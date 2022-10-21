@@ -1,4 +1,18 @@
 #![doc = include_str!("../README.md")]
+#![forbid(unsafe_code)]
+#![warn(
+    missing_docs,
+    rust_2018_idioms,
+    trivial_casts,
+    unused_lifetimes,
+    unused_qualifications,
+    missing_debug_implementations,
+    clippy::cognitive_complexity,
+    clippy::missing_const_for_fn,
+    clippy::doc_markdown,
+    clippy::missing_errors_doc,
+    clippy::semicolon_if_nothing_returned
+)]
 
 use std::io::{self, Read, Write};
 
@@ -41,11 +55,19 @@ impl Protocol {
     }
 
     /// Mixes the contents of the reader into the protocol state.
+    ///
+    /// # Errors
+    ///
+    /// Returns any errors returned by the reader or writer.
     pub fn mix_stream(&mut self, reader: impl Read) -> io::Result<u64> {
         self.copy_stream(reader, io::sink())
     }
 
     /// Mixes the contents of the reader into the protocol state while copying them to the writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns any errors returned by the reader or writer.
     pub fn copy_stream(
         &mut self,
         mut reader: impl Read,
@@ -275,7 +297,7 @@ impl Protocol {
         }
     }
 
-    /// Replace the protocol's state with derived output and return a ChaCha instance.
+    /// Replace the protocol's state with derived output and return a `ChaCha8` instance.
     #[inline(always)]
     fn chain(&mut self) -> Output {
         // Generate 64 bytes of XOF output from the current state.
@@ -355,7 +377,7 @@ mod tests {
             a.decrypt(&mut message);
         }
 
-        assert_eq!(b"this is a message", message.as_slice())
+        assert_eq!(b"this is a message", message.as_slice());
     }
 
     #[test]

@@ -334,4 +334,21 @@ mod tests {
 
         assert_eq!(b"this is a message", message.as_slice())
     }
+
+    #[test]
+    fn seal_open() {
+        let mut message = b"this is a message".to_vec();
+        message.extend_from_slice(&[0u8; TAG_LEN]);
+
+        {
+            let mut a = Protocol::new("this is a test");
+            a.mix(b"this is a key");
+            a.seal(&mut message);
+        }
+        {
+            let mut a = Protocol::new("this is a test");
+            a.mix(b"this is a key");
+            assert_eq!(a.open(&mut message), Some(b"this is a message".as_slice()));
+        }
+    }
 }

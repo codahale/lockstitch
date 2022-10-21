@@ -1,4 +1,4 @@
-# Lockstitch Design Documentation
+# The Design Of Lockstitch
 
 ## Preliminaries
 
@@ -85,10 +85,9 @@ function Derive(state, n):
   state ← BLAKE3::Update(state, [0x02])    // Begin the operation.
   (K_0, K_1) ← BLAKE3::Finalize(state, 64) // Finalize the state into two keys.
   state ← BLAKE3::Keyed(K_0)               // Replace the protocol's state with a new keyed hash.
-  chacha ← ChaCha8::New(K_1)               // Initialize a ChaCha8 instance.
-  out ← ChaCha8::Output(chacha, n)         // Produce n bytes of ChaCha8 output.
+  prf ← ChaCha8::Output(K_1, n)            // Produce n bytes of ChaCha8 output.
   state ← BLAKE3::Update(state, LE64(n))   // End the operation with the length.
-  return (state, out) 
+  return (state, prf) 
 ```
 
 ### `Encrypt`/`Decrypt`
@@ -101,10 +100,9 @@ function Encrypt(state, plaintext):
   state ← BLAKE3::Update(state, [0x03])            // Begin the operation.
   (K_0, K_1) ← BLAKE3::Finalize(state, 64)         // Finalize the state into two keys.
   state ← BLAKE3::Keyed(K_0)                       // Replace the protocol's state with a new keyed hash.
-  chacha ← ChaCha8::New(K_1)                       // Initialize a ChaCha8 instance.
   state ← BLAKE3::Update(state, plaintext)         // Update the protocol's state with the plaintext.
-  out ← ChaCha8::Output(chacha, |plaintext|)       // Produce a ChaCha8 keystream.
-  ciphertext ← plaintext ^ out                     // Encrypt the plaintext with ChaCha8 via XOR.
+  prf ← ChaCha8::Output(K_1, |plaintext|)          // Produce a ChaCha8 keystream.
+  ciphertext ← plaintext ^ prf                     // Encrypt the plaintext with ChaCha8 via XOR.
   state ← BLAKE3::Update(state, LE64(|plaintext|)) // End the operation with the length.
   return (state, ciphertext) 
 ```
@@ -116,9 +114,8 @@ function Decrypt(state, ciphertext):
   state ← BLAKE3::Update(state, [0x03])             // Begin the operation.
   (K_0, K_1) ← BLAKE3::Finalize(state, 64)          // Finalize the state into two keys.
   state ← BLAKE3::Keyed(K_0)                        // Replace the protocol's state with a new keyed hash.
-  chacha ← ChaCha8::New(K_1)                        // Initialize a ChaCha8 instance.
-  out ← ChaCha8::Output(chacha, |ciphertext|)       // Produce a ChaCha8 keystream.
-  plaintext ← ciphertext ^ out                      // Decrypt the ciphertext with ChaCha8 via XOR.
+  prf ← ChaCha8::Output(K_1, |ciphertext|)          // Produce a ChaCha8 keystream.
+  plaintext ← ciphertext ^ prf                      // Decrypt the ciphertext with ChaCha8 via XOR.
   state ← BLAKE3::Update(state, plaintext)          // Update the protocol's state with the plaintext.
   state ← BLAKE3::Update(state, LE64(|ciphertext|)) // End the operation with the length.
   return (state, plaintext) 
@@ -149,8 +146,7 @@ function Tag(state):
   state ← BLAKE3::Update(state, [0x05])    // Begin the operation.
   (K_0, K_1) ← BLAKE3::Finalize(state, 64) // Finalize the state into two keys.
   state ← BLAKE3::Keyed(K_0)               // Replace the protocol's state with a new keyed hash.
-  chacha ← ChaCha8::New(K_1)               // Initialize a ChaCha8 instance.
-  tag ← ChaCha8::Output(chacha, 16)        // Produce a ChaCha8 keystream.
+  tag ← ChaCha8::Output(K_1, 16)           // Produce 16 bytes of ChaCha8 output.
   state ← BLAKE3::Update(state, LE64(16))  // End the operation with the length.
   return (state, tag) 
 ```
@@ -311,7 +307,6 @@ function Signcrypt(sender, receiver.pub, plaintext):
   state ← Mix(state, I)
   (state, r) ← Ristretto255::Scalar(Derive(state, 64))
   s ← sender.priv * r + k
-  return (I, s)
   return (ephemeral.pub, ciphertext, I, s)
 ```
 

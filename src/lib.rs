@@ -83,22 +83,27 @@ impl Protocol {
         // Update the state with the operation code.
         self.state.update(&[Operation::Derive as u8]);
 
-        // Rekey the state.
+        // Chain the protocol's key and key a ChaCha8 instance.
         let mut chacha = self.chain();
 
-        // Fill the output buffer with ChaCha8 output, keeping track of the length. Derive
-        // operations are usually short, so we use the narrow buffer size to reduce latency at
-        // the expense of throughput.
-        let mut tmp = [0u8; 64];
-        let mut n = 0;
-        for chunk in out.chunks_mut(tmp.len()) {
-            chacha.refill(CHACHA_DROUNDS, &mut tmp);
-            chunk.copy_from_slice(&tmp[..chunk.len()]);
-            n += chunk.len();
+        // Fill the output buffer with ChaCha8 output.
+        if out.len() <= 64 {
+            // If the output is less than a single block (e.g. a key or scalar), favor latency over
+            // throughput.
+            let mut tmp = [0u8; 64];
+            chacha.fill_narrow(&mut tmp);
+            out.copy_from_slice(&tmp[..out.len()]);
+        } else {
+            // If the output is greater than a single block, favor throughput over latency.
+            let mut tmp = [0u8; 64 * 4];
+            for chunk in out.chunks_mut(tmp.len()) {
+                chacha.fill_wide(&mut tmp);
+                chunk.copy_from_slice(&tmp[..chunk.len()]);
+            }
         }
 
         // Update the state with the derived byte count as a 64-bit little-endian integer.
-        self.state.update(&(n as u64).to_le_bytes());
+        self.state.update(&(out.len() as u64).to_le_bytes());
     }
 
     /// Derive output from the protocol's current state and return it as an array.
@@ -115,7 +120,7 @@ impl Protocol {
         // Update the state with the operation code.
         self.state.update(&[Operation::Crypt as u8]);
 
-        // Rekey the state.
+        // Chain the protocol's key and key a ChaCha8 instance.
         let mut chacha = self.chain();
 
         // Here we use the wide (4x) buffer size to enable throughput optimizations.
@@ -128,7 +133,7 @@ impl Protocol {
 
             for plaintext in chunk.chunks_mut(tmp.len()) {
                 // XOR the plaintext with ChaCha8 output to produce ciphertext.
-                chacha.refill4(CHACHA_DROUNDS, &mut tmp);
+                chacha.fill_wide(&mut tmp);
                 for (p, k) in plaintext.iter_mut().zip(tmp.iter()) {
                     *p ^= *k;
                 }
@@ -145,7 +150,7 @@ impl Protocol {
         // Update the state with the operation code.
         self.state.update(&[Operation::Crypt as u8]);
 
-        // Rekey the state.
+        // Chain the protocol's key and key a ChaCha8 instance.
         let mut chacha = self.chain();
 
         // Here we use the wide (4x) buffer size to enable throughput optimizations.
@@ -155,7 +160,7 @@ impl Protocol {
         for chunk in in_out.chunks_mut(64 * 1024) {
             for ciphertext in chunk.chunks_mut(tmp.len()) {
                 // XOR the ciphertext with ChaCha8 output to produce plaintext.
-                chacha.refill4(CHACHA_DROUNDS, &mut tmp);
+                chacha.fill_wide(&mut tmp);
                 for (c, k) in ciphertext.iter_mut().zip(tmp.iter()) {
                     *c ^= *k;
                 }
@@ -175,12 +180,12 @@ impl Protocol {
         // Update the state with the operation code.
         self.state.update(&[Operation::Tag as u8]);
 
-        // Rekey the state.
+        // Chain the protocol's key and key a ChaCha8 instance.
         let mut chacha = self.chain();
 
         // Truncate the first block of ChaCha8 output and use it as the tag.
         let mut tmp = [0u8; 64];
-        chacha.refill(CHACHA_DROUNDS, &mut tmp);
+        chacha.fill_narrow(&mut tmp);
         out.copy_from_slice(&tmp[..TAG_LEN]);
 
         // Update the state with the tag length as a 64-bit little-endian integer.
@@ -270,7 +275,7 @@ impl Protocol {
 
     /// Replace the protocol's state with derived output and return a ChaCha instance.
     #[inline(always)]
-    fn chain(&mut self) -> ChaCha {
+    fn chain(&mut self) -> Output {
         // Generate 64 bytes of XOF output from the current state.
         let mut tmp = [0u8; 64];
         self.state.finalize_xof().fill(&mut tmp);
@@ -282,7 +287,7 @@ impl Protocol {
         self.state = Hasher::new_keyed(&a.try_into().expect("invalid key"));
 
         // Use the second 32 bytes as the key for ChaCha output using an all-zero nonce.
-        ChaCha::new(b.try_into().expect("invalid key"), &[0u8; 8])
+        Output { chacha: ChaCha::new(b.try_into().expect("invalid key"), &[0u8; 8]) }
     }
 }
 
@@ -294,7 +299,23 @@ enum Operation {
     Tag = 0x04,
 }
 
-const CHACHA_DROUNDS: u32 = 4; // aka ChaCha8
+struct Output {
+    chacha: ChaCha,
+}
+
+impl Output {
+    const DROUNDS: u32 = 4; // aka ChaCha8
+
+    #[inline(always)]
+    fn fill_narrow(&mut self, out: &mut [u8; 64]) {
+        self.chacha.refill(Self::DROUNDS, out);
+    }
+
+    #[inline(always)]
+    fn fill_wide(&mut self, out: &mut [u8; 64 * 4]) {
+        self.chacha.refill4(Self::DROUNDS, out);
+    }
+}
 
 #[cfg(test)]
 mod tests {

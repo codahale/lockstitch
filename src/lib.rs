@@ -124,7 +124,7 @@ impl Protocol {
 
         // Break the input into 64KiB chunks to enable SIMD optimizations on input.
         for chunk in in_out.chunks_mut(64 * 1024) {
-            // Update the state with the chunk.
+            // Update the state with the plaintext.
             self.state.update(chunk);
 
             for plaintext in chunk.chunks_mut(tmp.len()) {
@@ -153,19 +153,21 @@ impl Protocol {
 
         let mut tmp = [0u8; 64 * 4];
         let mut n = 0;
-        for ciphertext in in_out.chunks_mut(tmp.len()) {
-            // Generate a block of ChaCha8 output.
-            chacha.refill4(CHACHA_DROUNDS, &mut tmp);
 
-            // XOR the ciphertext with ChaCha8 output to produce plaintext.
-            for (c, k) in ciphertext.iter_mut().zip(tmp.iter()) {
-                *c ^= *k;
+        // Break the input into 64KiB chunks to enable SIMD optimizations on input.
+        for chunk in in_out.chunks_mut(64 * 1024) {
+            for ciphertext in chunk.chunks_mut(tmp.len()) {
+                // XOR the ciphertext with ChaCha8 output to produce plaintext.
+                chacha.refill4(CHACHA_DROUNDS, &mut tmp);
+                for (c, k) in ciphertext.iter_mut().zip(tmp.iter()) {
+                    *c ^= *k;
+                }
             }
 
             // Update the state with the plaintext.
-            self.state.update(ciphertext);
+            self.state.update(chunk);
 
-            n += ciphertext.len();
+            n += chunk.len();
         }
 
         // Update the state with the decrypted byte count as a 64-bit little-endian integer.

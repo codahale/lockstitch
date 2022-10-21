@@ -133,9 +133,9 @@ impl Protocol {
                 for (p, k) in plaintext.iter_mut().zip(tmp.iter()) {
                     *p ^= *k;
                 }
-
-                n += plaintext.len();
             }
+
+            n += chunk.len();
         }
 
         // Update the state with the encrypted byte count as a 64-bit little-endian integer.

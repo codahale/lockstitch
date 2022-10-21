@@ -129,7 +129,7 @@ aead/1KiB               time:   [1.5206 µs 1.5208 µs 1.5209 µs]
 aead/16KiB              time:   [7.1835 µs 7.1845 µs 7.1856 µs]
                         thrpt:  [2.1235 GiB/s 2.1239 GiB/s 2.1241 GiB/s]
 aead/1MiB               time:   [423.86 µs 424.02 µs 424.19 µs]
-                       thrpt:  [2.3022 GiB/s 2.3031 GiB/s 2.3039 GiB/s]
+                        thrpt:  [2.3022 GiB/s 2.3031 GiB/s 2.3039 GiB/s]
 ```
 
 (Benchmarks run on a GCE `c2-standard-4` with Intel Cascade Lake.)

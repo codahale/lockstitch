@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+
+use std::io::{self, Read, Write};
 
 use blake3::Hasher;
 use c2_chacha::guts::ChaCha;
@@ -40,18 +41,16 @@ impl Protocol {
     }
 
     /// Mixes the contents of the reader into the protocol state.
-    #[cfg(feature = "std")]
-    pub fn mix_stream(&mut self, reader: impl std::io::Read) -> std::io::Result<u64> {
-        self.copy_stream(reader, std::io::sink())
+    pub fn mix_stream(&mut self, reader: impl Read) -> io::Result<u64> {
+        self.copy_stream(reader, io::sink())
     }
 
     /// Mixes the contents of the reader into the protocol state while copying them to the writer.
-    #[cfg(feature = "std")]
     pub fn copy_stream(
         &mut self,
-        mut reader: impl std::io::Read,
-        mut writer: impl std::io::Write,
-    ) -> std::io::Result<u64> {
+        mut reader: impl Read,
+        mut writer: impl Write,
+    ) -> io::Result<u64> {
         // Update the state with the operation code.
         self.state.update(&[Operation::Mix as u8]);
 
@@ -67,7 +66,7 @@ impl Protocol {
                     writer.write_all(&buf[..x])?;
                     n += u64::try_from(x).expect("unexpected overflow");
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(e),
             }
         }

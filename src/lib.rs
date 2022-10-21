@@ -192,6 +192,8 @@ impl Protocol {
         self.state.update(&(TAG_LEN as u64).to_le_bytes());
     }
 
+    /// Check whether or not the output of [`Protocol::tag`] matches the provided tag. Returns `true` if they
+    /// match; `false` otherwise.
     #[inline(always)]
     #[must_use]
     pub fn check_tag(&mut self, tag: &[u8]) -> bool {

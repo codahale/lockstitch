@@ -120,7 +120,6 @@ impl Protocol {
 
         // Here we use the wide (4x) buffer size to enable throughput optimizations.
         let mut tmp = [0u8; 64 * 4];
-        let mut n = 0;
 
         // Break the input into 64KiB chunks to enable SIMD optimizations on input.
         for chunk in in_out.chunks_mut(64 * 1024) {
@@ -134,12 +133,10 @@ impl Protocol {
                     *p ^= *k;
                 }
             }
-
-            n += chunk.len();
         }
 
         // Update the state with the encrypted byte count as a 64-bit little-endian integer.
-        self.state.update(&(n as u64).to_le_bytes());
+        self.state.update(&(in_out.len() as u64).to_le_bytes());
     }
 
     /// Decrypt the given slice in place.
@@ -151,8 +148,8 @@ impl Protocol {
         // Rekey the state.
         let mut chacha = self.chain();
 
+        // Here we use the wide (4x) buffer size to enable throughput optimizations.
         let mut tmp = [0u8; 64 * 4];
-        let mut n = 0;
 
         // Break the input into 64KiB chunks to enable SIMD optimizations on input.
         for chunk in in_out.chunks_mut(64 * 1024) {
@@ -166,12 +163,10 @@ impl Protocol {
 
             // Update the state with the plaintext.
             self.state.update(chunk);
-
-            n += chunk.len();
         }
 
         // Update the state with the decrypted byte count as a 64-bit little-endian integer.
-        self.state.update(&(n as u64).to_le_bytes());
+        self.state.update(&(in_out.len() as u64).to_le_bytes());
     }
 
     /// Extract output from the protocol's current state and fill the given slice with it.

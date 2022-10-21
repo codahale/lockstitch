@@ -25,10 +25,12 @@ state ← BLAKE3::Update(state, [operation])
 
 Having begun, an operation may update the protocol's state with operation-specific data.
 
-Once an operation is complete, the protocol's state is updated with the number of bytes processed in
-the operation encoded as a 64-bit little-endian integer:
+Once an operation is complete, the protocol's state is updated with the operation's 1-byte code with
+the MSB set and the number of bytes processed in the operation encoded as a 64-bit little-endian
+integer:
 
 ```text
+state ← BLAKE3::Update(state, [operation | 0b1000_0000])
 state ← BLAKE3::Update(state, LE64(count))
 ```
 
@@ -69,7 +71,8 @@ Lockstitch supports four primitive operations: `Mix`, `Derive`, `Encrypt`/`Decry
 function Mix(state, data):
   state ← BLAKE3::Update(state, [0x01])       // Begin the operation.
   state ← BLAKE3::Update(state, data)         // Update the protocol's state with the data.
-  state ← BLAKE3::Update(state, LE64(|data|)) // End the operation with the length.
+  state ← BLAKE3::Update(state, [0x41])       // End the operation with the code and length.
+  state ← BLAKE3::Update(state, LE64(|data|))
   return state
 ```
 
@@ -86,7 +89,8 @@ function Derive(state, n):
   (K_0, K_1) ← BLAKE3::Finalize(state, 64) // Finalize the state into two keys.
   state ← BLAKE3::Keyed(K_0)               // Replace the protocol's state with a new keyed hash.
   prf ← ChaCha8::Output(K_1, n)            // Produce n bytes of ChaCha8 output.
-  state ← BLAKE3::Update(state, LE64(n))   // End the operation with the length.
+  state ← BLAKE3::Update(state, [0x42])    // End the operation with the code and the length.
+  state ← BLAKE3::Update(state, LE64(n))
   return (state, prf) 
 ```
 
@@ -103,7 +107,8 @@ function Encrypt(state, plaintext):
   state ← BLAKE3::Update(state, plaintext)         // Update the protocol's state with the plaintext.
   prf ← ChaCha8::Output(K_1, |plaintext|)          // Produce a ChaCha8 keystream.
   ciphertext ← plaintext ^ prf                     // Encrypt the plaintext with ChaCha8 via XOR.
-  state ← BLAKE3::Update(state, LE64(|plaintext|)) // End the operation with the length.
+  state ← BLAKE3::Update(state, [0x43])            // End the operation with the code and the length.
+  state ← BLAKE3::Update(state, LE64(|plaintext|))
   return (state, ciphertext) 
 ```
 
@@ -117,7 +122,8 @@ function Decrypt(state, ciphertext):
   prf ← ChaCha8::Output(K_1, |ciphertext|)          // Produce a ChaCha8 keystream.
   plaintext ← ciphertext ^ prf                      // Decrypt the ciphertext with ChaCha8 via XOR.
   state ← BLAKE3::Update(state, plaintext)          // Update the protocol's state with the plaintext.
-  state ← BLAKE3::Update(state, LE64(|ciphertext|)) // End the operation with the length.
+  state ← BLAKE3::Update(state, [0x43])             // End the operation with the code and the length.
+  state ← BLAKE3::Update(state, LE64(|ciphertext|))
   return (state, plaintext) 
 ```
 
@@ -143,11 +149,12 @@ The `Tag` operation produces a 16-byte authentication tag from ChaCha8 output:
 
 ```text
 function Tag(state):
-  state ← BLAKE3::Update(state, [0x05])    // Begin the operation.
+  state ← BLAKE3::Update(state, [0x04])    // Begin the operation.
   (K_0, K_1) ← BLAKE3::Finalize(state, 64) // Finalize the state into two keys.
   state ← BLAKE3::Keyed(K_0)               // Replace the protocol's state with a new keyed hash.
   tag ← ChaCha8::Output(K_1, 16)           // Produce 16 bytes of ChaCha8 output.
-  state ← BLAKE3::Update(state, LE64(16))  // End the operation with the length.
+  state ← BLAKE3::Update(state, [0x44])    // End the operation with the code and the length.
+  state ← BLAKE3::Update(state, LE64(16))
   return (state, tag) 
 ```
 

@@ -45,13 +45,13 @@ impl Protocol {
     #[inline(always)]
     pub fn mix(&mut self, data: &[u8]) {
         // Update the state with the operation code.
-        self.state.update(&[Operation::Mix as u8]);
+        self.state.update(&Operation::Mix.begin());
 
         // Update the state with the given slice.
         self.state.update(data);
 
-        // Update the state with the length of the given slice as a 64-bit little-endian integer.
-        self.state.update(&(data.len() as u64).to_le_bytes());
+        // Update the state with the operation code and byte count.
+        self.state.update(&Operation::Mix.end(data.len() as u64));
     }
 
     /// Mixes the contents of the reader into the protocol state.
@@ -74,7 +74,7 @@ impl Protocol {
         mut writer: impl Write,
     ) -> io::Result<u64> {
         // Update the state with the operation code.
-        self.state.update(&[Operation::Mix as u8]);
+        self.state.update(&Operation::Mix.begin());
 
         // 64KiB is a large enough buffer to enable all possible optimizations.
         let mut buf = [0u8; 1024 * 64];
@@ -93,8 +93,8 @@ impl Protocol {
             }
         }
 
-        // Update the state with the byte count as a 64-bit little-endian integer.
-        self.state.update(&n.to_le_bytes());
+        // Update the state with the operation code and byte count.
+        self.state.update(&Operation::Mix.end(n));
 
         Ok(n)
     }
@@ -103,7 +103,7 @@ impl Protocol {
     #[inline(always)]
     pub fn derive(&mut self, out: &mut [u8]) {
         // Update the state with the operation code.
-        self.state.update(&[Operation::Derive as u8]);
+        self.state.update(&Operation::Derive.begin());
 
         // Chain the protocol's key and key a ChaCha8 instance.
         let mut chacha = self.chain();
@@ -124,8 +124,8 @@ impl Protocol {
             }
         }
 
-        // Update the state with the derived byte count as a 64-bit little-endian integer.
-        self.state.update(&(out.len() as u64).to_le_bytes());
+        // Update the state with the operation code and derived byte count.
+        self.state.update(&Operation::Derive.end(out.len() as u64));
     }
 
     /// Derive output from the protocol's current state and return it as an array.
@@ -140,7 +140,7 @@ impl Protocol {
     #[inline(always)]
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
         // Update the state with the operation code.
-        self.state.update(&[Operation::Crypt as u8]);
+        self.state.update(&Operation::Crypt.begin());
 
         // Chain the protocol's key and key a ChaCha8 instance.
         let mut chacha = self.chain();
@@ -162,15 +162,15 @@ impl Protocol {
             }
         }
 
-        // Update the state with the encrypted byte count as a 64-bit little-endian integer.
-        self.state.update(&(in_out.len() as u64).to_le_bytes());
+        // Update the state with the operation code and encrypted byte count.
+        self.state.update(&Operation::Crypt.end(in_out.len() as u64));
     }
 
     /// Decrypt the given slice in place.
     #[inline(always)]
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
         // Update the state with the operation code.
-        self.state.update(&[Operation::Crypt as u8]);
+        self.state.update(&Operation::Crypt.begin());
 
         // Chain the protocol's key and key a ChaCha8 instance.
         let mut chacha = self.chain();
@@ -192,15 +192,15 @@ impl Protocol {
             self.state.update(chunk);
         }
 
-        // Update the state with the decrypted byte count as a 64-bit little-endian integer.
-        self.state.update(&(in_out.len() as u64).to_le_bytes());
+        // Update the state with the operation code and decrypted byte count.
+        self.state.update(&Operation::Crypt.end(in_out.len() as u64));
     }
 
     /// Extract output from the protocol's current state and fill the given slice with it.
     #[inline(always)]
     pub fn tag(&mut self, out: &mut [u8]) {
         // Update the state with the operation code.
-        self.state.update(&[Operation::Tag as u8]);
+        self.state.update(&Operation::Tag.begin());
 
         // Chain the protocol's key and key a ChaCha8 instance.
         let mut chacha = self.chain();
@@ -210,8 +210,8 @@ impl Protocol {
         chacha.fill_narrow(&mut tmp);
         out.copy_from_slice(&tmp[..TAG_LEN]);
 
-        // Update the state with the tag length as a 64-bit little-endian integer.
-        self.state.update(&(TAG_LEN as u64).to_le_bytes());
+        // Update the state with the operation code and tag length.
+        self.state.update(&Operation::Tag.end(TAG_LEN as u64));
     }
 
     /// Check whether or not the output of [`Protocol::tag`] matches the provided tag. Returns `true` if they
@@ -321,6 +321,21 @@ enum Operation {
     Derive = 0x02,
     Crypt = 0x03,
     Tag = 0x04,
+}
+
+impl Operation {
+    const fn begin(self) -> [u8; 1] {
+        [self as u8]
+    }
+
+    #[inline(always)]
+    fn end(self, n: u64) -> [u8; 9] {
+        let mut out = [0u8; 9];
+        let (code, len) = out.split_at_mut(1);
+        code[0] = (self as u8) | 0b1000_0000;
+        len.copy_from_slice(&n.to_le_bytes());
+        out
+    }
 }
 
 struct Output {

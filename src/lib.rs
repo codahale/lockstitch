@@ -121,17 +121,21 @@ impl Protocol {
         // Here we use the wide (4x) buffer size to enable throughput optimizations.
         let mut tmp = [0u8; 64 * 4];
         let mut n = 0;
-        for plaintext in in_out.chunks_mut(tmp.len()) {
-            // Update the state with the plaintext.
-            self.state.update(plaintext);
 
-            // XOR the plaintext with ChaCha8 output to produce ciphertext.
-            chacha.refill4(CHACHA_DROUNDS, &mut tmp);
-            for (p, k) in plaintext.iter_mut().zip(tmp.iter()) {
-                *p ^= *k;
+        // Break the input into 64KiB chunks to enable SIMD optimizations on input.
+        for chunk in in_out.chunks_mut(64 * 1024) {
+            // Update the state with the chunk.
+            self.state.update(chunk);
+
+            for plaintext in chunk.chunks_mut(tmp.len()) {
+                // XOR the plaintext with ChaCha8 output to produce ciphertext.
+                chacha.refill4(CHACHA_DROUNDS, &mut tmp);
+                for (p, k) in plaintext.iter_mut().zip(tmp.iter()) {
+                    *p ^= *k;
+                }
+
+                n += plaintext.len();
             }
-
-            n += plaintext.len();
         }
 
         // Update the state with the encrypted byte count as a 64-bit little-endian integer.

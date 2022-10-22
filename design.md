@@ -39,7 +39,7 @@ state ← BLAKE3::Update(state, LE64(count))
 ```
 
 This allows for the unambiguous encoding of multiple inputs and different types of operations as
-well as operations which produce outputs which do not directly update the protocol's state.
+well as operations which produce outputs but do not directly update the protocol's state.
 
 ### Generating Output
 

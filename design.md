@@ -184,7 +184,7 @@ function CheckTag(state, tag):
   return (state, tag ⊜ tag') // Compare the two in constant time.
 ```
 
-## Compound Operations
+## Basic Protocols
 
 By combining operations, we can use Lockstitch to construct a wide variety of cryptographic schemes
 using a single protocol.

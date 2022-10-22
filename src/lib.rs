@@ -300,19 +300,18 @@ impl Protocol {
     /// Replace the protocol's state with derived output and return a `ChaCha8` instance.
     #[inline(always)]
     fn chain(&mut self) -> Output {
-        // Use the hash of the current state to key a ChaCha8 instance with an all-zero nonce.
-        let hash = self.state.finalize();
-        let mut output = Output(ChaCha::new(hash.as_bytes(), &[0u8; 8]));
-
-        // Generate a full block of ChaCha8 output.
+        // Generate 64 bytes of XOF output from the current state.
         let mut tmp = [0u8; 64];
-        output.fill_narrow(&mut tmp);
+        self.state.finalize_xof().fill(&mut tmp);
 
-        // Use the first 32 bytes as the key for a new keyed BLAKE3 hasher and discard the rest.
-        self.state = Hasher::new_keyed(&tmp[..32].try_into().expect("invalid key"));
+        // Split the XOF output into two parts.
+        let (a, b) = tmp.split_at(32);
 
-        // Return the ChaCha8 instance for any additional output.
-        output
+        // Use the first 32 bytes as the key for a new keyed BLAKE3 hasher.
+        self.state = Hasher::new_keyed(&a.try_into().expect("invalid key"));
+
+        // Use the second 32 bytes as the key for ChaCha output using an all-zero nonce.
+        Output { chacha: ChaCha::new(b.try_into().expect("invalid key"), &[0u8; 8]) }
     }
 }
 
@@ -339,19 +338,21 @@ impl Operation {
     }
 }
 
-struct Output(ChaCha);
+struct Output {
+    chacha: ChaCha,
+}
 
 impl Output {
     const DROUNDS: u32 = 4; // aka ChaCha8
 
     #[inline(always)]
     fn fill_narrow(&mut self, out: &mut [u8; 64]) {
-        self.0.refill(Self::DROUNDS, out);
+        self.chacha.refill(Self::DROUNDS, out);
     }
 
     #[inline(always)]
     fn fill_wide(&mut self, out: &mut [u8; 64 * 4]) {
-        self.0.refill4(Self::DROUNDS, out);
+        self.chacha.refill4(Self::DROUNDS, out);
     }
 }
 

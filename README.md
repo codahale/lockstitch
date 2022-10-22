@@ -84,6 +84,16 @@ bad_ciphertext[5] ^= 1; // flip one bit
 assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), None);
 ```
 
+## Cargo Features
+
+* `std`: Enables features based on the Rust standard library. Enabled by default.
+* `hedge`: Enables hedged random value generation with `rand_core`. Enabled by default.
+
+**N.B.:** The SIMD optimizations in `blake3` require either the use of the `std` feature or setting
+`RUSTFLAGS="-C target-cpu=native"` in your build.
+
+## Additional Information
+
 For more information on the design of Lockstitch, see [`design.md`](design.md).
 For more information on performance, see [`perf.md`](perf.md).
 

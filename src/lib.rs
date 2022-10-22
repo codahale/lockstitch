@@ -1,3 +1,4 @@
+#![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 #![warn(
@@ -14,6 +15,7 @@
     clippy::semicolon_if_nothing_returned
 )]
 
+#[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
 use blake3::Hasher;
@@ -59,6 +61,7 @@ impl Protocol {
     /// # Errors
     ///
     /// Returns any errors returned by the reader or writer.
+    #[cfg(feature = "std")]
     pub fn mix_stream(&mut self, reader: impl Read) -> io::Result<u64> {
         self.copy_stream(reader, io::sink())
     }
@@ -68,6 +71,7 @@ impl Protocol {
     /// # Errors
     ///
     /// Returns any errors returned by the reader or writer.
+    #[cfg(feature = "std")]
     pub fn copy_stream(
         &mut self,
         mut reader: impl Read,

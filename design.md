@@ -1,5 +1,8 @@
 # The Design Of Lockstitch
 
+Lockstitch provides a single cryptographic primitive for all symmetric-key operations and an
+incremental, stateful building block for complex schemes, constructions, and protocols.
+
 ## Preliminaries
 
 ### Initializing A Protocol
@@ -23,7 +26,8 @@ Each operation begins by updating the protocol's state with the operation's uniq
 state ← BLAKE3::Update(state, [operation])
 ```
 
-Having begun, an operation may update the protocol's state with operation-specific data.
+Having begun, an operation may update the protocol's state with operation-specific data or replace
+it entirely.
 
 Once an operation is complete, the protocol's state is updated with the operation's 1-byte code with
 the MSB set and the number of bytes processed in the operation encoded as a 64-bit little-endian
@@ -54,9 +58,11 @@ While BLAKE3 can produce outputs of arbitrary length, Lockstitch uses ChaCha8 ex
 generate output values. This is done primarily to provide a clean separation of responsibilities in
 the design. BLAKE3 effectively functions as a chained KDF, a task for which it was designed and for
 which its fitness can be clearly analyzed. ChaCha8 functions as a pseudo-random function (PRF), a
-task for which is was designed as well. Finally, despite the strong structural similarities between
-ChaCha and BLAKE3's XOF, the use of ChaCha8 provides a performance benefit due to the reduced number
-of rounds in the compression function.
+task for which is was designed as well.
+
+Finally, despite the strong structural similarities between ChaCha and BLAKE3's XOF, the use of
+ChaCha8 provides a performance benefit due to the reduced number of rounds in the compression
+function.
 
 ## Primitive Operations
 
@@ -77,7 +83,10 @@ function Mix(state, data):
 ```
 
 Unlike a standard hash function, `Mix` operations (as with all other operations) are not
-commutative. That is, `Mix("alpha"); Mix("bet")` is not equivalent to `Mix("alphabet")`.
+commutative. That is, `Mix("alpha"); Mix("bet")` is not equivalent to `Mix("alphabet")`. This
+eliminates the possibility of collisions; no additional padding or encoding is required.
+
+`Mix` inherits the collision resistance of the underlying BLAKE3 algorithm.
 
 ### `Derive`
 
@@ -93,6 +102,10 @@ function Derive(state, n):
   state ← BLAKE3::Update(state, LE64(n))
   return (state, prf) 
 ```
+
+`Derive` inherits the PRF security of ChaCha8 using the protocol's prior state as a key. Further,
+the state of the protocol is overwritten with BLAKE3 output, making reversing it equivalent to
+breaking BLAKE3's preimage resistance.
 
 ### `Encrypt`/`Decrypt`
 
@@ -127,7 +140,7 @@ function Decrypt(state, ciphertext):
   return (state, plaintext) 
 ```
 
-Three points bear mentioning about `Encrypt` and `DECRYPT`.
+Three points bear mentioning about `Encrypt` and `Decrypt`.
 
 First, they provide no authentication by themselves. An attacker can modify a ciphertext and the
 `Decrypt` operation will return a plaintext which was never encrypted. (That is, they are IND-CPA
@@ -135,13 +148,13 @@ secure but not IND-CCA secure.)
 
 Second, both `Encrypt` and `Decrypt` use the same `Crypt` operation code to ensure protocols have
 the same state after both encrypting and decrypting data. The only difference between the two
-operations is the order of operations. `Encrypt` updates the state before XORing with the keystream;
-`Decrypt` updates the state afterwards.
+operations is the order of operations. `Encrypt` updates the state with the plaintext before XORing
+with the keystream; `Decrypt` updates the state afterwards.
 
 Finally, `Crypt` operations update the protocol's state with the plaintext, not with the ciphertext.
-See the discussion on [Authenticated Encryption And Data
-(AEAD)](#authenticated-encryption-and-data-aead) and [Signcryption](#signcryption) for why this is
-important.
+See the discussion on
+[Authenticated Encryption And Data (AEAD)](#authenticated-encryption-and-data-aead) and
+[Signcryption](#signcryption) for why this is important.
 
 ### `Tag`/`CheckTag`
 
@@ -158,13 +171,16 @@ function Tag(state):
   return (state, tag) 
 ```
 
+This is structurally the same as the `Derive` operation but with a dedicated operation code and a
+fixed length.
+
 The `CheckTag` operation compares a received tag with a counterfactual tag produced by the `Tag`
 operation:
 
 ```text
 function CheckTag(state, tag):
   (state, tag') ← Tag(state)
-  return (state, tag == tag')
+  return (state, tag = tag')
 ```
 
 Authentication tags are compared using a constant time algorithm to prevent timing attacks.
@@ -183,6 +199,9 @@ function MessageDigest(data):
   return digest
 ```
 
+This is essentially BLAKE3 but using XOF output to produce 32 bytes of ChaCha8 output for a digest.
+As such, it inherits BLAKE3's collision resistance.
+
 ### Message Authentication Codes
 
 ```text
@@ -193,6 +212,9 @@ function Mac(key, data):
   (state, tag) ← Tag(state)
   return tag
 ```
+
+The [operation encoding](#encoding-an-operation) ensures that the key and the data will never
+overlap, even if their lengths vary.
 
 ### Authenticated Encryption And Data (AEAD)
 
@@ -206,6 +228,11 @@ function Seal(key, nonce, ad, plaintext):
   (state, tag) ← Tag(state)
   return (ciphertext, tag)
 ```
+
+The final `Tag` operation closes over all inputs--key, nonce, authenticated data, and
+plaintext--which are also the values used to produce the ciphertext. Forging a tag here would imply
+that BLAKE3's MAC construction is not sUF-CMA secure, which would imply it is not collision
+resistant.
 
 ```text
 function Open(key, nonce, ad, ciphertext, tag):
@@ -238,7 +265,8 @@ is deterministic. The use of a nonce in this construction ensures both encryptio
 are probabilistic.
 
 While Encrypt-Then-Authentication is the less contentious choice, Encrypt-And-Authenticate has
-significant benefits with more complex constructions like [signcryption](#signcryption).
+significant benefits with more complex constructions like [signcryption](#signcryption), and here is
+IND-CCA secure.
 
 ## Complex Protocols
 
@@ -332,3 +360,34 @@ function Unsigncrypt(receiver, sender.pub, ephemeral.pub, I, s):
     return ⊥
   return plaintext
 ```
+
+This signcryption scheme is stronger than generic schemes which combine separate public key
+encryption and digital signature algorithms: Encrypt-Then-Sign (`EtS`) and Sign-then-Encrypt
+(`StE`).
+
+An adversary attacking an `EtS` scheme can strip the signature from someone else's encrypted message
+and replace it with their own, potentially allowing them to trick the recipient into decrypting the
+message for them. That's possible because the signature is of the ciphertext itself, which the
+adversary knows.
+
+With this scheme, on the other hand, the digital signature isn't of the ciphertext alone. A standard
+Schnorr signature scheme like Ed25519 derives the challenge scalar `r` from a hash of the signer's
+public key and the message being signed (i.e. the ciphertext). The challenge scalar here, on the
+other hand, is derived from the protocol's state, which depends on (among other things) the ECDH
+shared secret and the plaintext message. Unless our adversary already knows the shared secret (i.e.
+the secret key that the plaintext is encrypted with) and the plaintext they're trying to trick
+someone into giving them, they can't create their own signature (which they're trying to do in order
+to trick someone into giving them the plaintext).
+
+An adversary attacking an `StE` scheme can decrypt a signed message sent to them and re-encrypt it
+for someone else, potentially posing as the original sender. For example, someone sends a
+sternly-worded letter to their manager, informing them that they hate their job and are quitting.
+Their boss decrypts the message, keeps the signed plaintext, and several months later encrypts it
+with their new manager's public key and sends it to her. If the message is sufficiently generic
+(e.g. `I hate this job and am quitting.`), it looks like an authentic message from them to their new
+manager and they're out of a job.
+
+This scheme isn't vulnerable to this kind of attack because, again, the challenge scalar `r` is
+dependent on the protocol's state, which in addition to the plaintext message also includes the ECDH
+shared secret and all the public keys. An adversary can duplicate the protocol's state prior to the
+late `Mix` operation, but no further.

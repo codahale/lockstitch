@@ -311,13 +311,13 @@ impl Protocol {
         self.state.finalize_xof().fill(&mut tmp);
 
         // Split the XOF output into two parts.
-        let (a, b) = tmp.split_at(32);
+        let (chain_key, output_key) = tmp.split_at(32);
 
         // Use the first 32 bytes as the key for a new keyed BLAKE3 hasher.
-        self.state = Hasher::new_keyed(&a.try_into().expect("invalid key"));
+        self.state = Hasher::new_keyed(&chain_key.try_into().expect("invalid key"));
 
         // Use the second 32 bytes as the key for ChaCha output using an all-zero nonce.
-        Output { chacha: ChaCha::new(b.try_into().expect("invalid key"), &[0u8; 8]) }
+        Output { chacha: ChaCha::new(output_key.try_into().expect("invalid key"), &[0u8; 8]) }
     }
 
     /// Begin an operation.

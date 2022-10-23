@@ -109,21 +109,22 @@ impl Protocol {
         // Update the state with the operation code.
         self.begin_op(Operation::Derive);
 
-        // Chain the protocol's key and key a ChaCha8 instance.
-        let mut chacha = self.chain();
+        // Chain the protocol's key and key a PRF instance.
+        let mut prf = self.chain();
 
-        // Fill the output buffer with ChaCha8 output.
+        // Fill the output buffer with PRF output.
         if out.len() <= 64 {
-            // If the output is less than a single block (e.g. a key or scalar), favor latency over
-            // throughput.
+            // If the output is less than a single block (e.g. a key or scalar), only generate a
+            // single block of PRF output.
             let mut tmp = [0u8; 64];
-            chacha.fill_narrow(&mut tmp);
+            prf.fill_narrow(&mut tmp);
             out.copy_from_slice(&tmp[..out.len()]);
         } else {
-            // If the output is greater than a single block, favor throughput over latency.
+            // If the output is greater than a single block, generate four blocks of PRF output at
+            // a time.
             let mut tmp = [0u8; 64 * 4];
             for chunk in out.chunks_mut(tmp.len()) {
-                chacha.fill_wide(&mut tmp);
+                prf.fill_wide(&mut tmp);
                 chunk.copy_from_slice(&tmp[..chunk.len()]);
             }
         }
@@ -146,8 +147,8 @@ impl Protocol {
         // Update the state with the operation code.
         self.begin_op(Operation::Crypt);
 
-        // Chain the protocol's key and key a ChaCha8 instance.
-        let mut chacha = self.chain();
+        // Chain the protocol's key and key a PRF instance.
+        let mut prf = self.chain();
 
         // Here we use the wide (4x) buffer size to enable throughput optimizations.
         let mut tmp = [0u8; 64 * 4];
@@ -156,7 +157,7 @@ impl Protocol {
         for chunk in in_out.chunks_mut(64 * 1024) {
             for plaintext in chunk.chunks_mut(tmp.len()) {
                 // XOR the plaintext with ChaCha8 output to produce ciphertext.
-                chacha.fill_wide(&mut tmp);
+                prf.fill_wide(&mut tmp);
                 for (p, k) in plaintext.iter_mut().zip(tmp.iter()) {
                     *p ^= *k;
                 }
@@ -176,8 +177,8 @@ impl Protocol {
         // Update the state with the operation code.
         self.begin_op(Operation::Crypt);
 
-        // Chain the protocol's key and key a ChaCha8 instance.
-        let mut chacha = self.chain();
+        // Chain the protocol's key and key a PRF instance.
+        let mut prf = self.chain();
 
         // Here we use the wide (4x) buffer size to enable throughput optimizations.
         let mut tmp = [0u8; 64 * 4];
@@ -188,8 +189,8 @@ impl Protocol {
             self.state.update(chunk);
 
             for ciphertext in chunk.chunks_mut(tmp.len()) {
-                // XOR the ciphertext with ChaCha8 output to produce plaintext.
-                chacha.fill_wide(&mut tmp);
+                // XOR the ciphertext with PRF output to produce plaintext.
+                prf.fill_wide(&mut tmp);
                 for (c, k) in ciphertext.iter_mut().zip(tmp.iter()) {
                     *c ^= *k;
                 }
@@ -206,12 +207,12 @@ impl Protocol {
         // Update the state with the operation code.
         self.begin_op(Operation::Tag);
 
-        // Chain the protocol's key and key a ChaCha8 instance.
-        let mut chacha = self.chain();
+        // Chain the protocol's key and key a PRF instance.
+        let mut prf = self.chain();
 
-        // Truncate the first block of ChaCha8 output and use it as the tag.
+        // Truncate the first block of PRF output and use it as the tag.
         let mut tmp = [0u8; 64];
-        chacha.fill_narrow(&mut tmp);
+        prf.fill_narrow(&mut tmp);
         out.copy_from_slice(&tmp[..TAG_LEN]);
 
         // Update the state with the operation code and tag length.
@@ -303,21 +304,21 @@ impl Protocol {
         unreachable!("unable to hedge a valid value in 1000 tries");
     }
 
-    /// Replace the protocol's state with derived output and return a `ChaCha8` instance.
+    /// Replace the protocol's state with derived output and return a PRF instance.
     #[inline(always)]
-    fn chain(&mut self) -> Output {
+    fn chain(&mut self) -> Prf {
         // Generate 64 bytes of XOF output from the current state.
-        let mut tmp = [0u8; 64];
-        self.state.finalize_xof().fill(&mut tmp);
+        let mut xof_block = [0u8; 64];
+        self.state.finalize_xof().fill(&mut xof_block);
 
         // Split the XOF output into two parts.
-        let (chain_key, output_key) = tmp.split_at(32);
+        let (chain_key, output_key) = xof_block.split_at(32);
 
         // Use the first 32 bytes as the key for a new keyed BLAKE3 hasher.
         self.state = Hasher::new_keyed(&chain_key.try_into().expect("invalid key"));
 
-        // Use the second 32 bytes as the key for ChaCha output using an all-zero nonce.
-        Output { chacha: ChaCha::new(output_key.try_into().expect("invalid key"), &[0u8; 8]) }
+        // Use the second 32 bytes as the key for PRF output.
+        Prf::new(&output_key.try_into().expect("invalid key"))
     }
 
     /// Begin an operation.
@@ -336,6 +337,7 @@ impl Protocol {
     }
 }
 
+/// A primitive operation in a protocol with a unique 1-byte code.
 #[derive(Debug, Clone, Copy)]
 enum Operation {
     Mix = 0x01,
@@ -344,21 +346,27 @@ enum Operation {
     Tag = 0x04,
 }
 
-struct Output {
-    chacha: ChaCha,
-}
+/// A ChaCha8-based PRF.
+struct Prf(ChaCha);
 
-impl Output {
+impl Prf {
     const DROUNDS: u32 = 4; // aka ChaCha8
 
-    #[inline(always)]
-    fn fill_narrow(&mut self, out: &mut [u8; 64]) {
-        self.chacha.refill(Self::DROUNDS, out);
+    /// Creates a new `Prf` instance using the given key and an all-zero nonce.
+    fn new(key: &[u8; 32]) -> Prf {
+        Prf(ChaCha::new(key, &[0u8; 8]))
     }
 
+    /// Fills the given slice with a single block of PRF output.
+    #[inline(always)]
+    fn fill_narrow(&mut self, out: &mut [u8; 64]) {
+        self.0.refill(Self::DROUNDS, out);
+    }
+
+    /// Fills the given slice with a four blocks of PRF output.
     #[inline(always)]
     fn fill_wide(&mut self, out: &mut [u8; 64 * 4]) {
-        self.chacha.refill4(Self::DROUNDS, out);
+        self.0.refill4(Self::DROUNDS, out);
     }
 }
 

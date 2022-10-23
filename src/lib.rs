@@ -270,8 +270,8 @@ impl Protocol {
         }
     }
 
-    /// Clone the protocol and update it with the given secrets and 64 random bytes. Pass the clone
-    /// to the given function and return the result of that function.
+    /// Clones the protocol and mixes `secrets` plus 64 random bytes into the clone. Passes the
+    /// clone to `f` and if `f` returns `Some(R)`, returns `R`. Iterates until a value is returned.
     #[cfg(feature = "hedge")]
     #[must_use]
     pub fn hedge<R>(
@@ -280,16 +280,16 @@ impl Protocol {
         secrets: &[impl AsRef<[u8]>],
         f: impl Fn(&mut Self) -> Option<R>,
     ) -> R {
-        loop {
+        for _ in 0..1000 {
             // Clone the protocol's state.
             let mut clone = self.clone();
 
-            // Update the clone with the secrets.
+            // Mix each secret into the clone.
             for s in secrets {
                 clone.mix(s.as_ref());
             }
 
-            // Update the clone with a random value.
+            // Mix a random value into the clone.
             let mut r = [0u8; 64];
             rng.fill_bytes(&mut r);
             clone.mix(&r);
@@ -299,6 +299,8 @@ impl Protocol {
                 return r;
             }
         }
+
+        unreachable!("unable to hedge a valid value in 1000 tries");
     }
 
     /// Replace the protocol's state with derived output and return a `ChaCha8` instance.

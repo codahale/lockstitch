@@ -5,10 +5,13 @@ incremental, stateful building block for complex schemes, constructions, and pro
 
 ## Preliminaries
 
+The overall structure of Lockstitch is inspired by the Stateful Hash Object scheme in Section 6.3 of
+[the BLAKE3 spec](https://blake3.io).
+
 ### Initializing A Protocol
 
-The basic unit of Lockstitch is the protocol, which is essentially a BLAKE3 hash. Every protocol is
-initialized with a domain separation string, which is used to initialize a BLAKE3 hash in key
+The basic unit of Lockstitch is the protocol, which is a BLAKE3 hasher. Every protocol is
+initialized with a domain separation string, which is used to initialize a BLAKE3 hasher in key
 derivation function (KDF) mode:
 
 ```text
@@ -17,15 +20,22 @@ function Initialize(domain):
   return state
 ```
 
+The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch protocol domains:
+
+> The context string should be hardcoded, globally unique, and application-specific. … The context
+string should not contain variable data, like salts, IDs, or the current time. (If needed, those can
+be part of the key material, or mixed with the derived key afterwards.) … The purpose of this
+requirement is to ensure that there is no way for an attacker in any scenario to cause two different
+applications or components to inadvertently use the same context string. The safest way to guarantee
+this is to prevent the context string from including input of any kind.
+
 ### Encoding An Operation
 
-Given this state, Lockstitch defines an unambiguous encoding for operations (similar to TupleHash).
-
-Each operation updates the protocol's state with operation-specific data or replaces it with a
-derivative state.
-
-Once an operation is complete, the protocol's state is updated with the number of bytes processed
-(encoded with TupleHash's `right_encode` function) and the operation's 1-byte code:
+Given a BLAKE3 hasher, Lockstitch defines an unambiguous encoding for operations (similar to
+TupleHash). Each operation updates the protocol's state with operation-specific data or replaces it
+with a derivative state. Once an operation is complete, the protocol's state is updated with the
+number of bytes processed (encoded with TupleHash's `right_encode` function) and the operation's
+1-byte code:
 
 ```text
 state ← BLAKE3::Update(state, RE(count))
@@ -38,33 +48,32 @@ well as operations which produce outputs but do not directly update the protocol
 ### Generating Output
 
 To generate any output during an operation, the protocol produces two 32-byte keys from the first 64
-bytes of XOF output from its BLAKE3 hash. The protocol then replaces its current state with a
-BLAKE3 keyed hash created with the first key. Finally, a ChaCha8 stream is initialized with the
-second key 32-byte key and a 64-bit nonce of the operation's 1-byte code repeated 8 times.
+bytes of XOF output from its BLAKE3 hasher. The protocol then replaces its current state with a
+BLAKE3 keyed hasher created with the first key. Finally, a ChaCha8 stream is initialized with the
+second key and a 64-bit nonce consisting of the operation's 1-byte code repeated 8 times.
 
 ```text
-K_0||K_1 ← BLAKE3::XOF(state, 64)
+K_0ǁK_1 ← BLAKE3::XOF(state, 64)
 state ← BLAKE3::Keyed(K_0)
 chacha8 ← ChaCha8::New(K_1, [operation; 8])
 ```
 
-The use of the operation code in the nonce ensures that the output of an operation is dependent both
-on the protocol's state prior to that operation as well as the intent of the current operation.
+The use of the operation code in the nonce ensures that the output of an operation is dependent on
+both the protocol's state prior to that operation as well as the intent of the current operation.
 Further, the state of the protocol is overwritten with BLAKE3 output, making reversing it equivalent
 to breaking BLAKE3's preimage resistance.
 
 While BLAKE3 can produce outputs of arbitrary length, Lockstitch uses ChaCha8 exclusively to
 generate output values. This is done primarily to provide a clean separation of responsibilities in
 the design. BLAKE3 effectively functions as a chained KDF, a task for which it was designed and for
-which its fitness can be clearly analyzed. ChaCha8 functions as a pseudo-random function (PRF), a
-task for which is was designed as well. Finally, despite the strong structural similarities between
+which its fitness can be clearly analyzed. ChaCha8 is used as a pseudo-random function (PRF), a task
+for which it was designed as well. Finally, despite the strong structural similarities between
 ChaCha and BLAKE3's XOF, the use of ChaCha8 provides a performance benefit due to the reduced number
 of rounds in the compression function.
 
-## Primitive Operations
+## Operations
 
-Lockstitch supports four primitive operations: `Mix`, `Derive`, `Encrypt`/`Decrypt`, and
-`Tag`/`CheckTag`.
+Lockstitch supports four operations: `Mix`, `Derive`, `Encrypt`/`Decrypt`, and `Tag`/`CheckTag`.
 
 ### `Mix`
 
@@ -79,13 +88,14 @@ function Mix(state, data):
 ```
 
 Unlike a standard hash function, `Mix` operations (as with all other operations) are not
-commutative. That is, `Mix("alpha"); Mix("bet")` is not equivalent to `Mix("alphabet")`. This
+associative. That is, `Mix("alpha"); Mix("bet")` is not equivalent to `Mix("alphabet")`. This
 eliminates the possibility of collisions; no additional padding or encoding is required.
 
 `Mix` inherits the collision resistance of the underlying BLAKE3 algorithm.
 
-Unlike other operations (which all produce output), `Mix` does not re-key the state, allowing `Mix`
-operations to leverage the full throughput potential of BLAKE3.
+Unlike other operations (which all produce output and therefore replace the BLAKE3 hasher with a
+derived hasher), `Mix` does not replace the hasher, allowing sequential `Mix` operations to be
+batched, leveraging the full throughput potential of BLAKE3.
 
 ### `Derive`
 
@@ -93,8 +103,8 @@ operations to leverage the full throughput potential of BLAKE3.
 
 ```text
 function Derive(state, n):
-  K_0||K_1 ← BLAKE3::XOF(state, 64)      // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K_0)             // Replace the protocol's state with a new keyed hash.
+  K_0ǁK_1 ← BLAKE3::XOF(state, 64)      // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K_0)             // Replace the protocol's state with a new keyed hasher.
   chacha8 ← ChaCha8::new(K_1, [0x02; 8]) // Key a ChaCha8 instance using the operation code as a nonce.
   prf ← ChaCha8::Output(chacha8, n)      // Produce n bytes of ChaCha8 output.
   state ← BLAKE3::Update(state, RE(n))   // Update the protocol's state with the output length.
@@ -102,7 +112,11 @@ function Derive(state, n):
   return (state, prf) 
 ```
 
-`Derive` inherits the PRF security of ChaCha8 using the protocol's prior state as a key.
+`Derive` inherits the PRF security of ChaCha8 using the protocol's prior state as a key. `Derive`
+supports streaming, and a shorter `Derive` operation will return a prefix of a longer one (e.g.
+`Derive(16)` and `Derive(32)` will share the same initial 16 bytes). Once the operation is complete,
+however, the protocols' states would be different. If a use case requires `Derive` output to be
+dependent on its length, include the length in a `Mix` operation beforehand.
 
 ### `Encrypt`/`Decrypt`
 
@@ -111,11 +125,11 @@ state and updates the protocol's state with the plaintext itself.
 
 ```text
 function Encrypt(state, plaintext):
-  K_0||K_1 ← BLAKE3::XOF(state, 64)               // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K_0)                      // Replace the protocol's state with a new keyed hash.
+  K_0ǁK_1 ← BLAKE3::XOF(state, 64)               // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K_0)                      // Replace the protocol's state with a new keyed hasher.
   chacha8 ← ChaCha8::new(K_1, [0x03; 8])          // Key a ChaCha8 instance using the operation code as a nonce.
   prf ← ChaCha8::Output(chacha8, |plaintext|)     // Produce a ChaCha8 keystream.
-  ciphertext ← plaintext ^ prf                    // Encrypt the plaintext with ChaCha8 via XOR.
+  ciphertext ← plaintext ⊕ prf                    // Encrypt the plaintext with ChaCha8 via XOR.
   state ← BLAKE3::Update(state, ciphertext)       // Update the protocol's state with the ciphertext.
   state ← BLAKE3::Update(state, RE(|ciphertext|)) // Update the protocol's state with the plaintext length.
   state ← BLAKE3::Update(state, [0x03])           // Update the protocol's state with the Crypt op code.
@@ -126,11 +140,11 @@ function Encrypt(state, plaintext):
 
 ```text
 function Decrypt(state, ciphertext):
-  K_0||K_1 ← BLAKE3::XOF(state, 64)               // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K_0)                      // Replace the protocol's state with a new keyed hash.
+  K_0ǁK_1 ← BLAKE3::XOF(state, 64)               // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K_0)                      // Replace the protocol's state with a new keyed hasher.
   chacha8 ← ChaCha8::new(K_1, [0x03; 8])          // Key a ChaCha8 instance using the operation code as a nonce.
   prf ← ChaCha8::Output(chacha8, |ciphertext|)    // Produce a ChaCha8 keystream.
-  plaintext ← ciphertext ^ prf                    // Decrypt the ciphertext with ChaCha8 via XOR.
+  plaintext ← ciphertext ⊕ prf                    // Decrypt the ciphertext with ChaCha8 via XOR.
   state ← BLAKE3::Update(state, ciphertext)       // Update the protocol's state with the ciphertext.
   state ← BLAKE3::Update(state, RE(|ciphertext|)) // Update the protocol's state with the ciphertext length.
   state ← BLAKE3::Update(state, [0x03])           // Update the protocol's state with the Crypt op code.
@@ -151,14 +165,21 @@ ciphertexts which successfully decrypt). For IND-CPA and IND-CCA security, `Encr
 operations must be part of an integrated protocol (e.g. an
 [AEAD](#authenticated-encryption-and-data-aead)).
 
+As with `Derive`, `Encrypt`'s streaming support means an `Encrypt` operation with a shorter
+plaintext produces a keystream which is a prefix of one with a longer plaintext (e.g.
+`Encrypt("alpha")` and `Encrypt("alphabet")` will produce ciphertexts with the same initial 5
+bytes). Once the operation is complete, however, the protocols' states would be different. If a use
+case requires ciphertexts to be dependent on their length, include the length in a `Mix` operation
+beforehand.
+
 ### `Tag`/`CheckTag`
 
 The `Tag` operation produces a 16-byte authentication tag from ChaCha8 output:
 
 ```text
 function Tag(state):
-  K_0||K_1 ← BLAKE3::XOF(state, 64)      // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K_0)             // Replace the protocol's state with a new keyed hash.
+  K_0ǁK_1 ← BLAKE3::XOF(state, 64)      // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K_0)             // Replace the protocol's state with a new keyed hasher.
   chacha8 ← ChaCha8::new(K_1, [0x04; 8]) // Key a ChaCha8 instance using the operation code as a nonce.
   tag ← ChaCha8::Output(chacha8, 16)     // Produce 16 bytes of ChaCha8 output.
   state ← BLAKE3::Update(state, RE(16))  // Update the protocol's state with the ciphertext length.
@@ -177,8 +198,8 @@ operation:
 
 ```text
 function CheckTag(state, tag):
-  (state, tag') ← Tag(state) // Calculate the counterfactual tag.
-  return (state, tag ⊜ tag') // Compare the two in constant time.
+  (state, tag′) ← Tag(state) // Calculate the counterfactual tag.
+  return (state, tag = tag′) // Compare the two in constant time.
 ```
 
 ## Basic Protocols

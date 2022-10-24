@@ -34,11 +34,11 @@ this is to prevent the context string from including input of any kind.
 Given a BLAKE3 hasher, Lockstitch defines an unambiguous encoding for operations (similar to
 TupleHash). Each operation updates the protocol's state with operation-specific data or replaces it
 with a derivative state. Once an operation is complete, the protocol's state is updated with the
-number of bytes processed (encoded with TupleHash's `right_encode` function) and the operation's
+number of bytes processed `n` (encoded with TupleHash's `right_encode` function) and the operation's
 1-byte code:
 
 ```text
-state ← BLAKE3::Update(state, RE(count))
+state ← BLAKE3::Update(state, RE(n))
 state ← BLAKE3::Update(state, [operation])
 ```
 
@@ -53,9 +53,9 @@ BLAKE3 keyed hasher created with the first key. Finally, a ChaCha8 stream is ini
 second key and a 64-bit nonce consisting of the operation's 1-byte code repeated 8 times.
 
 ```text
-K_0ǁK_1 ← BLAKE3::XOF(state, 64)
-state ← BLAKE3::Keyed(K_0)
-chacha8 ← ChaCha8::New(K_1, [operation; 8])
+K₀ǁK₁ ← BLAKE3::XOF(state, 64)
+state ← BLAKE3::Keyed(K₀)
+chacha8 ← ChaCha8::new(K₁, [operation; 8])
 ```
 
 The use of the operation code in the nonce ensures that the output of an operation is dependent on
@@ -103,9 +103,9 @@ batched, leveraging the full throughput potential of BLAKE3.
 
 ```text
 function Derive(state, n):
-  K_0ǁK_1 ← BLAKE3::XOF(state, 64)      // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K_0)             // Replace the protocol's state with a new keyed hasher.
-  chacha8 ← ChaCha8::new(K_1, [0x02; 8]) // Key a ChaCha8 instance using the operation code as a nonce.
+  K₀ǁK₁ ← BLAKE3::XOF(state, 64)         // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K₀)              // Replace the protocol's state with a new keyed hasher.
+  chacha8 ← ChaCha8::new(K₁, [0x02; 8])  // Key a ChaCha8 instance using the operation code as a nonce.
   prf ← ChaCha8::Output(chacha8, n)      // Produce n bytes of ChaCha8 output.
   state ← BLAKE3::Update(state, RE(n))   // Update the protocol's state with the output length.
   state ← BLAKE3::Update(state, [0x02])  // Update the protocol's state with the Derive op code.
@@ -125,9 +125,9 @@ state and updates the protocol's state with the plaintext itself.
 
 ```text
 function Encrypt(state, plaintext):
-  K_0ǁK_1 ← BLAKE3::XOF(state, 64)               // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K_0)                      // Replace the protocol's state with a new keyed hasher.
-  chacha8 ← ChaCha8::new(K_1, [0x03; 8])          // Key a ChaCha8 instance using the operation code as a nonce.
+  K₀ǁK₁ ← BLAKE3::XOF(state, 64)                  // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K₀)                       // Replace the protocol's state with a new keyed hasher.
+  chacha8 ← ChaCha8::new(K₁, [0x03; 8])           // Key a ChaCha8 instance using the operation code as a nonce.
   prf ← ChaCha8::Output(chacha8, |plaintext|)     // Produce a ChaCha8 keystream.
   ciphertext ← plaintext ⊕ prf                    // Encrypt the plaintext with ChaCha8 via XOR.
   state ← BLAKE3::Update(state, ciphertext)       // Update the protocol's state with the ciphertext.
@@ -140,9 +140,9 @@ function Encrypt(state, plaintext):
 
 ```text
 function Decrypt(state, ciphertext):
-  K_0ǁK_1 ← BLAKE3::XOF(state, 64)               // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K_0)                      // Replace the protocol's state with a new keyed hasher.
-  chacha8 ← ChaCha8::new(K_1, [0x03; 8])          // Key a ChaCha8 instance using the operation code as a nonce.
+  K₀ǁK₁ ← BLAKE3::XOF(state, 64)                  // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K₀)                       // Replace the protocol's state with a new keyed hasher.
+  chacha8 ← ChaCha8::new(K₁, [0x03; 8])           // Key a ChaCha8 instance using the operation code as a nonce.
   prf ← ChaCha8::Output(chacha8, |ciphertext|)    // Produce a ChaCha8 keystream.
   plaintext ← ciphertext ⊕ prf                    // Decrypt the ciphertext with ChaCha8 via XOR.
   state ← BLAKE3::Update(state, ciphertext)       // Update the protocol's state with the ciphertext.
@@ -178,12 +178,12 @@ The `Tag` operation produces a 16-byte authentication tag from ChaCha8 output:
 
 ```text
 function Tag(state):
-  K_0ǁK_1 ← BLAKE3::XOF(state, 64)      // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K_0)             // Replace the protocol's state with a new keyed hasher.
-  chacha8 ← ChaCha8::new(K_1, [0x04; 8]) // Key a ChaCha8 instance using the operation code as a nonce.
-  tag ← ChaCha8::Output(chacha8, 16)     // Produce 16 bytes of ChaCha8 output.
-  state ← BLAKE3::Update(state, RE(16))  // Update the protocol's state with the ciphertext length.
-  state ← BLAKE3::Update(state, [0x04])  // Update the protocol's state with the Tag op code.
+  K₀ǁK₁ ← BLAKE3::XOF(state, 64)        // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K₀)             // Replace the protocol's state with a new keyed hasher.
+  chacha8 ← ChaCha8::new(K₁, [0x04; 8]) // Key a ChaCha8 instance using the operation code as a nonce.
+  tag ← ChaCha8::Output(chacha8, 16)    // Produce 16 bytes of ChaCha8 output.
+  state ← BLAKE3::Update(state, RE(16)) // Update the protocol's state with the ciphertext length.
+  state ← BLAKE3::Update(state, [0x04]) // Update the protocol's state with the Tag op code.
   return (state, tag) 
 ```
 

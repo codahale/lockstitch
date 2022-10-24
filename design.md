@@ -365,9 +365,9 @@ function Verify(signer.pub, message, I, s):
   state ← Mix(state, signer.pub)                        // Mix the signer's public key into the protocol.
   state ← Mix(state, message)                           // Mix the message into the protocol.
   state ← Mix(state, I)                                 // Mix the commitment point into the protocol.
-  (state, r') ← Ristretto255::Scalar(Derive(state, 64)) // Derive a counterfactual challenge scalar.
-  I' ← [s]G - [r']signer.pub                            // Calculate the counterfactual commitment point.
-  return I = I'                                         // The signature is valid if both points are equal.
+  (state, r′) ← Ristretto255::Scalar(Derive(state, 64)) // Derive a counterfactual challenge scalar.
+  I′ ← [s]G - [r′]signer.pub                            // Calculate the counterfactual commitment point.
+  return I = I′                                         // The signature is valid if both points are equal.
 ```
 
 An additional variation on this construction uses `Encrypt` instead of `Mix` to include the
@@ -406,9 +406,9 @@ function Unsigncrypt(receiver, sender.pub, ephemeral.pub, I, s):
   state ← Mix(state, ECDH(ephemeral.pub, receiver.priv)) // Mix the ECDH shared secret into the protocol.
   (state, plaintext) ← Decrypt(state, ciphertext)        // Decrypt the ciphertext.
   state ← Mix(state, I)                                  // Mix the commitment point into the protocol.
-  (state, r') ← Ristretto255::Scalar(Derive(state, 64))  // Derive a counterfactual challenge scalar.
-  I' ← [s]G - [r']signer.pub                             // Calculate the counterfactual commitment point.
-  if I = I':
+  (state, r′) ← Ristretto255::Scalar(Derive(state, 64))  // Derive a counterfactual challenge scalar.
+  I′ ← [s]G - [r′]signer.pub                             // Calculate the counterfactual commitment point.
+  if I = I′:
     return plaintext                                     // If both points are equal, return the plaintext.
   else:
     return ⊥                                             // Otherwise, return an error.

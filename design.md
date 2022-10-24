@@ -437,3 +437,40 @@ state. The initial [HPKE](#hybrid-public-key-encryption)-style portion of the pr
 trivially constructed by an adversary with an ephemeral key pair of their choosing, but the final
 portion is the sUF-CMA secure [EdDSA-style Schnorr signature scheme](#digital-signatures) from the
 previous section and unforgeable without the sender's private key.
+
+### Hedged Ephemeral Values
+
+Many cryptographic schemes require unique, ephemeral values, often with grave consequences should
+those values not be unique. A key and nonce pair, when used to encrypt two different plaintexts,
+will lose confidentiality. A commitment scalar, when used to sign two different messages, will leak
+the private key. Some algorithms (e.g. AES-SIV or Ed25519) derive those ephemeral values from secret
+information in a deterministic way: AES-SIV derives a nonce from the key, associated data, and
+plaintext; Ed25519 derives a commitment scalar from the signer's private key and the message. This
+has the benefit of eliminating nonce-misuse but can have unintended consequences. Deterministic
+encryption and signing can leak information about duplicate messages to eavesdroppers and is
+vulnerable to power-analysis side channels.
+
+A happy medium between these two extremes is the "hedged ephemeral" strategy, which combines both
+secret information _and_ random values to generate ephemeral values. In the event of an RNG failure,
+they devolve to be deterministic and safe.
+
+To generate hedged values, a Lockstitch protocol can be cloned, mixed with secret values and a
+random value, and used to derive a hedged ephemeral:
+
+```text
+function HedgedSign(signer, message):
+  state ← Initialize("com.example.eddsa")              // Initialize a protocol with a domain string.
+  state ← Mix(state, signer.pub)                       // Mix the signer's public key into the protocol.
+  state ← Mix(state, message)                          // Mix the message into the protocol.
+  with clone ← Clone(state) do                         // Clone the protocol's state.
+    clone ← Mix(clone, signer.priv)                    // Mix the signer's private key into the clone.
+    clone ← Mix(clone, Rand(64))                       // Mix 64 random bytes into the clone.
+    k ← Ristretto255::Scalar(Derive(clone, 64))        // Derive a commitment scalar from the clone.
+    I ← [k]G                                           // Calculate the commitment point.
+    yield (k, I)                                       // Return the ephemeral key pair to the signing scope.
+  end                                                  // Discard the cloned state.
+  state ← Mix(state, I)                                // Mix the commitment point into the protocol.
+  (state, r) ← Ristretto255::Scalar(Derive(state, 64)) // Derive a challenge scalar.
+  s ← signer.priv * r + k                              // Calculate the proof scalar.
+  return (I, s)                                        // Return the commitment point and proof scalar.
+```

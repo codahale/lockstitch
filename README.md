@@ -16,11 +16,9 @@ For example, we can create message digests:
 
 ```rust
 fn digest(data: &[u8]) -> [u8; 32] {
-  let mut out = [0u8; 32];
   let mut md = lockstitch::Protocol::new("com.example.md");
   md.mix(data);
-  md.derive(&mut out);
-  out
+  md.derive_array()
 }
 
 assert_eq!(digest(b"this is a message"), digest(b"this is a message"));
@@ -30,13 +28,11 @@ assert_ne!(digest(b"this is a message"), digest(b"this is another message"));
 We can create message authentication codes:
 
 ```rust
-fn mac(key: &[u8], data: &[u8]) -> [u8; 32] {
-  let mut out = [0u8; 32];
+fn mac(key: &[u8], data: &[u8]) -> [u8; 16] {
   let mut mac = lockstitch::Protocol::new("com.example.mac");
   mac.mix(key);
   mac.mix(data);
-  mac.derive(&mut out);
-  out
+  mac.tag_array()
 }
 
 assert_eq!(mac(b"a key", b"a message"), mac(b"a key", b"a message"));

@@ -200,6 +200,14 @@ impl Protocol {
         self.end_op(Operation::Tag, TAG_LEN as u64);
     }
 
+    /// Extract output from the protocol's current state and fill the given slice with it.
+    #[inline(always)]
+    pub fn tag_array(&mut self) -> [u8; TAG_LEN] {
+        let mut out = [0u8; TAG_LEN];
+        self.tag(&mut out);
+        out
+    }
+
     /// Check whether or not the output of [`Protocol::tag`] matches the provided tag. Returns
     /// `true` if they match; `false` otherwise.
     #[inline(always)]

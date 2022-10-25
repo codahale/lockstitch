@@ -58,18 +58,28 @@ state ← BLAKE3::Keyed(K₀)
 chacha8 ← ChaCha8::new(K₁, [operation; 8])
 ```
 
-The use of the operation code in the nonce ensures that the output of an operation is dependent on
-both the protocol's state prior to that operation as well as the intent of the current operation.
-Further, the state of the protocol is overwritten with BLAKE3 output, making reversing it equivalent
-to breaking BLAKE3's preimage resistance.
+While BLAKE can produce output of arbitrary length via its eXtendable Output Function (XOF),
+Lockstitch uses ChaCha8 exclusively to generate output values. This is done for three reasons.
 
-While BLAKE3 can produce outputs of arbitrary length, Lockstitch uses ChaCha8 exclusively to
-generate output values. This is done primarily to provide a clean separation of responsibilities in
-the design. BLAKE3 effectively functions as a chained KDF, a task for which it was designed and for
-which its fitness can be clearly analyzed. ChaCha8 is used as a pseudo-random function (PRF), a task
-for which it was designed as well. Finally, despite the strong structural similarities between
-ChaCha and BLAKE3's XOF, the use of ChaCha8 provides a performance benefit due to the reduced number
-of rounds in the compression function.
+First, this design provides a clean separation of responsibilities. BLAKE3 effectively functions as
+a chained KDF, a task for which it was designed and for which its fitness can be clearly analyzed.
+ChaCha8 is used as a pseudo-random function (PRF), the task for which it was designed.
+
+Second, in addition to a key, ChaCha8 requires a nonce which is copied directly into the cipher's
+initial state. The use of the operation code in the nonce ensures that the output of an operation is
+dependent on both the protocol's state prior to that operation as well as the intent of the current
+operation and does so without requiring an additional BLAKE3 update. Because the key is derived from
+the protocol's state and assumed to be unique, the original version of ChaCha is used with a 64-bit
+nonce and 64-bit counter. This provides a maximum of 2^64 bytes of output, which matches the 2^64
+bytes of input for BLAKE3.
+
+Finally, despite the strong structural similarities between ChaCha and BLAKE3's XOF, the use of
+ChaCha8 provides a performance benefit due to the reduced number of rounds in the compression
+function. A hash function will always require more rounds than a PRF at an equivalent safety margin
+as its job is much harder: a hash function begins with a public state, takes a potentially large
+amount of adversarial data as input, and produces a digest which ideally reveals no information
+about said data; in contrast, a PRF begins with a high-entropy secret state, takes a fixed sequence
+as input, and produces an output stream which ideally is indistinguishable from random.
 
 ## Operations
 

@@ -64,6 +64,14 @@ fn ae_dec(domain: &str, k: &[u8], n: &[u8], d: &[u8], c: &[u8]) -> Option<Vec<u8
     aead.check_tag(t).then_some(p)
 }
 
+fn tuple_hash(domain: &str, data: &[Vec<u8>]) -> [u8; 32] {
+    let mut tuple_hash = Protocol::new(domain);
+    for d in data {
+        tuple_hash.mix(d);
+    }
+    tuple_hash.derive_array()
+}
+
 proptest! {
     #[test]
     fn message_digests(
@@ -136,5 +144,20 @@ proptest! {
         c in vec(any::<u8>(), TAG_LEN..200),
     ) {
         prop_assert_eq!(ae_dec(&d, &k, &n, &ad, &c), None, "decrypted bad ciphertext");
+    }
+
+    #[test]
+    fn tuple_hashes(
+        d1: String, dd1 in vec(vec(any::<u8>(), 0..200), 0..10),
+        d2: String, dd2 in vec(vec(any::<u8>(), 0..200), 0..10),
+    ) {
+        let h1 = tuple_hash(&d1, &dd1);
+        let h2 = tuple_hash(&d2, &dd2);
+
+        if d1 == d2 && dd1 == dd2 {
+            prop_assert_eq!(h1, h2, "equal inputs produced different outputs");
+        } else {
+            prop_assert_ne!(h1, h2, "different inputs produced the same outputs");
+        }
     }
 }

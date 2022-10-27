@@ -6,7 +6,7 @@ in complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful o
 Xoodyak's Cyclist mode, Lockstitch combines BLAKE3 and ChaCha8 to provide GiB/sec performance on
 modern processors at a 128-bit security level.
 
-## ⚠️ WARNING: You should, under no circumstances, use this. ⚠️
+## ⚠️ WARNING: You should not use this. ⚠️
 
 Neither the design nor the implementation of this library have been independently evaluated.
 

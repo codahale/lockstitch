@@ -58,6 +58,27 @@ state ← BLAKE3::Keyed(K₀)
 chacha8 ← ChaCha8::new(K₁, [operation; 8])
 ```
 
+If BLAKE3 is KDF secure (i.e. its outputs are indistinguishable from random by an adversary in
+possession of all inputs except the keying material, which is not required to be uniformly random),
+then sequences of operations which accept input and output in a protocol form a [KDF
+chain][kdf-chain], giving Lockstitch protocols the following security properties:
+
+* **Resilience**: A protocol's outputs will appear random to an adversary so long as one of the
+  inputs is secret, even if the other inputs to the protocol are adversary-controlled.
+* **Forward Security**: A protocol's previous outputs will appear random to an adversary even if the
+  protocol's state is disclosed at some point.
+* **Break-in Recovery**: A protocol's future outputs will appear random to an adversary in
+  possession of the protocol's state as long as one of the future inputs to the protocol is secret.
+
+[kdf-chain]: https://signal.org/docs/specifications/doubleratchet/doubleratchet.pdf
+
+Finally, if ChaCha8 is PRF secure (i.e. its outputs are indistinguishable from random by an
+adversary if the key is uniformly random), an adversary in possession of the output will not be able
+to infer anything about the key or, indeed, distinguish the output from a randomly generated
+sequences of bytes of equal length.
+
+#### XOF vs PRF
+
 While BLAKE can produce output of arbitrary length via its eXtendable Output Function (XOF),
 Lockstitch uses ChaCha8 exclusively to generate output values. This is done for three reasons.
 
@@ -101,7 +122,9 @@ Unlike a standard hash function, `Mix` operations (as with all other operations)
 associative. That is, `Mix("alpha"); Mix("bet")` is not equivalent to `Mix("alphabet")`. This
 eliminates the possibility of collisions; no additional padding or encoding is required.
 
-`Mix` inherits the collision resistance of the underlying BLAKE3 algorithm.
+`Mix` consists solely of BLAKE3 update operations and as such has collision resistance which reduces
+to the underlying BLAKE3 algorithm: no polynomial algorithm should be able to find two sets of
+inputs which produce the same output except with negligible probability.
 
 Unlike other operations (which all produce output and therefore replace the BLAKE3 hasher with a
 derived hasher), `Mix` does not replace the hasher, allowing sequential `Mix` operations to be
@@ -122,11 +145,13 @@ function Derive(state, n):
   return (state, prf) 
 ```
 
-`Derive` inherits the PRF security of ChaCha8 using the protocol's prior state as a key. `Derive`
-supports streaming, and a shorter `Derive` operation will return a prefix of a longer one (e.g.
-`Derive(16)` and `Derive(32)` will share the same initial 16 bytes). Once the operation is complete,
-however, the protocols' states would be different. If a use case requires `Derive` output to be
-dependent on its length, include the length in a `Mix` operation beforehand.
+A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
+protocol's state prior to the operation provided BLAKE3 is KDF secure and ChaCha8 is PRF secure.
+
+`Derive` supports streaming output, thus a shorter `Derive` operation will return a prefix of a
+longer one (e.g.  `Derive(16)` and `Derive(32)` will share the same initial 16 bytes). Once the
+operation is complete, however, the protocols' states will be different.. If a use case requires
+`Derive` output to be dependent on its length, include the length in a `Mix` operation beforehand.
 
 ### `Encrypt`/`Decrypt`
 
@@ -211,6 +236,11 @@ function CheckTag(state, tag):
   (state, tag′) ← Tag(state) // Calculate the counterfactual tag.
   return (state, tag = tag′) // Compare the two in constant time.
 ```
+
+Because the output of a `Tag` operation is indistinguishable from random by an adversary who does not
+know the protocol's prior state, `Tag` serves as an sUF-CMA secure authenticator for the protocol's
+state. This provides the authenticity for Lockstitch's
+[authenticated encryption](#authenticated-encryption-and-data-aead) construction.
 
 ## Basic Protocols
 

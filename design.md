@@ -104,7 +104,8 @@ as input, and produces an output stream which ideally is indistinguishable from 
 
 ## Operations
 
-Lockstitch supports four operations: `Mix`, `Derive`, `Encrypt`/`Decrypt`, and `Tag`/`CheckTag`.
+Lockstitch supports five operations: `Mix`, `Derive`, `Encrypt`/`Decrypt`, `Tag`/`CheckTag`, and
+`Ratchet`.
 
 ### `Mix`
 
@@ -241,6 +242,19 @@ Because the output of a `Tag` operation is indistinguishable from random by an a
 know the protocol's prior state, `Tag` serves as an sUF-CMA secure authenticator for the protocol's
 state. This provides the authenticity for Lockstitch's
 [authenticated encryption](#authenticated-encryption-and-data-aead) construction.
+
+### `Ratchet`
+
+The `Ratchet` operation irreversibly modifies the protocol's state, preventing rollback:
+
+```text
+function Ratchet(state):
+  K ← BLAKE3::XOF(state, 32)            // Generate one key with XOF output from the current state.
+  state ← BLAKE3::Keyed(K₀)             // Replace the protocol's state with a new keyed hasher.
+  state ← BLAKE3::Update(state, RE(0))  // Update the protocol's state with zero bytes processed.
+  state ← BLAKE3::Update(state, [0x05]) // Update the protocol's state with the Ratchet op code.
+  return state
+```
 
 ## Basic Protocols
 

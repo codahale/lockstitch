@@ -9,6 +9,7 @@ enum Input {
     Encrypt(Vec<u8>),
     Decrypt(Vec<u8>),
     Tag,
+    Ratchet,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -31,30 +32,33 @@ fn apply_transcript(t: &Transcript) -> Vec<Output> {
     let mut protocol = Protocol::new(domain);
     t.inputs
         .iter()
+        .cloned()
         .flat_map(|op| match op {
             Input::Mix(data) => {
-                protocol.mix(data);
+                protocol.mix(&data);
                 None
             }
             Input::Derive(n) => {
-                let mut out = vec![0u8; *n];
+                let mut out = vec![0u8; n];
                 protocol.derive(&mut out);
                 Some(Output::Derived(out))
             }
-            Input::Encrypt(plaintext) => {
-                let mut ciphertext = plaintext.clone();
-                protocol.encrypt(&mut ciphertext);
-                Some(Output::Encrypted(ciphertext))
+            Input::Encrypt(mut plaintext) => {
+                protocol.encrypt(&mut plaintext);
+                Some(Output::Encrypted(plaintext))
             }
-            Input::Decrypt(ciphertext) => {
-                let mut plaintext = ciphertext.clone();
-                protocol.decrypt(&mut plaintext);
-                Some(Output::Decrypted(plaintext))
+            Input::Decrypt(mut ciphertext) => {
+                protocol.decrypt(&mut ciphertext);
+                Some(Output::Decrypted(ciphertext))
             }
             Input::Tag => {
                 let mut tag = vec![0u8; TAG_LEN];
                 protocol.tag(&mut tag);
                 Some(Output::Tagged(tag))
+            }
+            Input::Ratchet => {
+                protocol.ratchet();
+                None
             }
         })
         .collect()
@@ -69,32 +73,35 @@ fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>, Vec<Vec<u8>>)
     let inputs = t
         .inputs
         .iter()
+        .cloned()
         .map(|op| match op {
             Input::Mix(data) => {
-                protocol.mix(data);
+                protocol.mix(&data);
                 Input::Mix(data.to_vec())
             }
             Input::Derive(n) => {
-                let mut out = vec![0u8; *n];
+                let mut out = vec![0u8; n];
                 protocol.derive(&mut out);
                 derived.push(out);
-                Input::Derive(*n)
+                Input::Derive(n)
             }
-            Input::Encrypt(plaintext) => {
-                let mut ciphertext = plaintext.clone();
-                protocol.encrypt(&mut ciphertext);
-                Input::Decrypt(ciphertext)
+            Input::Encrypt(mut plaintext) => {
+                protocol.encrypt(&mut plaintext);
+                Input::Decrypt(plaintext)
             }
-            Input::Decrypt(ciphertext) => {
-                let mut plaintext = ciphertext.clone();
-                protocol.decrypt(&mut plaintext);
-                Input::Encrypt(plaintext)
+            Input::Decrypt(mut ciphertext) => {
+                protocol.decrypt(&mut ciphertext);
+                Input::Encrypt(ciphertext)
             }
             Input::Tag => {
                 let mut tag = vec![0u8; TAG_LEN];
                 protocol.tag(&mut tag);
                 tagged.push(tag);
                 Input::Tag
+            }
+            Input::Ratchet => {
+                protocol.ratchet();
+                Input::Ratchet
             }
         })
         .collect();
@@ -109,6 +116,7 @@ fn data() -> impl Strategy<Value = Vec<u8>> {
 fn input() -> impl Strategy<Value = Input> {
     prop_oneof![
         Just(Input::Tag),
+        Just(Input::Ratchet),
         (1usize..256).prop_map(Input::Derive),
         data().prop_map(Input::Mix),
         data().prop_map(Input::Encrypt),

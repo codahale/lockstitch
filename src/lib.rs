@@ -222,6 +222,15 @@ impl Protocol {
         constant_time_eq(tag, &tag_p)
     }
 
+    /// Modifies the protocol's state irreversibly, preventing rollback.
+    pub fn ratchet(&mut self) {
+        // Chain the protocol's key, ignoring the PRF output.
+        let _ = self.prf(Operation::Ratchet);
+
+        // Update the state with the operation code and zero length.
+        self.end_op(Operation::Ratchet, 0);
+    }
+
     /// Seals the given mutable slice in place.
     ///
     /// The last `TAG_LEN` bytes of the slice will be overwritten with the authentication tag.
@@ -295,6 +304,7 @@ impl Protocol {
 
     /// Replace the protocol's state with derived output and return a PRF instance.
     #[inline(always)]
+    #[must_use]
     fn prf(&mut self, operation: Operation) -> Prf {
         // Generate two keys' worth of XOF output from the current state.
         let mut xof_block = [0u8; blake3::KEY_LEN + Prf::KEY_LEN];
@@ -338,6 +348,7 @@ enum Operation {
     Derive = 0x02,
     Crypt = 0x03,
     Tag = 0x04,
+    Ratchet = 0x05,
 }
 
 /// A ChaCha8-based PRF.

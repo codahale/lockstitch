@@ -370,55 +370,52 @@ impl Prf {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use super::*;
 
     #[test]
-    fn basic_ops() {
-        let mut sho = Protocol::new("this is a test");
-        sho.mix(b"one");
-        sho.mix(b"two");
+    fn known_answers() {
+        let mut protocol = Protocol::new("com.example.kat");
+        protocol.mix(b"one");
+        protocol.mix(b"two");
 
-        let mut one = [0u8; 10];
-        sho.derive(&mut one);
+        assert_eq!("3d5c26f7f0cb6f8f", hex::encode(protocol.derive_array::<8>()));
 
-        sho.mix(b"three");
+        let mut plaintext = b"this is an example".to_vec();
+        protocol.encrypt(&mut plaintext);
 
-        let mut two = [0u8; 10];
-        sho.derive(&mut two);
+        assert_eq!("c005c4d9d0dc568a88479053a7443f6a7781", hex::encode(plaintext));
+        assert_eq!("d3ecd0e3cb4a8459f57c84ea09cdd084", hex::encode(protocol.tag_array()));
+
+        assert_eq!("d3f3b054ff883a5e", hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]
-    fn encrypt_decrypt() {
-        let mut message = b"this is a message".to_vec();
+    fn streams() {
+        let mut slices = Protocol::new("com.example.streams");
+        slices.mix(b"one");
+        slices.mix(b"two");
 
-        {
-            let mut a = Protocol::new("this is a test");
-            a.mix(b"this is a key");
-            a.encrypt(&mut message);
-        }
-        {
-            let mut a = Protocol::new("this is a test");
-            a.mix(b"this is a key");
-            a.decrypt(&mut message);
-        }
+        let mut streams = Protocol::new("com.example.streams");
+        streams.mix_stream(Cursor::new(b"one")).expect("error mixing stream");
 
-        assert_eq!(b"this is a message", message.as_slice());
+        let mut output = Vec::new();
+        streams.copy_stream(Cursor::new(b"two"), &mut output).expect("error copying stream");
+
+        assert_eq!(slices.tag_array(), streams.tag_array());
+        assert_eq!(b"two".as_slice(), &output);
     }
 
     #[test]
-    fn seal_open() {
-        let mut message = b"this is a message".to_vec();
-        message.extend_from_slice(&[0u8; TAG_LEN]);
+    fn hedging() {
+        let mut hedger = Protocol::new("com.example.hedge");
+        hedger.mix(b"one");
+        let tag = hedger.hedge(rand::thread_rng(), &[b"two"], |clone| {
+            let tag = clone.tag_array();
+            (tag[0] == 0).then_some(tag)
+        });
 
-        {
-            let mut a = Protocol::new("this is a test");
-            a.mix(b"this is a key");
-            a.seal(&mut message);
-        }
-        {
-            let mut a = Protocol::new("this is a test");
-            a.mix(b"this is a key");
-            assert_eq!(a.open(&mut message), Some(b"this is a message".as_slice()));
-        }
+        assert_eq!(tag[0], 0);
     }
 }

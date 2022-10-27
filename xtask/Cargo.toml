@@ -11,3 +11,6 @@ xshell = "0.2.2"
 [[bin]]
 name = "xtask"
 path = "src/xtask.rs"
+
+[package.metadata.release]
+release = false

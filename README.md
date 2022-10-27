@@ -1,12 +1,14 @@
 # Lockstitch
 
-**WARNING: You should, under no circumstances, use this.**
-
 Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption)
 in complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, and
 Xoodyak's Cyclist mode, Lockstitch combines BLAKE3 and ChaCha8 to provide GiB/sec performance on
 modern processors at a 128-bit security level.
+
+## ⚠️ WARNING: You should, under no circumstances, use this. ⚠️
+
+Neither the design nor the implementation of this library have been independently evaluated.
 
 ## Use
 

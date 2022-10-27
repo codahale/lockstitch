@@ -137,23 +137,29 @@ prop_compose! {
 }
 
 proptest! {
-    /// Any two equal transcripts must produce equal outputs. Any two different transcripts must
-    /// produce different outputs.
+    /// Multiple applications of the same inputs must always produce the same outputs.
     #[test]
-    fn transcript_consistency(t0 in transcript(), t1 in transcript()) {
-        let out0 = apply_transcript(&t0);
-        let out1 = apply_transcript(&t1);
+    fn determinism(t in transcript()) {
+        let a = apply_transcript(&t);
+        let b = apply_transcript(&t);
 
-        if t0 == t1 {
-            prop_assert_eq!(out0, out1, "equal transcripts produced different outputs");
-        } else  {
-            prop_assert_ne!(out0, out1, "different transcripts produced equal outputs");
-        }
+        prop_assert_eq!(a, b, "two runs of the same transcript produced different outputs");
+    }
+
+    /// Two different transcripts must produce different outputs.
+    #[test]
+    fn divergence(t0 in transcript(), t1 in transcript()) {
+        prop_assume!(t0 != t1, "transcripts must be different");
+
+        let a = apply_transcript(&t0);
+        let b = apply_transcript(&t1);
+
+        prop_assert_ne!(a, b, "different transcripts produced equal outputs");
     }
 
     /// For any transcript, reversible outputs (e.g. encrypt/decrypt) must be symmetric.
     #[test]
-    fn transcript_symmetry(t in transcript()) {
+    fn symmetry(t in transcript()) {
         let (t_inv, a_d, a_t) = invert_transcript(&t);
         let (t_p, b_d, b_t) = invert_transcript(&t_inv);
 

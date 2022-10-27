@@ -78,6 +78,8 @@ proptest! {
         d1: String, m1 in vec(any::<u8>(), 0..200),
         d2: String, m2 in vec(any::<u8>(), 0..200),
     ) {
+        prop_assume!(!(d1 == d2 && m1 == m2), "inputs must be different");
+
         // Leak the domains so we can pretend we've statically allocated it in this test.
         let d1: &'static str = Box::leak(Box::new(d1).into_boxed_str());
         let d2: &'static str = Box::leak(Box::new(d2).into_boxed_str());
@@ -85,11 +87,7 @@ proptest! {
         let md1 = md(d1, &m1);
         let md2 = md(d2, &m2);
 
-        if d1 == d2 && m1 == m2 {
-            prop_assert_eq!(md1, md2, "equal inputs produced different outputs");
-        } else {
-            prop_assert_ne!(md1, md2, "different inputs produced the same outputs");
-        }
+        prop_assert_ne!(md1, md2, "different inputs produced the same outputs");
     }
 
     #[test]
@@ -97,6 +95,8 @@ proptest! {
         d1: String, k1 in vec(any::<u8>(), 1..200), m1 in vec(any::<u8>(), 1..200),
         d2: String, k2 in vec(any::<u8>(), 1..200), m2 in vec(any::<u8>(), 1..200),
     ) {
+        prop_assume!(!(d1 == d2 && k1 == k2 && m1 == m2), "inputs must be different");
+
         // Leak the domains so we can pretend we've statically allocated it in this test.
         let d1: &'static str = Box::leak(Box::new(d1).into_boxed_str());
         let d2: &'static str = Box::leak(Box::new(d2).into_boxed_str());
@@ -104,11 +104,7 @@ proptest! {
         let mac1 = mac(d1, &k1, &m1);
         let mac2 = mac(d2, &k2, &m2);
 
-        if d1 == d2 && k1 == k2 && m1 == m2 {
-            prop_assert_eq!(mac1, mac2, "equal inputs produced different outputs");
-        } else {
-            prop_assert_ne!(mac1, mac2, "different inputs produced the same outputs");
-        }
+        prop_assert_ne!(mac1, mac2, "different inputs produced the same outputs");
     }
 
     #[test]
@@ -117,6 +113,8 @@ proptest! {
         d2: String, k2 in vec(any::<u8>(), 1..200), n2 in vec(any::<u8>(), 1..200),
         m in vec(any::<u8>(), 1..200),
     ) {
+        prop_assume!(!(d1 == d2 && k1 == k2 && n1 == n2), "inputs must be different");
+
         // Leak the domains so we can pretend we've statically allocated it in this test.
         let d1: &'static str = Box::leak(Box::new(d1).into_boxed_str());
         let d2: &'static str = Box::leak(Box::new(d2).into_boxed_str());
@@ -124,12 +122,7 @@ proptest! {
         let c = enc(d1, &k1, &n1, &m);
         let p = dec(d2, &k2, &n2, &c);
 
-
-        if d1 == d2 && k1 == k2 && n1 == n2 {
-            prop_assert_eq!(p, m, "equal inputs produced different outputs");
-        } else {
-            prop_assert_ne!(p, m, "different inputs produced the same outputs");
-        }
+        prop_assert_ne!(p, m, "different inputs produced the same outputs");
     }
 
     #[test]
@@ -138,6 +131,8 @@ proptest! {
         d2: String, k2 in vec(any::<u8>(), 1..200), n2 in vec(any::<u8>(), 1..200), ad2 in vec(any::<u8>(), 0..200),
         m in vec(any::<u8>(), 1..200),
     ) {
+        prop_assume!(!(d1 == d2 && k1 == k2 && n1 == n2 && ad1 == ad2), "inputs must be different");
+
         // Leak the domains so we can pretend we've statically allocated it in this test.
         let d1: &'static str = Box::leak(Box::new(d1).into_boxed_str());
         let d2: &'static str = Box::leak(Box::new(d2).into_boxed_str());
@@ -145,11 +140,7 @@ proptest! {
         let c = ae_enc(d1, &k1, &n1, &ad1, &m);
         let p = ae_dec(d2, &k2, &n2, &ad2, &c);
 
-        if d1 == d2 && k1 == k2 && n1 == n2 && ad1 == ad2 {
-            prop_assert_eq!(p, Some(m), "equal inputs produced different outputs");
-        } else {
-            prop_assert_eq!(p, None, "different inputs produced the same outputs");
-        }
+        prop_assert_eq!(p, None, "different inputs produced the same outputs");
     }
 
     #[test]
@@ -163,7 +154,9 @@ proptest! {
         // Leak the domain so we can pretend we've statically allocated it in this test.
         let d: &'static str = Box::leak(Box::new(d).into_boxed_str());
 
-        prop_assert_eq!(ae_dec(d, &k, &n, &ad, &c), None, "decrypted bad ciphertext");
+        let p = ae_dec(d, &k, &n, &ad, &c);
+
+        prop_assert_eq!(p, None, "decrypted bad ciphertext");
     }
 
     #[test]
@@ -171,6 +164,8 @@ proptest! {
         d1: String, dd1 in vec(vec(any::<u8>(), 0..200), 0..10),
         d2: String, dd2 in vec(vec(any::<u8>(), 0..200), 0..10),
     ) {
+        prop_assume!(!(d1 == d2 && dd1 == dd2), "inputs must be different");
+
         // Leak the domains so we can pretend we've statically allocated it in this test.
         let d1: &'static str = Box::leak(Box::new(d1).into_boxed_str());
         let d2: &'static str = Box::leak(Box::new(d2).into_boxed_str());
@@ -178,10 +173,6 @@ proptest! {
         let h1 = tuple_hash(d1, &dd1);
         let h2 = tuple_hash(d2, &dd2);
 
-        if d1 == d2 && dd1 == dd2 {
-            prop_assert_eq!(h1, h2, "equal inputs produced different outputs");
-        } else {
-            prop_assert_ne!(h1, h2, "different inputs produced the same outputs");
-        }
+        prop_assert_ne!(h1, h2, "different inputs produced the same outputs");
     }
 }

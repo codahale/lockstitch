@@ -38,7 +38,7 @@ pub struct Protocol {
 impl Protocol {
     /// Create a new protocol with the given domain.
     #[inline(always)]
-    pub fn new(domain: &str) -> Protocol {
+    pub fn new(domain: &'static str) -> Protocol {
         // Begin with BLAKE3 in KDF mode.
         Protocol { state: Hasher::new_derive_key(domain) }
     }

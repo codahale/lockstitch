@@ -6,13 +6,18 @@ incremental, stateful building block for complex schemes, constructions, and pro
 ## Preliminaries
 
 The overall structure of Lockstitch is inspired by the Stateful Hash Object scheme in Section 6.3 of
-[the BLAKE3 spec](https://blake3.io).
+[the BLAKE3 spec][blake3] and the [KDF chain][kdf-chain] of the Signal protocol. Lockstitch's
+interface is inspired by [STROBE][strobe] and [Xoodyak][xoodyak].
+
+[blake3]: https://blake3.io
+[strobe]: https://strobe.sourceforge.io
+[xoodyak]: https://csrc.nist.gov/CSRC/media/Projects/lightweight-cryptography/documents/finalist-round/updated-spec-doc/xoodyak-spec-final.pdf
 
 ### Initializing A Protocol
 
-The basic unit of Lockstitch is the protocol, which is a BLAKE3 hasher. Every protocol is
-initialized with a domain separation string, which is used to initialize a BLAKE3 hasher in key
-derivation function (KDF) mode:
+The basic unit of Lockstitch is the protocol, which wraps a BLAKE3 hasher. Every protocol is
+initialized with a domain separation string, used to initialize a BLAKE3 hasher in key derivation
+function (KDF) mode:
 
 ```text
 function Initialize(domain):
@@ -48,9 +53,9 @@ well as operations which produce outputs but do not directly update the protocol
 ### Generating Output
 
 To generate any output during an operation, the protocol produces two 32-byte keys from the first 64
-bytes of XOF output from its BLAKE3 hasher. The protocol then replaces its current state with a
-BLAKE3 keyed hasher created with the first key. Finally, a ChaCha8 stream is initialized with the
-second key and a 64-bit nonce consisting of the operation's 1-byte code repeated 8 times.
+bytes of XOF output from its BLAKE3 hasher. The protocol then replaces its BLAKE3 hasher with a
+BLAKE3 keyed hasher using the first key. Finally, a ChaCha8 stream is initialized using the second
+key and a 64-bit nonce consisting of the operation's 1-byte code repeated 8 times.
 
 ```text
 K₀ǁK₁ ← BLAKE3::XOF(state, 64)

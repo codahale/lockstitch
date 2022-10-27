@@ -360,10 +360,10 @@ impl Prf {
     const BLOCK_LEN: usize = 64;
     const WIDE_BLOCK_LEN: usize = Self::BLOCK_LEN * 4;
 
-    /// Creates a new `Prf` instance using the given key and 64-bit nonce consisting of the
+    /// Creates a new `Prf` instance using the given key and a 96-bit nonce consisting of the
     /// operation code, repeated.
     fn new(key: &[u8; 32], operation: Operation) -> Prf {
-        Prf(ChaCha::new(key, &[operation as u8; 8]))
+        Prf(ChaCha::new(key, &[operation as u8; 12]))
     }
 
     /// Fills the given slice with a single block of PRF output.
@@ -391,15 +391,15 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        assert_eq!("3d5c26f7f0cb6f8f", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("ec28f0b6eef4a292", hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
 
-        assert_eq!("c005c4d9d0dc568a88479053a7443f6a7781", hex::encode(plaintext));
-        assert_eq!("d3ecd0e3cb4a8459f57c84ea09cdd084", hex::encode(protocol.tag_array()));
+        assert_eq!("699e2b6e212f7226153ac7388336ae163bb5", hex::encode(plaintext));
+        assert_eq!("98d78081c223f840d37071503d731996", hex::encode(protocol.tag_array()));
 
-        assert_eq!("d3f3b054ff883a5e", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("8897515f30b7d1c1", hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

@@ -19,7 +19,8 @@
 use std::io::{self, Read, Write};
 
 use blake3::Hasher;
-use c2_chacha::guts::ChaCha;
+use chacha20::cipher::{KeyIvInit, StreamCipher};
+use chacha20::ChaCha8;
 use constant_time_eq::constant_time_eq;
 
 #[cfg(feature = "hedge")]
@@ -102,22 +103,8 @@ impl Protocol {
         // Chain the protocol's key and key a PRF instance.
         let mut prf = self.prf(Operation::Derive);
 
-        // Fill the output buffer with PRF output.
-        if out.len() <= Prf::BLOCK_LEN {
-            // If the output is less than a single block (e.g. a key or scalar), only generate a
-            // single block of PRF output.
-            let mut tmp = [0u8; Prf::BLOCK_LEN];
-            prf.fill_narrow(&mut tmp);
-            out.copy_from_slice(&tmp[..out.len()]);
-        } else {
-            // If the output is greater than a single block, generate four blocks of PRF output at
-            // a time.
-            let mut tmp = [0u8; Prf::WIDE_BLOCK_LEN];
-            for chunk in out.chunks_mut(tmp.len()) {
-                prf.fill_wide(&mut tmp);
-                chunk.copy_from_slice(&tmp[..chunk.len()]);
-            }
-        }
+        // Fill the slice with PRF output.
+        prf.fill(out);
 
         // Update the state with the operation code and derived byte count.
         self.end_op(Operation::Derive, out.len() as u64);
@@ -137,18 +124,10 @@ impl Protocol {
         // Chain the protocol's key and key a PRF instance.
         let mut prf = self.prf(Operation::Crypt);
 
-        // Here we use the wide (4x) buffer size to enable throughput optimizations.
-        let mut tmp = [0u8; Prf::WIDE_BLOCK_LEN];
-
         // Break the input into 64KiB chunks to enable SIMD optimizations on input.
         for chunk in in_out.chunks_mut(Self::BUF_LEN) {
-            for plaintext in chunk.chunks_mut(tmp.len()) {
-                // XOR the plaintext with ChaCha8 output to produce ciphertext.
-                prf.fill_wide(&mut tmp);
-                for (p, k) in plaintext.iter_mut().zip(tmp.iter()) {
-                    *p ^= *k;
-                }
-            }
+            // XOR the plaintext with ChaCha8 output.
+            prf.xor(chunk);
 
             // Update the state with the ciphertext.
             self.state.update(chunk);
@@ -164,21 +143,13 @@ impl Protocol {
         // Chain the protocol's key and key a PRF instance.
         let mut prf = self.prf(Operation::Crypt);
 
-        // Here we use the wide (4x) buffer size to enable throughput optimizations.
-        let mut tmp = [0u8; Prf::WIDE_BLOCK_LEN];
-
         // Break the input into 64KiB chunks to enable SIMD optimizations on input.
         for chunk in in_out.chunks_mut(Self::BUF_LEN) {
             // Update the state with the ciphertext.
             self.state.update(chunk);
 
-            for ciphertext in chunk.chunks_mut(tmp.len()) {
-                // XOR the ciphertext with PRF output to produce plaintext.
-                prf.fill_wide(&mut tmp);
-                for (c, k) in ciphertext.iter_mut().zip(tmp.iter()) {
-                    *c ^= *k;
-                }
-            }
+            // XOR the plaintext with ChaCha8 output.
+            prf.xor(chunk);
         }
 
         // Update the state with the operation code and decrypted byte count.
@@ -191,10 +162,8 @@ impl Protocol {
         // Chain the protocol's key and key a PRF instance.
         let mut prf = self.prf(Operation::Tag);
 
-        // Truncate the first block of PRF output and use it as the tag.
-        let mut tmp = [0u8; Prf::BLOCK_LEN];
-        prf.fill_narrow(&mut tmp);
-        out.copy_from_slice(&tmp[..TAG_LEN]);
+        // Fill the tag with ChaCha8 output.
+        prf.fill(&mut out[..TAG_LEN]);
 
         // Update the state with the operation code and tag length.
         self.end_op(Operation::Tag, TAG_LEN as u64);
@@ -317,7 +286,7 @@ impl Protocol {
         self.state = Hasher::new_keyed(&chain_key.try_into().expect("invalid key"));
 
         // Use the PRF key to create a ChaCha8 instance for output.
-        Prf::new(&prf_key.try_into().expect("invalid key"), operation)
+        Prf::new(prf_key.try_into().expect("invalid key"), operation)
     }
 
     /// End an operation, including the number of bytes processed.
@@ -352,30 +321,28 @@ enum Operation {
 }
 
 /// A ChaCha8-based PRF.
-struct Prf(ChaCha);
+struct Prf(ChaCha8);
 
 impl Prf {
-    const DROUNDS: u32 = 4; // aka ChaCha8
     const KEY_LEN: usize = 32;
-    const BLOCK_LEN: usize = 64;
-    const WIDE_BLOCK_LEN: usize = Self::BLOCK_LEN * 4;
 
     /// Creates a new `Prf` instance using the given key and a 96-bit nonce consisting of the
     /// operation code, repeated.
-    fn new(key: &[u8; 32], operation: Operation) -> Prf {
-        Prf(ChaCha::new(key, &[operation as u8; 12]))
+    fn new(key: [u8; 32], operation: Operation) -> Prf {
+        Prf(ChaCha8::new(&key.into(), &[operation as u8; 12].into()))
     }
 
-    /// Fills the given slice with a single block of PRF output.
+    /// Fills the given slice with PRF output.
     #[inline(always)]
-    fn fill_narrow(&mut self, out: &mut [u8; Self::BLOCK_LEN]) {
-        self.0.refill(Self::DROUNDS, out);
+    fn fill(&mut self, out: &mut [u8]) {
+        out.fill(0);
+        self.xor(out);
     }
 
-    /// Fills the given slice with a four blocks of PRF output.
+    /// XOR the given slice with PRF output.
     #[inline(always)]
-    fn fill_wide(&mut self, out: &mut [u8; Self::WIDE_BLOCK_LEN]) {
-        self.0.refill4(Self::DROUNDS, out);
+    fn xor(&mut self, out: &mut [u8]) {
+        self.0.apply_keystream(out);
     }
 }
 

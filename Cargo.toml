@@ -1,6 +1,6 @@
 [package]
 name = "lockstitch"
-version = "0.1.0-pre"
+version = "0.1.0"
 edition = "2021"
 authors = ["Coda Hale <coda.hale@gmail.com>"]
 license = "MIT OR Apache-2.0"

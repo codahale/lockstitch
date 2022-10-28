@@ -44,3 +44,7 @@ rand = "0.8.5"
 [[bench]]
 name = "benchmarks"
 harness = false
+
+[package.metadata.release]
+pre-release-commit-message = "release: version {{version}}"
+tag-message = "release: {{crate_name}} version {{version}}"

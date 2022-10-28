@@ -103,7 +103,7 @@ impl Protocol {
         // Chain the protocol's key and key a PRF instance.
         let mut prf = self.prf(Operation::Derive);
 
-        // Fill the slice with PRF output.
+        // Fill the slice with ChaCha8 output.
         prf.fill(out);
 
         // Update the state with the operation code and derived byte count.
@@ -279,14 +279,14 @@ impl Protocol {
         let mut xof_block = [0u8; blake3::KEY_LEN + Prf::KEY_LEN];
         self.state.finalize_xof().fill(&mut xof_block);
 
-        // Split the XOF output into a BLAKE3 chain key and a ChaCha8 PRF key.
-        let (chain_key, prf_key) = xof_block.split_at(blake3::KEY_LEN);
+        // Split the XOF output into a BLAKE3 chain key and a ChaCha8 output key.
+        let (chain_key, output_key) = xof_block.split_at(blake3::KEY_LEN);
 
         // Use the chain key to replace the protocol's state with a new keyed hasher.
-        self.state = Hasher::new_keyed(&chain_key.try_into().expect("invalid key"));
+        self.state = Hasher::new_keyed(&chain_key.try_into().expect("invalid BLAKE3 key"));
 
-        // Use the PRF key to create a ChaCha8 instance for output.
-        Prf::new(prf_key.try_into().expect("invalid key"), operation)
+        // Use the output key to create a ChaCha8 keystream for output.
+        Prf::new(output_key.try_into().expect("invalid ChaCha8 key"), operation)
     }
 
     /// End an operation, including the number of bytes processed.
@@ -332,14 +332,14 @@ impl Prf {
         Prf(ChaCha8::new(&key.into(), &[operation as u8; 12].into()))
     }
 
-    /// Fills the given slice with PRF output.
+    /// Fills the given slice with `ChaCha8` output.
     #[inline(always)]
     fn fill(&mut self, out: &mut [u8]) {
         out.fill(0);
         self.xor(out);
     }
 
-    /// XOR the given slice with PRF output.
+    /// XOR the given slice with `ChaCha8` output.
     #[inline(always)]
     fn xor(&mut self, out: &mut [u8]) {
         self.0.apply_keystream(out);

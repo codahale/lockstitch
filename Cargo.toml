@@ -36,7 +36,7 @@ std = ["blake3/std", "c2-chacha/std"]
 members = ["xtask"]
 
 [dev-dependencies]
-criterion = "0.4.0"
+criterion = { version = "0.4.0", features = ["html_reports"] }
 hex = "0.4.3"
 proptest = "1.0.0"
 rand = "0.8.5"

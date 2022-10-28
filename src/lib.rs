@@ -182,13 +182,7 @@ impl Protocol {
     #[inline(always)]
     #[must_use]
     pub fn check_tag(&mut self, tag: &[u8]) -> bool {
-        if tag.len() != TAG_LEN {
-            return false;
-        }
-
-        let mut tag_p = [0u8; TAG_LEN];
-        self.tag(&mut tag_p);
-        constant_time_eq(tag, &tag_p)
+        constant_time_eq(tag, &self.tag_array())
     }
 
     /// Modifies the protocol's state irreversibly, preventing rollback.

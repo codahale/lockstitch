@@ -10,6 +10,18 @@ modern processors at a 128-bit security level.
 
 Neither the design nor the implementation of this library have been independently evaluated.
 
+## Design
+
+A Lockstitch protocol is a stateful object which has five different operations:
+
+* `Mix`: Mixes a piece of data into the protocol's state, making all future outputs dependent on it.
+* `Derive`: Outputs bytes of pseudo-random data dependent on the protocol's prior state.
+* `Encrypt`/`Decrypt`: Encrypts and decrypts data using the protocol's state as the key.
+* `Tag`/`CheckTag`: Generates and verifies authenticator tags of the protocol's state.
+* `Ratchet`: Irreversibly modifies the protocol's state, preventing rollback.
+
+Using these operations, one can construct a wide variety of symmetric-key constructions.
+
 ## Use
 
 Lockstitch is used to compose cryptographic protocols.
@@ -87,8 +99,8 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 * `std`: Enables features based on the Rust standard library. Enabled by default.
 * `hedge`: Enables hedged random value generation with `rand_core`. Enabled by default.
 
-**N.B.:** The SIMD optimizations in `blake3` require either the use of the `std` feature or setting
-`RUSTFLAGS="-C target-cpu=native"` in your build.
+The SIMD optimizations in `blake3` and `chacha20` require setting `RUSTFLAGS="-C target-cpu=native"`
+in your build.
 
 ## Additional Information
 

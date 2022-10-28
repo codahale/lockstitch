@@ -222,6 +222,8 @@ impl Protocol {
 
         // Check the tag.
         if self.check_tag(tag) {
+            // If the tag is verified, then the ciphertext is authentic. Return the slice of the
+            // input which contains the plaintext.
             Some(ciphertext)
         } else {
             // Otherwise, the ciphertext is inauthentic and we zero out the inauthentic plaintext to

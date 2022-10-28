@@ -163,7 +163,7 @@ proptest! {
         let (t_inv, a_d, a_t) = invert_transcript(&t);
         let (t_p, b_d, b_t) = invert_transcript(&t_inv);
 
-        prop_assert_eq!(t, t_p, "non-commutative transcript inversion");
+        prop_assert_eq!(t, t_p, "unable to invert a transcript");
         prop_assert_eq!(a_d, b_d, "divergent derived outputs");
         prop_assert_eq!(a_t, b_t, "divergent tag outputs");
     }

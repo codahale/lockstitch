@@ -99,8 +99,30 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 * `std`: Enables features based on the Rust standard library. Enabled by default.
 * `hedge`: Enables hedged random value generation with `rand_core`. Enabled by default.
 
-The SIMD optimizations in `blake3` and `chacha20` require setting `RUSTFLAGS="-C target-cpu=native"`
-in your build.
+## Performance
+
+Both BLAKE3 and ChaCha8 benefit significantly from the use of SIMD operations, allowing them to
+process larger inputs and outputs in parallel.
+
+The SIMD optimizations in the `blake3` and `chacha20` crates require enabling specific CPU features
+in your build. `blake3` has optimizations for AVX2, AVX512, SSE2, and SSE4.1 on Intel CPUs and NEON
+on ARM CPUs. `chacha20` has optimizations for AVX2 and SSE2 on Intel CPUs.
+
+To compile a x86-64 binary with support for AVX2 and SSE2, for example, create a
+`.cargo/config.toml` file with the following:
+
+```toml
+[build]
+rustflags = ["-C", "target-features=+avx2,+sse2"]
+```
+
+To compile a non-portable binary which enables all optimizations for the specific CPU on the
+compiling machine, create a `.cargo/config.toml` file with the following:
+
+```toml
+[build]
+rustflags = ["-C", "target-cpu=native"]
+```
 
 ## Additional Information
 

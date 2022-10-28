@@ -329,6 +329,11 @@ impl Prf {
     /// Fills the given slice with `ChaCha8` output.
     #[inline(always)]
     fn fill(&mut self, out: &mut [u8]) {
+        // The chacha20 crate doesn't provide a PRF interface, only a stream cipher which XORs the
+        // contents of a slice with the keystream. To prevent fun bugs where people re-use buffers
+        // and end up encrypting old PRF output with new PRF output, we explicitly zero out the
+        // output slice before XORing it with the keystream, resulting in it being filled with just
+        // PRF output.
         out.fill(0);
         self.xor(out);
     }

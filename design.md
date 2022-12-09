@@ -28,11 +28,11 @@ function Initialize(domain):
 The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch protocol domains:
 
 > The context string should be hardcoded, globally unique, and application-specific. … The context
-string should not contain variable data, like salts, IDs, or the current time. (If needed, those can
-be part of the key material, or mixed with the derived key afterwards.) … The purpose of this
-requirement is to ensure that there is no way for an attacker in any scenario to cause two different
-applications or components to inadvertently use the same context string. The safest way to guarantee
-this is to prevent the context string from including input of any kind.
+> string should not contain variable data, like salts, IDs, or the current time. (If needed, those
+> can be part of the key material, or mixed with the derived key afterwards.) … The purpose of this
+> requirement is to ensure that there is no way for an attacker in any scenario to cause two
+> different applications or components to inadvertently use the same context string. The safest way
+> to guarantee this is to prevent the context string from including input of any kind.
 
 ### Encoding An Operation
 

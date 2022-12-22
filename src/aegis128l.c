@@ -1,6 +1,5 @@
 // from https://github.com/jedisct1/rust-aegis/blob/dacf18bfc353e97be0a9a733029e61df7a3f2bce/src/c/aegis128l.c
-// Modified to return a tag on decryption without checking and with support for authenticated data
-// removed.
+// Modified to return a tag on decryption without checking.
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -124,6 +123,16 @@ crypto_aead_aegis128l_mac(unsigned char *mac, size_t adlen, size_t mlen, aes_blo
     AES_BLOCK_STORE(mac, tmp);
 }
 
+static inline void
+crypto_aead_aegis128l_absorb(const unsigned char *const src, aes_block_t *const state)
+{
+    aes_block_t msg0, msg1;
+
+    msg0 = AES_BLOCK_LOAD(src);
+    msg1 = AES_BLOCK_LOAD(src + 16);
+    crypto_aead_aegis128l_update(state, msg0, msg1);
+}
+
 static void
 crypto_aead_aegis128l_enc(unsigned char *const dst, const unsigned char *const src,
                           aes_block_t *const state)
@@ -165,8 +174,9 @@ crypto_aead_aegis128l_dec(unsigned char *const dst, const unsigned char *const s
     crypto_aead_aegis128l_update(state, msg0, msg1);
 }
 
-int crypto_aead_aegis128l_encrypt(unsigned char *c, unsigned char *mac, const unsigned char *m,
-                                  size_t mlen, const unsigned char *npub, const unsigned char *k)
+int crypto_aead_aegis128l_encrypt_detached(unsigned char *c, unsigned char *mac, const unsigned char *m,
+                                           size_t mlen, const unsigned char *ad, size_t adlen,
+                                           const unsigned char *npub, const unsigned char *k)
 {
     aes_block_t state[8];
     CRYPTO_ALIGN(16)
@@ -177,6 +187,16 @@ int crypto_aead_aegis128l_encrypt(unsigned char *c, unsigned char *mac, const un
 
     crypto_aead_aegis128l_init(k, npub, state);
 
+    for (i = 0ULL; i + 32ULL <= adlen; i += 32ULL)
+    {
+        crypto_aead_aegis128l_absorb(ad + i, state);
+    }
+    if (adlen & 0x1f)
+    {
+        memset(src, 0, 32);
+        memcpy(src, ad + i, adlen & 0x1f);
+        crypto_aead_aegis128l_absorb(src, state);
+    }
     for (i = 0ULL; i + 32ULL <= mlen; i += 32ULL)
     {
         crypto_aead_aegis128l_enc(c + i, m + i, state);
@@ -189,14 +209,15 @@ int crypto_aead_aegis128l_encrypt(unsigned char *c, unsigned char *mac, const un
         memcpy(c + i, dst, mlen & 0x1f);
     }
 
-    crypto_aead_aegis128l_mac(mac, 0, mlen, state);
+    crypto_aead_aegis128l_mac(mac, adlen, mlen, state);
 
     return 0;
 }
 
-int crypto_aead_aegis128l_decrypt(unsigned char *m, const unsigned char *c, size_t clen,
-                                  unsigned char *mac, const unsigned char *npub,
-                                  const unsigned char *k)
+int crypto_aead_aegis128l_decrypt_detached(unsigned char *m, const unsigned char *c, size_t clen,
+                                           unsigned char *mac, const unsigned char *ad,
+                                           size_t adlen, const unsigned char *npub,
+                                           const unsigned char *k)
 {
     aes_block_t state[8];
     CRYPTO_ALIGN(16)
@@ -211,6 +232,16 @@ int crypto_aead_aegis128l_decrypt(unsigned char *m, const unsigned char *c, size
     mlen = clen;
     crypto_aead_aegis128l_init(k, npub, state);
 
+    for (i = 0ULL; i + 32ULL <= adlen; i += 32ULL)
+    {
+        crypto_aead_aegis128l_absorb(ad + i, state);
+    }
+    if (adlen & 0x1f)
+    {
+        memset(src, 0, 32);
+        memcpy(src, ad + i, adlen & 0x1f);
+        crypto_aead_aegis128l_absorb(src, state);
+    }
     if (m != NULL)
     {
         for (i = 0ULL; i + 32ULL <= mlen; i += 32ULL)

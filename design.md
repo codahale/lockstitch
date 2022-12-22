@@ -251,12 +251,12 @@ included with the ciphertext:
 function Open(state, ciphertextǁtag):
   K₀ǁK₁ ← BLAKE3::XOF(state, 48)                    // Generate two keys with XOF output from the current state.
   state ← BLAKE3::Keyed(K₀)                         // Replace the protocol's state with a new keyed hasher.
-  aegis ← AEGIS128L::new(K₁, [0x03; 16])            // Key an AEGIS128L instance using the operation code as a nonce.
+  aegis ← AEGIS128L::new(K₁, [0x04; 16])            // Key an AEGIS128L instance using the operation code as a nonce.
   plaintext ← AEGIS128L::Decrypt(aegis, ciphertext) // Decrypt the ciphertext with AEGIS128L.
   tag′ ← AEGIS128L::Finalize(aegis)                 // Calculate the AEGIS128L tag.
   state ← BLAKE3::Update(state, tag′)               // Update the protocol's state with the tag.
   state ← BLAKE3::Update(state, RE(16))             // Update the protocol's state with the tag length.
-  state ← BLAKE3::Update(state, [0x03])             // Update the protocol's state with the Crypt op code.
+  state ← BLAKE3::Update(state, [0x04])             // Update the protocol's state with the Crypt op code.
   if tag ≠ tag′:
     return ⟂ 
   return (state, plaintext) 

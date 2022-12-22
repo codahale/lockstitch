@@ -54,18 +54,19 @@ well as operations which produce outputs but do not directly update the protocol
 
 ### Generating Output
 
-To generate any output during an operation, the protocol produces two 32-byte keys from the first 64
-bytes of XOF output from its BLAKE3 hasher. The protocol then replaces its BLAKE3 hasher with a
-BLAKE3 keyed hasher using the first key. Finally, a ChaCha8 stream is initialized using the second
-key and a 96-bit nonce consisting of the operation's 1-byte code repeated 12 times.
+To generate any output during an operation, the protocol produces a 32-byte chain key and a 16-byte
+output key from the first 48 bytes of XOF output from its BLAKE3 hasher. The protocol then replaces
+its BLAKE3 hasher with a BLAKE3 keyed hasher using the first key. Finally, an AEGIS128L instance is
+initialized using the output key and a 128-bit nonce consisting of the operation's 1-byte code
+repeated 16 times.
 
 ```text
-K₀ǁK₁ ← BLAKE3::XOF(state, 64)
+K₀ǁK₁ ← BLAKE3::XOF(state, 48)
 state ← BLAKE3::Keyed(K₀)
-chacha8 ← ChaCha8::new(K₁, [operation; 12])
+aegis ← AEGIS128L::new(K₁, [operation; 16])
 ```
 
-**N.B.**: Each operation is limited to 256GiB of output.
+**N.B.**: Each operation is limited to 2 EiB of output (2^64 bits).
 
 If BLAKE3 is KDF secure (i.e. its outputs are indistinguishable from random by an adversary in
 possession of all inputs except the keying material, which is not required to be uniformly random),
@@ -81,7 +82,7 @@ chain][kdf-chain], giving Lockstitch protocols the following security properties
 
 [kdf-chain]: https://signal.org/docs/specifications/doubleratchet/doubleratchet.pdf
 
-Finally, if ChaCha8 is PRF secure (i.e. its outputs are indistinguishable from random by an
+Finally, if AEGIS128L is PRF secure (i.e. its outputs are indistinguishable from random by an
 adversary if the key is uniformly random), an adversary in possession of the output will not be able
 to infer anything about the key or, indeed, distinguish the output from a randomly generated
 sequences of bytes of equal length.
@@ -89,30 +90,26 @@ sequences of bytes of equal length.
 #### XOF vs PRF
 
 While BLAKE can produce output of arbitrary length via its eXtendable Output Function (XOF),
-Lockstitch uses ChaCha8 exclusively to generate output values. This is done for three reasons.
+Lockstitch uses AEGIS128L exclusively to generate output values. This is done for three reasons.
 
 First, this design provides a clean separation of responsibilities. BLAKE3 effectively functions as
 a chained KDF, a task for which it was designed and for which its fitness can be clearly analyzed.
-ChaCha8 is used as a pseudo-random function (PRF), the task for which it was designed.
+AEGIS128L is used as a pseudo-random function (PRF), the task for which it was designed.
 
-Second, in addition to a key, ChaCha8 requires a nonce which is copied directly into the cipher's
+Second, in addition to a key, AEGIS128L requires a nonce which is copied directly into the cipher's
 initial state. The use of the operation code in the nonce ensures that the output of an operation is
 dependent on both the protocol's state prior to that operation as well as the intent of the current
 operation and does so without requiring an additional BLAKE3 update. Because the key is derived from
 the protocol's state and assumed to be unique, the nonce can be used to encode intent without risk
-key/nonce pair re-use.
+of key/nonce pair re-use.
 
-Finally, despite the strong structural similarities between ChaCha and BLAKE3's XOF, the use of
-ChaCha8 provides a performance benefit due to the reduced number of rounds in the compression
-function. A hash function will always require more rounds than a PRF at an equivalent safety margin
-as its job is much harder: a hash function begins with a public state, takes a potentially large
-amount of adversarial data as input, and produces a digest which ideally reveals no information
-about said data; in contrast, a PRF begins with a high-entropy secret state, takes a fixed sequence
-as input, and produces an output stream which ideally is indistinguishable from random.
+Finally, the use of AEGIS128L provides a performance benefit due to the use of hardware AES
+instructions. On x86-64 or Apple Silicon processors, AEGIS128L will top 10 GB/s of output, more than
+10x faster than BLAKE3's XOF output.
 
 ## Operations
 
-Lockstitch supports five operations: `Mix`, `Derive`, `Encrypt`/`Decrypt`, `Tag`/`CheckTag`, and
+Lockstitch supports five operations: `Mix`, `Derive`, `Encrypt`/`Decrypt`, `Seal`/`Open`, and
 `Ratchet`.
 
 ### `Mix`
@@ -145,17 +142,23 @@ batched, leveraging the full throughput potential of BLAKE3.
 
 ```text
 function Derive(state, n):
-  K₀ǁK₁ ← BLAKE3::XOF(state, 64)         // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K₀)              // Replace the protocol's state with a new keyed hasher.
-  chacha8 ← ChaCha8::new(K₁, [0x02; 12]) // Key a ChaCha8 instance using the operation code as a nonce.
-  prf ← ChaCha8::Output(chacha8, n)      // Produce n bytes of ChaCha8 output.
-  state ← BLAKE3::Update(state, RE(n))   // Update the protocol's state with the output length.
-  state ← BLAKE3::Update(state, [0x02])  // Update the protocol's state with the Derive op code.
+  K₀ǁK₁ ← BLAKE3::XOF(state, 48)             // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K₀)                  // Replace the protocol's state with a new keyed hasher.
+  aegis ← AEGIS128L::new(K₁, [0x02; 16])     // Key an AEGIS128L instance using the operation code as a nonce.
+  prf ← AEGIS128L::Encrypt(aegis, [0x00; n]) // Produce n bytes of AEGIS128L output.
+  tag ← AEGIS128L::Finalize(aegis)           // Calculate the AEGIS128L tag.
+  state ← BLAKE3::Update(state, tag)         // Update the protocol's state with the tag.
+  state ← BLAKE3::Update(state, RE(16))      // Update the protocol's state with the tag length.
+  state ← BLAKE3::Update(state, [0x02])      // Update the protocol's state with the Derive op code.
   return (state, prf) 
 ```
 
 A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
-protocol's state prior to the operation provided BLAKE3 is KDF secure and ChaCha8 is PRF secure.
+protocol's state prior to the operation provided BLAKE3 is KDF secure and AEGIS128L is PRF secure.
+The protocol's state after the operation is dependent on both the fact that the operation was a
+`Derive` operation as well as the number of bytes produced. AEGIS128L is compactly committing by
+design, so the final `tag` closes over the key, the nonce, and the plaintext (in this case, `n` zero
+bytes).
 
 `Derive` supports streaming output, thus a shorter `Derive` operation will return a prefix of a
 longer one (e.g.  `Derive(16)` and `Derive(32)` will share the same initial 16 bytes). Once the
@@ -164,19 +167,19 @@ operation is complete, however, the protocols' states will be different.. If a u
 
 ### `Encrypt`/`Decrypt`
 
-`Encrypt` uses ChaCha8 to encrypt a given plaintext with a key derived from the protocol's current
-state and updates the protocol's state with the plaintext itself.
+`Encrypt` uses AEGIS128L to encrypt a given plaintext with a key derived from the protocol's current
+state and updates the protocol's state with the final AEGIS128L tag.
 
 ```text
 function Encrypt(state, plaintext):
-  K₀ǁK₁ ← BLAKE3::XOF(state, 64)                  // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K₀)                       // Replace the protocol's state with a new keyed hasher.
-  chacha8 ← ChaCha8::new(K₁, [0x03; 12])          // Key a ChaCha8 instance using the operation code as a nonce.
-  prf ← ChaCha8::Output(chacha8, |plaintext|)     // Produce a ChaCha8 keystream.
-  ciphertext ← plaintext ⊕ prf                    // Encrypt the plaintext with ChaCha8 via XOR.
-  state ← BLAKE3::Update(state, ciphertext)       // Update the protocol's state with the ciphertext.
-  state ← BLAKE3::Update(state, RE(|ciphertext|)) // Update the protocol's state with the plaintext length.
-  state ← BLAKE3::Update(state, [0x03])           // Update the protocol's state with the Crypt op code.
+  K₀ǁK₁ ← BLAKE3::XOF(state, 48)                    // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K₀)                         // Replace the protocol's state with a new keyed hasher.
+  aegis ← AEGIS128L::new(K₁, [0x03; 16])            // Key an AEGIS128L instance using the operation code as a nonce.
+  ciphertext ← AEGIS128L::Encrypt(aegis, plaintext) // Encrypt the plaintext with AEGIS128L.
+  tag ← AEGIS128L::Finalize(aegis)                  // Calculate the AEGIS128L tag.
+  state ← BLAKE3::Update(state, tag)                // Update the protocol's state with the tag.
+  state ← BLAKE3::Update(state, RE(16))             // Update the protocol's state with the tag length.
+  state ← BLAKE3::Update(state, [0x03])             // Update the protocol's state with the Crypt op code.
   return (state, ciphertext) 
 ```
 
@@ -184,29 +187,32 @@ function Encrypt(state, plaintext):
 
 ```text
 function Decrypt(state, ciphertext):
-  K₀ǁK₁ ← BLAKE3::XOF(state, 64)                  // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K₀)                       // Replace the protocol's state with a new keyed hasher.
-  chacha8 ← ChaCha8::new(K₁, [0x03; 12])          // Key a ChaCha8 instance using the operation code as a nonce.
-  prf ← ChaCha8::Output(chacha8, |ciphertext|)    // Produce a ChaCha8 keystream.
-  plaintext ← ciphertext ⊕ prf                    // Decrypt the ciphertext with ChaCha8 via XOR.
-  state ← BLAKE3::Update(state, ciphertext)       // Update the protocol's state with the ciphertext.
-  state ← BLAKE3::Update(state, RE(|ciphertext|)) // Update the protocol's state with the ciphertext length.
-  state ← BLAKE3::Update(state, [0x03])           // Update the protocol's state with the Crypt op code.
+  K₀ǁK₁ ← BLAKE3::XOF(state, 48)                    // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K₀)                         // Replace the protocol's state with a new keyed hasher.
+  aegis ← AEGIS128L::new(K₁, [0x03; 16])            // Key an AEGIS128L instance using the operation code as a nonce.
+  plaintext ← AEGIS128L::Decrypt(aegis, ciphertext) // Decrypt the ciphertext with AEGIS128L.
+  tag ← AEGIS128L::Finalize(aegis)                  // Calculate the AEGIS128L tag.
+  state ← BLAKE3::Update(state, tag)                // Update the protocol's state with the tag.
+  state ← BLAKE3::Update(state, RE(16))             // Update the protocol's state with the tag length.
+  state ← BLAKE3::Update(state, [0x03])             // Update the protocol's state with the Crypt op code.
   return (state, plaintext) 
 ```
 
-Two points bear mentioning about `Encrypt` and `Decrypt`.
+Three points bear mentioning about `Encrypt` and `Decrypt`.
 
 First, both `Encrypt` and `Decrypt` use the same `Crypt` operation code to ensure protocols have
 the same state after both encrypting and decrypting data.
 
-Second, they provide no authentication by themselves. An attacker can modify a ciphertext and the
-`Decrypt` operation will return a plaintext which was never encrypted. Alone, they are EAV secure
-(i.e. a passive adversary will not be able to read plaintext without knowing the protocol's prior
-state) but not IND-CPA secure (i.e. an active adversary with an encryption oracle will be able to
-detect duplicate plaintexts) or IND-CCA secure (i.e. an active adversary can produce modified
-ciphertexts which successfully decrypt). For IND-CPA and IND-CCA security, `Encrypt`/`Decrypt`
-operations must be part of an integrated protocol (e.g. an
+Second, despite not updating the BLAKE3 hasher with either the plaintext or ciphertext, the
+inclusion of the AEGIS128L tag ensures the protocol's state is dependent on both.
+
+Third, `Crypt` operations provide no authentication by themselves. An attacker can modify a
+ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
+they are EAV secure (i.e. a passive adversary will not be able to read plaintext without knowing the
+protocol's prior state) but not IND-CPA secure (i.e. an active adversary with an encryption oracle
+will be able to detect duplicate plaintexts) or IND-CCA secure (i.e. an active adversary can produce
+modified ciphertexts which successfully decrypt). For IND-CPA and IND-CCA security,
+`Encrypt`/`Decrypt` operations must be part of an integrated protocol (e.g. an
 [AEAD](#authenticated-encryption-and-data-aead)).
 
 As with `Derive`, `Encrypt`'s streaming support means an `Encrypt` operation with a shorter
@@ -216,40 +222,45 @@ bytes). Once the operation is complete, however, the protocols' states would be 
 case requires ciphertexts to be dependent on their length, include the length in a `Mix` operation
 beforehand.
 
-### `Tag`/`CheckTag`
+### `Seal`/`Open`
 
-The `Tag` operation produces a 16-byte authentication tag from ChaCha8 output:
-
-```text
-function Tag(state):
-  K₀ǁK₁ ← BLAKE3::XOF(state, 64)         // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K₀)              // Replace the protocol's state with a new keyed hasher.
-  chacha8 ← ChaCha8::new(K₁, [0x04; 12]) // Key a ChaCha8 instance using the operation code as a nonce.
-  tag ← ChaCha8::Output(chacha8, 16)     // Produce 16 bytes of ChaCha8 output.
-  state ← BLAKE3::Update(state, RE(16))  // Update the protocol's state with the ciphertext length.
-  state ← BLAKE3::Update(state, [0x04])  // Update the protocol's state with the Tag op code.
-  return (state, tag) 
-```
-
-This is structurally the same as the `Derive` operation but with a dedicated operation code and a
-fixed length. The specific operation code provides domain separation for output which is usually
-passed in the clear (whereas `Derive` output is often used as inputs for additional processes).
-Fixing the length at 128 bits provides users with the maximum security available given the size of
-the state space.
-
-The `CheckTag` operation compares a received tag with a counterfactual tag produced by the `Tag`
-operation:
+The `Seal` operation uses AEGIS128L to encrypt a given plaintext with a key derived from the
+protocol's current state, updates the protocol's state with the final AEGIS128L tag, and returns the
+tag:
 
 ```text
-function CheckTag(state, tag):
-  (state, tag′) ← Tag(state) // Calculate the counterfactual tag.
-  return (state, tag = tag′) // Compare the two in constant time.
+function Seal(state, plaintext):
+  K₀ǁK₁ ← BLAKE3::XOF(state, 48)                    // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K₀)                         // Replace the protocol's state with a new keyed hasher.
+  aegis ← AEGIS128L::new(K₁, [0x04; 16])            // Key an AEGIS128L instance using the operation code as a nonce.
+  ciphertext ← AEGIS128L::Encrypt(aegis, plaintext) // Encrypt the plaintext with AEGIS128L.
+  tag ← AEGIS128L::Finalize(aegis)                  // Calculate the AEGIS128L tag.
+  state ← BLAKE3::Update(state, tag)                // Update the protocol's state with the tag.
+  state ← BLAKE3::Update(state, RE(16))             // Update the protocol's state with the tag length.
+  state ← BLAKE3::Update(state, [0x04])             // Update the protocol's state with the Crypt op code.
+  return (state, ciphertextǁtag) 
 ```
 
-Because the output of a `Tag` operation is indistinguishable from random by an adversary who does not
-know the protocol's prior state, `Tag` serves as an sUF-CMA secure authenticator for the protocol's
-state. This provides the authenticity for Lockstitch's
-[authenticated encryption](#authenticated-encryption-and-data-aead) construction.
+This is essentially the same thing as the `Encrypt` operation but includes the AEGIS128L tag in the
+ciphertext.
+
+The `Open` operation decrypts the ciphertext and compares the counterfactual tag against the tag
+included with the ciphertext:
+
+```text
+function Open(state, ciphertextǁtag):
+  K₀ǁK₁ ← BLAKE3::XOF(state, 48)                    // Generate two keys with XOF output from the current state.
+  state ← BLAKE3::Keyed(K₀)                         // Replace the protocol's state with a new keyed hasher.
+  aegis ← AEGIS128L::new(K₁, [0x03; 16])            // Key an AEGIS128L instance using the operation code as a nonce.
+  plaintext ← AEGIS128L::Decrypt(aegis, ciphertext) // Decrypt the ciphertext with AEGIS128L.
+  tag′ ← AEGIS128L::Finalize(aegis)                 // Calculate the AEGIS128L tag.
+  state ← BLAKE3::Update(state, tag′)               // Update the protocol's state with the tag.
+  state ← BLAKE3::Update(state, RE(16))             // Update the protocol's state with the tag length.
+  state ← BLAKE3::Update(state, [0x03])             // Update the protocol's state with the Crypt op code.
+  if tag ≠ tag′:
+    return ⟂ 
+  return (state, plaintext) 
+```
 
 ### `Ratchet`
 
@@ -281,34 +292,34 @@ function MessageDigest(data):
   return digest
 ```
 
-This is essentially equivalent to using BLAKE3 with ChaCha8 as an XOF. As such, it inherits
+This is essentially equivalent to using BLAKE3 with AEGIS128L's MAC as an XOF. As such, it inherits
 BLAKE3's collision resistance.
 
 ### Message Authentication Codes
 
-Adding a key to the previous construction and swapping the `Derive` for a `Tag` makes it a MAC:
+Adding a key to the previous construction makes it a MAC:
 
 ```text
 function Mac(key, data):
   state ← Initialize("com.example.mac") // Initialize a protocol with a domain string.
   state ← Mix(state, key)               // Mix the key into the protocol.
   state ← Mix(state, data)              // Mix the data into the protocol.
-  (state, tag) ← Tag(state)             // Create and return a tag.
+  (state, tag) ← Derive(state, 16)      // Derive 16 bytes of output and return it.
   return tag
 ```
 
 The [operation encoding](#encoding-an-operation) ensures that the key and the data will never
 overlap, even if their lengths vary.
 
-The `CheckTag` operation provides a secure way to verify the MAC:
+Use a constant-time comparison to verify the MAC:
 
 ```text
 function VerifyMac(key, data, tag):
   state ← Initialize("com.example.mac") // Initialize a protocol with a domain string.
   state ← Mix(state, key)               // Mix the key into the protocol.
   state ← Mix(state, data)              // Mix the data into the protocol.
-  (state, ok) ← CheckTag(state, tag)    // Check the tag.
-  return ok
+  (state, tag′) ← Derive(state, 16)     // Derive 16 bytes of output.
+  return tag = tag′
 ```
 
 ### Authenticated Encryption And Data (AEAD)
@@ -321,34 +332,29 @@ function Seal(key, nonce, ad, plaintext):
   state ← Mix(state, key)                         // Mix the key into the protocol.
   state ← Mix(state, nonce)                       // Mix the nonce into the protocol.
   state ← Mix(state, ad)                          // Mix the associated data into the protocol.
-  (state, ciphertext) ← Encrypt(state, plaintext) // Encrypt the plaintext.
-  (state, tag) ← Tag(state)                       // Create a tag.
-  return (ciphertext, tag)                        // Return the ciphertext and tag.
+  (state, ciphertext) ← Seal(state, plaintext)    // Seal the plaintext.
+  return ciphertext                               // Return the ciphertext.
 ```
 
 The introduction of a nonce makes the scheme probabilistic (which is required for IND-CCA security).
-The final `Tag` operation closes over all inputs--key, nonce, associated data, and plaintext--which
-are also the values used to produce the ciphertext. Forging a tag here would imply that BLAKE3's MAC
-construction is not sUF-CMA secure, which would imply it is not collision resistant.
+The final `Seal` operation closes over all inputs--key, nonce, associated data, and plaintext--which
+are also the values used to produce the ciphertext. Forging a tag here would imply that AEGIS128L's
+MAC construction is not sUF-CMA secure.
 
 In addition, this construction is compactly committing: finding a ciphertext and tag pair which
 successfully decrypts under multiple keys would imply either BLAKE3 is not collision-resistant or
-ChaCha8 is not PRF-secure, and the final tag serves as a commitment for the ciphertext.
+AEGIS128L is not compactly committing, and the final tag serves as a commitment for the ciphertext.
 
-Decryption uses the `CheckTag` operation to verify the tag:
+Decryption uses the `Open` operation to decrypt:
 
 ```text
-function Open(key, nonce, ad, ciphertext, tag):
+function Open(key, nonce, ad, ciphertext):
   state ← Initialize("com.example.aead")          // Initialize a protocol with a domain string.
   state ← Mix(state, key)                         // Mix the key into the protocol.
   state ← Mix(state, nonce)                       // Mix the nonce into the protocol.
   state ← Mix(state, ad)                          // Mix the associated data into the protocol.
-  (state, plaintext) ← Decrypt(state, ciphertext) // Decrypt the ciphertext.
-  (state, ok) ← CheckTag(state, tag)              // Check the tag to authenticate.
-  if ok:
-    return plaintext                              // If authentic, return the plaintext.
-  else:
-    return ⊥                                      // Otherwise, return an error.
+  (state, plaintext) ← Open(state, ciphertext)    // Decrypt the ciphertext.
+  return plaintext                                // Return the authenticated plaintext or ⟂.
 ```
 
 ## Complex Protocols
@@ -369,9 +375,8 @@ function HPKE_Encrypt(receiver.pub, plaintext):
   state ← Mix(state, receiver.pub)                       // Mix the receiver's public key into the protocol.
   state ← Mix(state, ephemeral.pub)                      // Mix the ephemeral public key into the protocol.
   state ← Mix(state, ECDH(receiver.pub, ephemeral.priv)) // Mix the ephemeral ECDH shared secret into the protocol.
-  (state, ciphertext) ← Encrypt(state, plaintext)        // Encrypt the plaintext.
-  (state, tag) ← Tag(state)                              // Generate a tag.
-  return (ephemeral.pub, ciphertext, tag)                // Return the ephemeral public key, ciphertext, and tag.
+  (state, ciphertext) ← Seal(state, plaintext)           // Seal the plaintext.
+  return (ephemeral.pub, ciphertext)                     // Return the ephemeral public key and tag.
 ```
 
 ```text
@@ -380,12 +385,8 @@ function HPKE_Decrypt(receiver, ephemeral.pub, ciphertext, tag):
   state ← Mix(state, receiver.pub)                       // Mix the receiver's public key into the protocol.
   state ← Mix(state, ephemeral.pub)                      // Mix the ephemeral public key into the protocol.
   state ← Mix(state, ECDH(ephemeral.pub, receiver.priv)) // Mix the ephemeral ECDH shared secret into the protocol.
-  (state, plaintext) ← Decrypt(state, ciphertext)        // Decrypt the plaintext.
-  (state, ok) ← CheckTag(state, tag)                     // Check the tag's validity.
-  if ok:
-    return plaintext                                     // Return the plaintext if the tag is valid.
-  else:
-    return ⊥                                             // Otherwise, return an error.
+  (state, plaintext) ← Open(state, ciphertext)           // Open the plaintext.
+  return plaintext                                       // Return the authenticated plaintext or ⟂.
 ```
 
 **N.B.:** This construction does not provide authentication in the public key setting. An adversary

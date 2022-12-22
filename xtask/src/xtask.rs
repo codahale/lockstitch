@@ -89,15 +89,15 @@ fn bench(sh: &Shell, neon: bool, args: Vec<String>) -> Result<()> {
 }
 
 fn cloud_create(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute instances create lockstitch-benchmark --zone=us-central1-a --machine-type=n2-standard-4 --min-cpu-platform='Intel Ice Lake' --image-project 'debian-cloud' --image-family 'debian-11'").run()?;
+    cmd!(sh, "gcloud compute instances create lockstitch-benchmark --zone=us-central1-a --machine-type=n2-standard-4 --min-cpu-platform 'Intel Ice Lake' --image-project 'debian-cloud' --image-family 'debian-11'").run()?;
 
     Ok(())
 }
 
 fn cloud_setup(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'sudo apt-get install build-essential gnu-plot git -y'").run()?;
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'cargo install cargo-criterion'")
+    // cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'sudo apt-get install build-essential git -y'").run()?;
+    // cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'source ~/.cargo/env && cargo install cargo-criterion'")
         .run()?;
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'git clone https://github.com/codahale/lockstitch'").run()?;
 

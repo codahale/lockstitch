@@ -3,7 +3,7 @@
 Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption)
 in complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, and
-Xoodyak's Cyclist mode, Lockstitch combines BLAKE3 and ChaCha8 to provide GiB/sec performance on
+Xoodyak's Cyclist mode, Lockstitch combines BLAKE3 and AEGIS128L to provide GiB/sec performance on
 modern processors at a 128-bit security level.
 
 ## ⚠️ WARNING: You should not use this. ⚠️
@@ -46,7 +46,7 @@ fn mac(key: &[u8], data: &[u8]) -> [u8; 16] {
   let mut mac = lockstitch::Protocol::new("com.example.mac");
   mac.mix(key);
   mac.mix(data);
-  mac.tag_array()
+  mac.derive_array()
 }
 
 assert_eq!(mac(b"a key", b"a message"), mac(b"a key", b"a message"));
@@ -57,29 +57,25 @@ We can even create authenticated encryption:
 ```rust
 fn aead_encrypt(key: &[u8], nonce: &[u8], ad: &[u8], plaintext: &[u8]) -> Vec<u8> {
   let mut out = vec![0u8; plaintext.len() + lockstitch::TAG_LEN];
-  let (ciphertext, tag) = out.split_at_mut(plaintext.len());
-  ciphertext.copy_from_slice(plaintext);
+  out[..plaintext.len()].copy_from_slice(plaintext);
 
   let mut aead = lockstitch::Protocol::new("com.example.aead");
   aead.mix(key);
   aead.mix(nonce);
   aead.mix(ad);
-  aead.encrypt(ciphertext);
-  aead.tag(tag);
+  aead.seal(&mut out);
 
   out
 }
 
 fn aead_decrypt(key: &[u8], nonce: &[u8], ad: &[u8], ciphertext: &[u8]) -> Option<Vec<u8>> {
-  let (ciphertext, tag) = ciphertext.split_at(ciphertext.len() - lockstitch::TAG_LEN);
-  let mut plaintext = ciphertext.to_vec();
+  let mut ciphertext = ciphertext.to_vec();
 
   let mut aead = lockstitch::Protocol::new("com.example.aead");
   aead.mix(key);
   aead.mix(nonce);
   aead.mix(ad);
-  aead.decrypt(&mut plaintext);
-  aead.check_tag(tag).then_some(plaintext)
+  aead.open(&mut ciphertext).map(|p| p.to_vec())
 }
 
 let plaintext = b"a message".to_vec();
@@ -101,12 +97,11 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 
 ## Performance
 
-Both BLAKE3 and ChaCha8 benefit significantly from the use of SIMD operations, allowing them to
-process larger inputs and outputs in parallel.
+Both BLAKE3 and AEGIS128L benefit significantly from the use of specific CPU operations.
 
-The SIMD optimizations in the `blake3` and `chacha20` crates require enabling specific CPU features
-in your build. `blake3` has optimizations for AVX2, AVX512, SSE2, and SSE4.1 on Intel CPUs and NEON
-on ARM CPUs. `chacha20` has optimizations for AVX2 and SSE2 on Intel CPUs.
+The SIMD optimizations in the `blake3` crate requires either enabling specific CPU features in your
+build or using the `std` feature for auto-detection. `blake3` has optimizations for AVX2, AVX512,
+SSE2, and SSE4.1 on Intel CPUs and NEON on ARM CPUs.
 
 To compile a x86-64 binary with support for AVX2 and SSE2, for example, create a
 `.cargo/config.toml` file with the following:
@@ -124,6 +119,9 @@ compiling machine, create a `.cargo/config.toml` file with the following:
 rustflags = ["-C", "target-cpu=native"]
 ```
 
+Lockstitch's AEGIS128L implementation requires hardware support for AES and is currently only
+implemented for `x86_64` and `aarch64` processors.
+
 ## Additional Information
 
 For more information on the design of Lockstitch, see [`design.md`](design.md).
@@ -131,6 +129,6 @@ For more information on performance, see [`perf.md`](perf.md).
 
 ## License
 
-Copyright © 2022 Coda Hale
+Copyright © 2022 Coda Hale, Frank Denis
 
-Distributed under the Apache License 2.0 or MIT License.
+Distributed under the MIT License.

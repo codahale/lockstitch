@@ -12,7 +12,7 @@ fn mac(domain: &'static str, k: &[u8], m: &[u8]) -> [u8; TAG_LEN] {
     let mut mac = Protocol::new(domain);
     mac.mix(k);
     mac.mix(m);
-    mac.tag_array()
+    mac.derive_array::<TAG_LEN>()
 }
 
 fn enc(domain: &'static str, k: &[u8], n: &[u8], p: &[u8]) -> Vec<u8> {
@@ -42,12 +42,8 @@ fn ae_enc(domain: &'static str, k: &[u8], n: &[u8], d: &[u8], p: &[u8]) -> Vec<u
     aead.mix(d);
 
     let mut out = vec![0u8; p.len() + TAG_LEN];
-    let (c, t) = out.split_at_mut(p.len());
-
-    c.copy_from_slice(p);
-    aead.encrypt(c);
-
-    aead.tag(t);
+    out[..p.len()].copy_from_slice(p);
+    aead.seal(&mut out);
 
     out
 }
@@ -58,10 +54,8 @@ fn ae_dec(domain: &'static str, k: &[u8], n: &[u8], d: &[u8], c: &[u8]) -> Optio
     aead.mix(n);
     aead.mix(d);
 
-    let (c, t) = c.split_at(c.len() - TAG_LEN);
     let mut p = c.to_vec();
-    aead.decrypt(&mut p);
-    aead.check_tag(t).then_some(p)
+    aead.open(&mut p).map(|p| p.to_vec())
 }
 
 fn tuple_hash(domain: &'static str, data: &[Vec<u8>]) -> [u8; 32] {

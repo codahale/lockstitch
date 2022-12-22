@@ -1,6 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
-#![forbid(unsafe_code)]
 #![warn(
     missing_docs,
     rust_2018_idioms,
@@ -19,12 +18,12 @@
 use std::io::{self, Read, Write};
 
 use blake3::Hasher;
-use chacha20::cipher::{KeyIvInit, StreamCipher};
-use chacha20::ChaCha8;
 use constant_time_eq::constant_time_eq;
 
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
+
+mod aegis128l;
 
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
@@ -75,7 +74,7 @@ impl Protocol {
         mut reader: impl Read,
         mut writer: impl Write,
     ) -> io::Result<u64> {
-        let mut buf = [0u8; Self::BUF_LEN];
+        let mut buf = [0u8; 64 * 1024]; // 64KiB is big enough to enable all possible SIMD optimizations
         let mut n = 0;
 
         loop {
@@ -100,14 +99,20 @@ impl Protocol {
     /// Derive output from the protocol's current state and fill the given slice with it.
     #[inline(always)]
     pub fn derive(&mut self, out: &mut [u8]) {
-        // Chain the protocol's key and key a PRF instance.
-        let mut prf = self.prf(Operation::Derive);
+        // Chain the protocol's key and generate an output key.
+        let output_key = self.chain();
 
-        // Fill the slice with ChaCha8 output.
-        prf.fill(out);
+        // Ensure we're not accidentally encrypting things.
+        out.fill(0);
 
-        // Update the state with the operation code and derived byte count.
-        self.end_op(Operation::Derive, out.len() as u64);
+        // Encrypt the all-zeros buffer.
+        let tag = aegis128l::encrypt(&output_key, &[Operation::Derive as u8; 16], out);
+
+        // Update the BLAKE3 hasher with the resulting tag.
+        self.state.update(&tag);
+
+        // Update the state with the operation code and tag length.
+        self.end_op(Operation::Derive, 16);
     }
 
     /// Derive output from the protocol's current state and return it as an array.
@@ -121,77 +126,33 @@ impl Protocol {
     /// Encrypt the given slice in place.
     #[inline(always)]
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
-        // Chain the protocol's key and key a PRF instance.
-        let mut prf = self.prf(Operation::Crypt);
+        // Chain the protocol's key and generate an output key.
+        let output_key = self.chain();
 
-        // Break the input into 64KiB chunks to enable SIMD optimizations on input.
-        for chunk in in_out.chunks_mut(Self::BUF_LEN) {
-            // XOR the plaintext with ChaCha8 output.
-            prf.xor(chunk);
+        // Encrypt the plaintext.
+        let tag = aegis128l::encrypt(&output_key, &[Operation::Crypt as u8; 16], in_out);
 
-            // Update the state with the ciphertext.
-            self.state.update(chunk);
-        }
+        // Update the BLAKE3 hasher with the resulting tag.
+        self.state.update(&tag);
 
-        // Update the state with the operation code and encrypted byte count.
-        self.end_op(Operation::Crypt, in_out.len() as u64);
+        // Update the state with the operation code and tag length.
+        self.end_op(Operation::Crypt, 16);
     }
 
     /// Decrypt the given slice in place.
     #[inline(always)]
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
-        // Chain the protocol's key and key a PRF instance.
-        let mut prf = self.prf(Operation::Crypt);
+        // Chain the protocol's key and generate an output key.
+        let output_key = self.chain();
 
-        // Break the input into 64KiB chunks to enable SIMD optimizations on input.
-        for chunk in in_out.chunks_mut(Self::BUF_LEN) {
-            // Update the state with the ciphertext.
-            self.state.update(chunk);
+        // Decrypt the ciphertext.
+        let tag = aegis128l::decrypt(&output_key, &[Operation::Crypt as u8; 16], in_out);
 
-            // XOR the plaintext with ChaCha8 output.
-            prf.xor(chunk);
-        }
-
-        // Update the state with the operation code and decrypted byte count.
-        self.end_op(Operation::Crypt, in_out.len() as u64);
-    }
-
-    /// Extract output from the protocol's current state and fill the given slice with it.
-    #[inline(always)]
-    pub fn tag(&mut self, out: &mut [u8]) {
-        // Chain the protocol's key and key a PRF instance.
-        let mut prf = self.prf(Operation::Tag);
-
-        // Fill the tag with ChaCha8 output.
-        prf.fill(&mut out[..TAG_LEN]);
+        // Update the BLAKE3 hasher with the resulting tag.
+        self.state.update(&tag);
 
         // Update the state with the operation code and tag length.
-        self.end_op(Operation::Tag, TAG_LEN as u64);
-    }
-
-    /// Extract output from the protocol's current state and fill the given slice with it.
-    #[inline(always)]
-    pub fn tag_array(&mut self) -> [u8; TAG_LEN] {
-        let mut out = [0u8; TAG_LEN];
-        self.tag(&mut out);
-        out
-    }
-
-    /// Check whether or not the output of [`Protocol::tag`] matches the provided tag. Returns
-    /// `true` if they match; `false` otherwise.
-    #[inline(always)]
-    #[must_use]
-    pub fn check_tag(&mut self, tag: &[u8]) -> bool {
-        constant_time_eq(tag, &self.tag_array())
-    }
-
-    /// Modifies the protocol's state irreversibly, preventing rollback.
-    pub fn ratchet(&mut self) {
-        // Chain the protocol's key, ignoring the PRF output.
-        let _ = self.prf(Operation::Ratchet);
-
-        // Update the state with the operation code and zero length.
-        self.end_op(Operation::Ratchet, 0);
+        self.end_op(Operation::Crypt, 16);
     }
 
     /// Seals the given mutable slice in place.
@@ -200,13 +161,20 @@ impl Protocol {
     #[inline(always)]
     pub fn seal(&mut self, in_out: &mut [u8]) {
         // Split the buffer into plaintext and tag.
-        let (plaintext, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
+        let (in_out, tag_out) = in_out.split_at_mut(in_out.len() - TAG_LEN);
+
+        // Chain the protocol's key and generate an output key.
+        let output_key = self.chain();
 
         // Encrypt the plaintext.
-        self.encrypt(plaintext);
+        let tag = aegis128l::encrypt(&output_key, &[Operation::AuthCrypt as u8; 16], in_out);
+        tag_out.copy_from_slice(&tag);
 
-        // Extract a tag.
-        self.tag(tag);
+        // Update the BLAKE3 hasher with the resulting tag.
+        self.state.update(&tag);
+
+        // Update the state with the operation code and tag length.
+        self.end_op(Operation::AuthCrypt, 16);
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -215,23 +183,41 @@ impl Protocol {
     #[must_use]
     pub fn open<'a>(&mut self, in_out: &'a mut [u8]) -> Option<&'a [u8]> {
         // Split the buffer into ciphertext and tag.
-        let (ciphertext, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
+        let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
+
+        // Chain the protocol's key and generate an output key.
+        let output_key = self.chain();
 
         // Decrypt the ciphertext.
-        self.decrypt(ciphertext);
+        let tag_p = aegis128l::decrypt(&output_key, &[Operation::AuthCrypt as u8; 16], in_out);
+
+        // Update the BLAKE3 hasher with the resulting tag.
+        self.state.update(&tag_p);
+
+        // Update the state with the operation code and tag length.
+        self.end_op(Operation::AuthCrypt, 16);
 
         // Check the tag.
-        if self.check_tag(tag) {
+        if constant_time_eq(tag, &tag_p) {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
-            Some(ciphertext)
+            Some(in_out)
         } else {
             // Otherwise, the ciphertext is inauthentic and we zero out the inauthentic plaintext to
             // avoid bugs where the caller forgets to check the return value of this function and
             // discloses inauthentic plaintext.
-            ciphertext.fill(0);
+            in_out.fill(0);
             None
         }
+    }
+
+    /// Modifies the protocol's state irreversibly, preventing rollback.
+    pub fn ratchet(&mut self) {
+        // Chain the protocol's key, ignoring the PRF output.
+        let _ = self.chain();
+
+        // Update the state with the operation code and zero length.
+        self.end_op(Operation::Ratchet, 0);
     }
 
     /// Clones the protocol and mixes `secrets` plus 64 random bytes into the clone. Passes the
@@ -267,22 +253,22 @@ impl Protocol {
         unreachable!("unable to hedge a valid value in 1000 tries");
     }
 
-    /// Replace the protocol's state with derived output and return a PRF instance.
+    /// Replace the protocol's state with derived output and return an AEGIS128L output key.
     #[inline(always)]
     #[must_use]
-    fn prf(&mut self, operation: Operation) -> Prf {
+    fn chain(&mut self) -> [u8; 16] {
         // Generate two keys' worth of XOF output from the current state.
-        let mut xof_block = [0u8; blake3::KEY_LEN + Prf::KEY_LEN];
+        let mut xof_block = [0u8; blake3::KEY_LEN + 16];
         self.state.finalize_xof().fill(&mut xof_block);
 
-        // Split the XOF output into a BLAKE3 chain key and a ChaCha8 output key.
+        // Split the XOF output into a BLAKE3 chain key and an AEGIS128L output key.
         let (chain_key, output_key) = xof_block.split_at(blake3::KEY_LEN);
 
         // Use the chain key to replace the protocol's state with a new keyed hasher.
         self.state = Hasher::new_keyed(&chain_key.try_into().expect("invalid BLAKE3 key"));
 
-        // Use the output key to create a ChaCha8 keystream for output.
-        Prf::new(output_key.try_into().expect("invalid ChaCha8 key"), operation)
+        // Use the output key to create an AEGIS128L key for output.
+        output_key.try_into().expect("invalid AEGIS128L key")
     }
 
     /// End an operation, including the number of bytes processed.
@@ -301,9 +287,6 @@ impl Protocol {
         // Update the state with the length and operation code.
         self.state.update(&buffer[offset..]);
     }
-
-    // 64KiB is a large enough buffer to enable all possible SIMD optimizations.
-    const BUF_LEN: usize = 64 * 1024;
 }
 
 /// A primitive operation in a protocol with a unique 1-byte code.
@@ -312,39 +295,8 @@ enum Operation {
     Mix = 0x01,
     Derive = 0x02,
     Crypt = 0x03,
-    Tag = 0x04,
+    AuthCrypt = 0x04,
     Ratchet = 0x05,
-}
-
-/// A ChaCha8-based PRF.
-struct Prf(ChaCha8);
-
-impl Prf {
-    const KEY_LEN: usize = 32;
-
-    /// Creates a new `Prf` instance using the given key and a 96-bit nonce consisting of the
-    /// operation code, repeated.
-    fn new(key: [u8; 32], operation: Operation) -> Prf {
-        Prf(ChaCha8::new(&key.into(), &[operation as u8; 12].into()))
-    }
-
-    /// Fills the given slice with `ChaCha8` output.
-    #[inline(always)]
-    fn fill(&mut self, out: &mut [u8]) {
-        // The chacha20 crate doesn't provide a PRF interface, only a stream cipher which XORs the
-        // contents of a slice with the keystream. To prevent fun bugs where people re-use buffers
-        // and end up encrypting old PRF output with new PRF output, we explicitly zero out the
-        // output slice before XORing it with the keystream, resulting in it being filled with just
-        // PRF output.
-        out.fill(0);
-        self.xor(out);
-    }
-
-    /// XOR the given slice with `ChaCha8` output.
-    #[inline(always)]
-    fn xor(&mut self, out: &mut [u8]) {
-        self.0.apply_keystream(out);
-    }
 }
 
 #[cfg(test)]
@@ -359,15 +311,25 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        assert_eq!("ec28f0b6eef4a292", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("0914194389f16590", hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
+        assert_eq!("225fa2e797f4b442a41593e800ae19fb83fe", hex::encode(plaintext));
 
-        assert_eq!("699e2b6e212f7226153ac7388336ae163bb5", hex::encode(plaintext));
-        assert_eq!("98d78081c223f840d37071503d731996", hex::encode(protocol.tag_array()));
+        protocol.ratchet();
 
-        assert_eq!("8897515f30b7d1c1", hex::encode(protocol.derive_array::<8>()));
+        let plaintext = b"this is an example";
+        let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
+        sealed[..plaintext.len()].copy_from_slice(plaintext);
+        protocol.seal(&mut sealed);
+
+        assert_eq!(
+            "4928ce70d5244fc339d9f08e235d48ebb659665f859d8b371e8dbb1f5aa861d0a4d3",
+            hex::encode(sealed)
+        );
+
+        assert_eq!("4dcf44aa574b8030", hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]
@@ -382,7 +344,7 @@ mod tests {
         let mut output = Vec::new();
         streams.copy_stream(Cursor::new(b"two"), &mut output).expect("error copying stream");
 
-        assert_eq!(slices.tag_array(), streams.tag_array());
+        assert_eq!(slices.derive_array::<16>(), streams.derive_array::<16>());
         assert_eq!(b"two".as_slice(), &output);
     }
 
@@ -391,7 +353,7 @@ mod tests {
         let mut hedger = Protocol::new("com.example.hedge");
         hedger.mix(b"one");
         let tag = hedger.hedge(rand::thread_rng(), &[b"two"], |clone| {
-            let tag = clone.tag_array();
+            let tag = clone.derive_array::<16>();
             (tag[0] == 0).then_some(tag)
         });
 

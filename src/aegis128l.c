@@ -270,7 +270,7 @@ int crypto_aead_aegis128l_decrypt_detached(unsigned char *m, const unsigned char
         state[4] = AES_BLOCK_XOR(state[4], AES_BLOCK_LOAD(dst + 16));
     }
 
-    crypto_aead_aegis128l_mac(computed_mac, 0, mlen, state);
+    crypto_aead_aegis128l_mac(computed_mac, adlen, mlen, state);
     memcpy(mac, computed_mac, 16);
     return 0;
 }

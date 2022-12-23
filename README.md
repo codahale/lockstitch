@@ -17,7 +17,7 @@ A Lockstitch protocol is a stateful object which has five different operations:
 * `Mix`: Mixes a piece of data into the protocol's state, making all future outputs dependent on it.
 * `Derive`: Outputs bytes of pseudo-random data dependent on the protocol's prior state.
 * `Encrypt`/`Decrypt`: Encrypts and decrypts data using the protocol's state as the key.
-* `Tag`/`CheckTag`: Generates and verifies authenticator tags of the protocol's state.
+* `Seal`/`Open`: Similar to `Encrypt`/`Decrypt` but uses a MAC to ensure authenticity.
 * `Ratchet`: Irreversibly modifies the protocol's state, preventing rollback.
 
 Using these operations, one can construct a wide variety of symmetric-key constructions.
@@ -50,6 +50,8 @@ fn mac(key: &[u8], data: &[u8]) -> [u8; 16] {
 }
 
 assert_eq!(mac(b"a key", b"a message"), mac(b"a key", b"a message"));
+assert_ne!(mac(b"a key", b"a message"), mac(b"another key", b"a message"));
+assert_ne!(mac(b"a key", b"a message"), mac(b"a key", b"another message"));
 ```
 
 We can even create authenticated encryption:
@@ -97,11 +99,14 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 
 ## Performance
 
-Both BLAKE3 and AEGIS128L benefit significantly from the use of specific CPU operations.
+Both BLAKE3 and AEGIS128L benefit significantly from the use of specific CPU operations. `blake3`
+has optimizations for AVX2, AVX512, SSE2, and SSE4.1 on Intel CPUs and NEON on ARM CPUs.
+Lockstitch's AEGIS128L implementation requires hardware support for AES and is currently only
+implemented for `x86_64` processors with `aes` and `ssse3` features and `aarch64` processors with
+NEON and the `aesmc` and `aese` instructions.
 
-The SIMD optimizations in the `blake3` crate requires either enabling specific CPU features in your
-build or using the `std` feature for auto-detection. `blake3` has optimizations for AVX2, AVX512,
-SSE2, and SSE4.1 on Intel CPUs and NEON on ARM CPUs.
+The SIMD optimizations in the `blake3` crate requires either enabling the `std` feature of this
+crate or enabling specific CPU features in your build.
 
 To compile a x86-64 binary with support for AVX2 and SSE2, for example, create a
 `.cargo/config.toml` file with the following:
@@ -119,9 +124,6 @@ compiling machine, create a `.cargo/config.toml` file with the following:
 rustflags = ["-C", "target-cpu=native"]
 ```
 
-Lockstitch's AEGIS128L implementation requires hardware support for AES and is currently only
-implemented for `x86_64` and `aarch64` processors.
-
 ## Additional Information
 
 For more information on the design of Lockstitch, see [`design.md`](design.md).
@@ -130,5 +132,8 @@ For more information on performance, see [`perf.md`](perf.md).
 ## License
 
 Copyright © 2022 Coda Hale, Frank Denis
+
+AEGIS128L implementation copied from [rust-aegis](https://github.com/jedisct1/rust-aegis/) with some
+modifications.
 
 Distributed under the MIT License.

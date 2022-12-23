@@ -1,6 +1,6 @@
 # The Design Of Lockstitch
 
-Lockstitch provides a single cryptographic primitive for all symmetric-key operations and an
+Lockstitch provides a single cryptographic service for all symmetric-key operations and an
 incremental, stateful building block for complex schemes, constructions, and protocols.
 
 ## Preliminaries
@@ -56,7 +56,7 @@ well as operations which produce outputs but do not directly update the protocol
 
 To generate any output during an operation, the protocol produces a 32-byte chain key and a 16-byte
 output key from the first 48 bytes of XOF output from its BLAKE3 hasher. The protocol then replaces
-its BLAKE3 hasher with a BLAKE3 keyed hasher using the first key. Finally, an AEGIS128L instance is
+its BLAKE3 hasher with a keyed BLAKE3 hasher using the first key. Finally, an AEGIS128L instance is
 initialized using the output key and a 128-bit nonce consisting of the operation's 1-byte code
 repeated 16 times.
 
@@ -94,7 +94,7 @@ Lockstitch uses AEGIS128L exclusively to generate output values. This is done fo
 
 First, this design provides a clean separation of responsibilities. BLAKE3 effectively functions as
 a chained KDF, a task for which it was designed and for which its fitness can be clearly analyzed.
-AEGIS128L is used as a pseudo-random function (PRF), the task for which it was designed.
+AEGIS128L is used as a PRF and AEAD, tasks for which it was designed.
 
 Second, in addition to a key, AEGIS128L requires a nonce which is copied directly into the cipher's
 initial state. The use of the operation code in the nonce ensures that the output of an operation is
@@ -103,9 +103,13 @@ operation and does so without requiring an additional BLAKE3 update. Because the
 the protocol's state and assumed to be unique, the nonce can be used to encode intent without risk
 of key/nonce pair re-use.
 
-Finally, the use of AEGIS128L provides a performance benefit due to the use of hardware AES
-instructions. On x86-64 or Apple Silicon processors, AEGIS128L will top 10 GB/s of output, more than
-10x faster than BLAKE3's XOF output.
+Finally, the use of AEGIS128L provides a huge performance benefit over BLAKE3's XOF. A hash
+function will always require more rounds than a PRF at an equivalent safety margin as its job is
+much harder: a hash function begins with a public state, takes a potentially large amount of
+adversarial data as input, and produces a digest which ideally reveals no information about said
+data; in contrast, a PRF begins with a high-entropy secret state, takes a fixed sequence as input,
+and produces an output stream which ideally is indistinguishable from random. As a result, AEGIS128L
+is an order of magnitude faster than BLAKE3's XOF.
 
 ## Operations
 
@@ -204,7 +208,8 @@ First, both `Encrypt` and `Decrypt` use the same `Crypt` operation code to ensur
 the same state after both encrypting and decrypting data.
 
 Second, despite not updating the BLAKE3 hasher with either the plaintext or ciphertext, the
-inclusion of the AEGIS128L tag ensures the protocol's state is dependent on both.
+inclusion of the AEGIS128L tag ensures the protocol's state is dependent on both because AEGIS128L
+is compactly committing.
 
 Third, `Crypt` operations provide no authentication by themselves. An attacker can modify a
 ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
@@ -237,8 +242,8 @@ function Seal(state, plaintext):
   tag ← AEGIS128L::Finalize(aegis)                  // Calculate the AEGIS128L tag.
   state ← BLAKE3::Update(state, tag)                // Update the protocol's state with the tag.
   state ← BLAKE3::Update(state, RE(16))             // Update the protocol's state with the tag length.
-  state ← BLAKE3::Update(state, [0x04])             // Update the protocol's state with the Crypt op code.
-  return (state, ciphertextǁtag) 
+  state ← BLAKE3::Update(state, [0x04])             // Update the protocol's state with the AuthCrypt op code.
+  return (state, ciphertext, tag) 
 ```
 
 This is essentially the same thing as the `Encrypt` operation but includes the AEGIS128L tag in the
@@ -248,19 +253,22 @@ The `Open` operation decrypts the ciphertext and compares the counterfactual tag
 included with the ciphertext:
 
 ```text
-function Open(state, ciphertextǁtag):
+function Open(state, ciphertext, tag):
   K₀ǁK₁ ← BLAKE3::XOF(state, 48)                    // Generate two keys with XOF output from the current state.
   state ← BLAKE3::Keyed(K₀)                         // Replace the protocol's state with a new keyed hasher.
   aegis ← AEGIS128L::new(K₁, [0x04; 16])            // Key an AEGIS128L instance using the operation code as a nonce.
   plaintext ← AEGIS128L::Decrypt(aegis, ciphertext) // Decrypt the ciphertext with AEGIS128L.
-  tag′ ← AEGIS128L::Finalize(aegis)                 // Calculate the AEGIS128L tag.
+  tag′ ← AEGIS128L::Finalize(aegis)                 // Calculate the counterfactual AEGIS128L tag.
   state ← BLAKE3::Update(state, tag′)               // Update the protocol's state with the tag.
   state ← BLAKE3::Update(state, RE(16))             // Update the protocol's state with the tag length.
-  state ← BLAKE3::Update(state, [0x04])             // Update the protocol's state with the Crypt op code.
+  state ← BLAKE3::Update(state, [0x04])             // Update the protocol's state with the AuthCrypt op code.
   if tag ≠ tag′:
     return ⟂ 
-  return (state, plaintext) 
+  else:
+    return (state, plaintext) 
 ```
+
+The resulting construction is CCA secure if BLAKE3 is KDF secure and AEGIS128L is CCA secure.
 
 ### `Ratchet`
 
@@ -328,12 +336,12 @@ Lockstitch can be used to create an AEAD:
 
 ```text
 function Seal(key, nonce, ad, plaintext):
-  state ← Initialize("com.example.aead")          // Initialize a protocol with a domain string.
-  state ← Mix(state, key)                         // Mix the key into the protocol.
-  state ← Mix(state, nonce)                       // Mix the nonce into the protocol.
-  state ← Mix(state, ad)                          // Mix the associated data into the protocol.
-  (state, ciphertext) ← Seal(state, plaintext)    // Seal the plaintext.
-  return ciphertext                               // Return the ciphertext.
+  state ← Initialize("com.example.aead")            // Initialize a protocol with a domain string.
+  state ← Mix(state, key)                           // Mix the key into the protocol.
+  state ← Mix(state, nonce)                         // Mix the nonce into the protocol.
+  state ← Mix(state, ad)                            // Mix the associated data into the protocol.
+  (state, ciphertext, tag) ← Seal(state, plaintext) // Seal the plaintext.
+  return ciphertext, tag                            // Return the ciphertext and tag.
 ```
 
 The introduction of a nonce makes the scheme probabilistic (which is required for IND-CCA security).
@@ -348,14 +356,17 @@ AEGIS128L is not compactly committing, and the final tag serves as a commitment 
 Decryption uses the `Open` operation to decrypt:
 
 ```text
-function Open(key, nonce, ad, ciphertext):
-  state ← Initialize("com.example.aead")          // Initialize a protocol with a domain string.
-  state ← Mix(state, key)                         // Mix the key into the protocol.
-  state ← Mix(state, nonce)                       // Mix the nonce into the protocol.
-  state ← Mix(state, ad)                          // Mix the associated data into the protocol.
-  (state, plaintext) ← Open(state, ciphertext)    // Decrypt the ciphertext.
-  return plaintext                                // Return the authenticated plaintext or ⟂.
+function Open(key, nonce, ad, ciphertext, tag):
+  state ← Initialize("com.example.aead")            // Initialize a protocol with a domain string.
+  state ← Mix(state, key)                           // Mix the key into the protocol.
+  state ← Mix(state, nonce)                         // Mix the nonce into the protocol.
+  state ← Mix(state, ad)                            // Mix the associated data into the protocol.
+  (state, plaintext) ← Open(state, ciphertext, tag) // Open the ciphertext.
+  return plaintext                                  // Return the authenticated plaintext or ⟂.
 ```
+
+Unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces of
+authenticated data.
 
 ## Complex Protocols
 
@@ -393,7 +404,8 @@ function HPKE_Decrypt(receiver, ephemeral.pub, ciphertext, tag):
 in possession of the receiver's public key (i.e. anyone) can create ciphertexts which will decrypt
 as valid. In the symmetric key setting (i.e. an adversary without the receiver's public key), this
 is IND-CCA secure, but the real-world scenarios in which that applies are minimal. As-is, the tag
-is more like a checksum than a MAC.
+is more like a checksum than a MAC, preventing modifications only by adversaries who don't have the
+recipient's public key.
 
 Using a static ECDH shared secret (i.e. `ECDH(receiver.pub, sender.priv)`) would add implicit
 authentication but would require a nonce to be IND-CCA secure. The resulting scheme would be

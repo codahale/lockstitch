@@ -10,7 +10,7 @@ documentation = "https://docs.rs/lockstitch/"
 keywords = ["crypto", "blake3", "aegis128l", "hazmat"]
 categories = ["cryptography", "no-std"]
 readme = "README.md"
-include = ["src/**/*", "benches/**/*", "tests/**/*", "LICENSE", "README.md", "design.md", "perf.md"]
+include = ["src/**/*", "benches/**/*", "tests/**/*", "LICENSE", "README.md", "build.rs", "design.md", "perf.md"]
 
 [dependencies]
 blake3 = { version = "1.3.3", default-features = false }

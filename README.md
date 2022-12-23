@@ -108,7 +108,7 @@ NEON and the `aesmc` and `aese` instructions.
 The SIMD optimizations in the `blake3` crate requires either enabling the `std` feature of this
 crate or enabling specific CPU features in your build.
 
-To compile a x86-64 binary with support for AVX2 and SSE2, for example, create a
+To compile a `x86_64` binary with support for AVX2 and SSE2, for example, create a
 `.cargo/config.toml` file with the following:
 
 ```toml

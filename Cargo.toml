@@ -26,6 +26,7 @@ std = ["blake3/std"]
 members = ["xtask"]
 
 [dev-dependencies]
+aegis = "0.2.4"
 criterion = { version = "0.4.0", features = ["html_reports"] }
 hex = "0.4.3"
 proptest = "1.0.0"

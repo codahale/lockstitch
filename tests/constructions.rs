@@ -105,7 +105,7 @@ proptest! {
     fn stream_ciphers(
         d1: String, k1 in vec(any::<u8>(), 1..200), n1 in vec(any::<u8>(), 1..200),
         d2: String, k2 in vec(any::<u8>(), 1..200), n2 in vec(any::<u8>(), 1..200),
-        m in vec(any::<u8>(), 1..200),
+        m in vec(any::<u8>(), 100..200),
     ) {
         prop_assume!(!(d1 == d2 && k1 == k2 && n1 == n2), "inputs must be different");
 

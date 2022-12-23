@@ -112,7 +112,7 @@ impl Protocol {
         self.state.update(&tag);
 
         // Update the state with the operation code and tag length.
-        self.end_op(Operation::Derive, 16);
+        self.end_op(Operation::Derive, TAG_LEN as u64);
     }
 
     /// Derive output from the protocol's current state and return it as an array.
@@ -136,7 +136,7 @@ impl Protocol {
         self.state.update(&tag);
 
         // Update the state with the operation code and tag length.
-        self.end_op(Operation::Crypt, 16);
+        self.end_op(Operation::Crypt, TAG_LEN as u64);
     }
 
     /// Decrypt the given slice in place.
@@ -152,7 +152,7 @@ impl Protocol {
         self.state.update(&tag);
 
         // Update the state with the operation code and tag length.
-        self.end_op(Operation::Crypt, 16);
+        self.end_op(Operation::Crypt, TAG_LEN as u64);
     }
 
     /// Seals the given mutable slice in place.
@@ -174,7 +174,7 @@ impl Protocol {
         self.state.update(&tag);
 
         // Update the state with the operation code and tag length.
-        self.end_op(Operation::AuthCrypt, 16);
+        self.end_op(Operation::AuthCrypt, TAG_LEN as u64);
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -195,7 +195,7 @@ impl Protocol {
         self.state.update(&tag_p);
 
         // Update the state with the operation code and tag length.
-        self.end_op(Operation::AuthCrypt, 16);
+        self.end_op(Operation::AuthCrypt, TAG_LEN as u64);
 
         // Check the tag.
         if constant_time_eq(tag, &tag_p) {

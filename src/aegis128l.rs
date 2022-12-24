@@ -178,12 +178,12 @@ impl State {
     }
 
     #[allow(unused_unsafe)]
-    fn mac(&mut self, ad_len: usize, mlen: usize) -> [u8; 16] {
+    fn mac(&mut self, ad_len: usize, mc_len: usize) -> [u8; 16] {
         let tmp = {
             let blocks = &self.blocks;
             let mut sizes = [0u8; 16];
             sizes[..8].copy_from_slice(&(ad_len as u64 * 8).to_le_bytes());
-            sizes[8..16].copy_from_slice(&(mlen as u64 * 8).to_le_bytes());
+            sizes[8..16].copy_from_slice(&(mc_len as u64 * 8).to_le_bytes());
             xor!(from_bytes!(&sizes), blocks[2])
         };
         for _ in 0..7 {

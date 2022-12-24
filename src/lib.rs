@@ -106,7 +106,7 @@ impl Protocol {
         out.fill(0);
 
         // Encrypt the all-zeros buffer.
-        let tag = aegis128l::encrypt(&output_key, &[Operation::Derive as u8; 16], &[], out);
+        let tag = aegis128l::encrypt(&output_key, &[Operation::Derive as u8; 16], out, &[]);
 
         // Update the BLAKE3 hasher with the resulting tag.
         self.state.update(&tag);
@@ -130,7 +130,7 @@ impl Protocol {
         let output_key = self.chain();
 
         // Encrypt the plaintext.
-        let tag = aegis128l::encrypt(&output_key, &[Operation::Crypt as u8; 16], &[], in_out);
+        let tag = aegis128l::encrypt(&output_key, &[Operation::Crypt as u8; 16], in_out, &[]);
 
         // Update the BLAKE3 hasher with the resulting tag.
         self.state.update(&tag);
@@ -146,7 +146,7 @@ impl Protocol {
         let output_key = self.chain();
 
         // Decrypt the ciphertext.
-        let tag = aegis128l::decrypt(&output_key, &[Operation::Crypt as u8; 16], &[], in_out);
+        let tag = aegis128l::decrypt(&output_key, &[Operation::Crypt as u8; 16], in_out, &[]);
 
         // Update the BLAKE3 hasher with the resulting tag.
         self.state.update(&tag);
@@ -167,7 +167,7 @@ impl Protocol {
         let output_key = self.chain();
 
         // Encrypt the plaintext.
-        let tag = aegis128l::encrypt(&output_key, &[Operation::AuthCrypt as u8; 16], &[], in_out);
+        let tag = aegis128l::encrypt(&output_key, &[Operation::AuthCrypt as u8; 16], in_out, &[]);
         tag_out.copy_from_slice(&tag);
 
         // Update the BLAKE3 hasher with the resulting tag.
@@ -189,7 +189,7 @@ impl Protocol {
         let output_key = self.chain();
 
         // Decrypt the ciphertext.
-        let tag_p = aegis128l::decrypt(&output_key, &[Operation::AuthCrypt as u8; 16], &[], in_out);
+        let tag_p = aegis128l::decrypt(&output_key, &[Operation::AuthCrypt as u8; 16], in_out, &[]);
 
         // Update the BLAKE3 hasher with the resulting tag.
         self.state.update(&tag_p);

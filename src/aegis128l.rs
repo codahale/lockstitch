@@ -215,6 +215,39 @@ mod tests {
         assert_eq!(tag_a, tag_b);
     }
 
+    #[test]
+    fn block_xor() {
+        let a = from_bytes!(b"ayellowsubmarine");
+        let b = from_bytes!(b"tuneintotheocho!");
+        let c = xor!(a, b);
+
+        assert_eq!(as_bytes!(c), [21, 12, 11, 9, 5, 1, 3, 28, 1, 10, 8, 14, 17, 1, 1, 68]);
+    }
+
+    #[test]
+    fn block_and() {
+        let a = from_bytes!(b"ayellowsubmarine");
+        let b = from_bytes!(b"tuneintotheocho!");
+        let c = and!(a, b);
+
+        assert_eq!(
+            as_bytes!(c),
+            [96, 113, 100, 100, 104, 110, 116, 99, 116, 96, 101, 97, 98, 104, 110, 33]
+        );
+    }
+
+    #[test]
+    fn block_round() {
+        let a = from_bytes!(b"ayellowsubmarine");
+        let b = from_bytes!(b"tuneintotheocho!");
+        let c = round!(a, b);
+
+        assert_eq!(
+            as_bytes!(c),
+            [35, 216, 134, 65, 227, 155, 91, 10, 135, 68, 17, 98, 56, 180, 66, 103]
+        );
+    }
+
     proptest! {
         #[test]
         fn decrypting_from_rust_aegis(

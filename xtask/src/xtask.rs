@@ -95,8 +95,8 @@ fn cloud_create(sh: &Shell) -> Result<()> {
 }
 
 fn cloud_setup(sh: &Shell) -> Result<()> {
-    // cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'sudo apt-get install build-essential git -y'").run()?;
-    // cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'sudo apt-get install build-essential git -y'").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'source ~/.cargo/env && cargo install cargo-criterion'")
         .run()?;
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'git clone https://github.com/codahale/lockstitch'").run()?;

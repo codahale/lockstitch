@@ -12,67 +12,72 @@ mod x86_64;
 
 pub fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 16] {
     let mut state = State::new(key, nonce);
-    let mc_len = mc.len();
-    let ad_len = ad.len();
     let mut src = [0u8; 32];
     let mut dst = [0u8; 32];
-    let mut i = 0;
-    while i + 32 <= ad_len {
-        src.copy_from_slice(&ad[i..][..32]);
+
+    let mut chunks = ad.chunks_exact(32);
+    for chunk in chunks.by_ref() {
+        src.copy_from_slice(chunk);
         state.absorb(&src);
-        i += 32;
-    }
-    if ad_len % 32 != 0 {
-        src.fill(0);
-        src[..ad_len % 32].copy_from_slice(&ad[i..]);
-        state.absorb(&src);
-    }
-    i = 0;
-    while i + 32 <= mc_len {
-        src.copy_from_slice(&mc[i..][..32]);
-        state.enc(&mut dst, &src);
-        mc[i..][..32].copy_from_slice(&dst);
-        i += 32;
-    }
-    if mc_len % 32 != 0 {
-        src.fill(0);
-        src[..mc_len % 32].copy_from_slice(&mc[i..]);
-        state.enc(&mut dst, &src);
-        mc[i..].copy_from_slice(&dst[..mc_len % 32]);
     }
 
-    state.mac(ad_len, mc_len)
+    let chunk = chunks.remainder();
+    if !chunk.is_empty() {
+        src.fill(0);
+        src[..chunk.len()].copy_from_slice(chunk);
+        state.absorb(&src);
+    }
+
+    let mut chunks = mc.chunks_exact_mut(32);
+    for chunk in chunks.by_ref() {
+        src.copy_from_slice(chunk);
+        state.enc(&mut dst, &src);
+        chunk.copy_from_slice(&dst);
+    }
+
+    let chunk = chunks.into_remainder();
+    if !chunk.is_empty() {
+        src.fill(0);
+        src[..chunk.len()].copy_from_slice(chunk);
+        state.enc(&mut dst, &src);
+        chunk.copy_from_slice(&dst[..chunk.len()]);
+    }
+
+    state.mac(ad.len(), mc.len())
 }
 
 pub fn decrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 16] {
     let mut state = State::new(key, nonce);
-    let mc_len = mc.len();
-    let ad_len = ad.len();
     let mut src = [0u8; 32];
     let mut dst = [0u8; 32];
-    let mut i = 0;
-    while i + 32 <= ad_len {
-        src.copy_from_slice(&ad[i..][..32]);
+
+    let mut chunks = ad.chunks_exact(32);
+    for chunk in chunks.by_ref() {
+        src.copy_from_slice(chunk);
         state.enc(&mut dst, &src);
-        i += 32;
     }
-    if ad_len % 32 != 0 {
+
+    let chunk = chunks.remainder();
+    if !chunk.is_empty() {
         src.fill(0);
-        src[..ad_len % 32].copy_from_slice(&ad[i..]);
+        src[..chunk.len()].copy_from_slice(chunk);
         state.enc(&mut dst, &src);
     }
-    i = 0;
-    while i + 32 <= mc_len {
-        src.copy_from_slice(&mc[i..][..32]);
+
+    let mut chunks = mc.chunks_exact_mut(32);
+    for chunk in chunks.by_ref() {
+        src.copy_from_slice(chunk);
         state.dec(&mut dst, &src);
-        mc[i..][..32].copy_from_slice(&dst);
-        i += 32;
+        chunk.copy_from_slice(&dst);
     }
-    if mc_len % 32 != 0 {
-        state.dec_partial(&mut dst, &mc[i..]);
-        mc[i..].copy_from_slice(&dst[0..mc_len % 32]);
+
+    let chunk = chunks.into_remainder();
+    if !chunk.is_empty() {
+        state.dec_partial(&mut dst, chunk);
+        chunk.copy_from_slice(&dst[..chunk.len()]);
     }
-    state.mac(ad_len, mc_len)
+
+    state.mac(ad.len(), mc.len())
 }
 
 #[repr(transparent)]
@@ -82,20 +87,21 @@ struct State {
 }
 
 impl State {
+    #[allow(unused_unsafe)]
     fn update(&mut self, d1: AesBlock, d2: AesBlock) {
         let blocks = &mut self.blocks;
         let tmp = blocks[7];
-        let mut i = 7;
-        while i > 0 {
-            blocks[i] = round!(blocks[i - 1], blocks[i]);
-            i -= 1;
-        }
-        blocks[0] = round!(tmp, blocks[0]);
-        blocks[0] = xor!(blocks[0], d1);
-        blocks[4] = xor!(blocks[4], d2);
+        blocks[7] = round!(blocks[6], blocks[7]);
+        blocks[6] = round!(blocks[5], blocks[6]);
+        blocks[5] = round!(blocks[4], blocks[5]);
+        blocks[4] = xor!(round!(blocks[3], blocks[4]), d2);
+        blocks[3] = round!(blocks[2], blocks[3]);
+        blocks[2] = round!(blocks[1], blocks[2]);
+        blocks[1] = round!(blocks[0], blocks[1]);
+        blocks[0] = xor!(round!(tmp, blocks[0]), d1);
     }
 
-    pub fn new(key: &[u8; 16], nonce: &[u8; 16]) -> Self {
+    fn new(key: &[u8; 16], nonce: &[u8; 16]) -> Self {
         let c1 = from_bytes!(&[
             0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5,
             0x28, 0xdd,
@@ -126,7 +132,7 @@ impl State {
     #[inline(always)]
     fn absorb(&mut self, src: &[u8; 32]) {
         let msg0 = from_bytes!(&src[..16]);
-        let msg1 = from_bytes!(&src[16..32]);
+        let msg1 = from_bytes!(&src[16..]);
         self.update(msg0, msg1);
     }
 
@@ -136,11 +142,11 @@ impl State {
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
         let msg0 = from_bytes!(&src[..16]);
-        let msg1 = from_bytes!(&src[16..32]);
+        let msg1 = from_bytes!(&src[16..]);
         let c0 = xor!(msg0, z0);
         let c1 = xor!(msg1, z1);
         dst[..16].copy_from_slice(&as_bytes!(c0));
-        dst[16..32].copy_from_slice(&as_bytes!(c1));
+        dst[16..].copy_from_slice(&as_bytes!(c1));
         self.update(msg0, msg1);
     }
 
@@ -149,10 +155,10 @@ impl State {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
-        let msg0 = xor!(from_bytes!(&src[0..16]), z0);
-        let msg1 = xor!(from_bytes!(&src[16..32]), z1);
+        let msg0 = xor!(from_bytes!(&src[..16]), z0);
+        let msg1 = xor!(from_bytes!(&src[16..]), z1);
         dst[..16].copy_from_slice(&as_bytes!(msg0));
-        dst[16..32].copy_from_slice(&as_bytes!(msg1));
+        dst[16..].copy_from_slice(&as_bytes!(msg1));
         self.update(msg0, msg1);
     }
 
@@ -165,15 +171,15 @@ impl State {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
-        let msg_padded0 = xor!(from_bytes!(&src_padded[0..16]), z0);
-        let msg_padded1 = xor!(from_bytes!(&src_padded[16..32]), z1);
+        let msg_padded0 = xor!(from_bytes!(&src_padded[..16]), z0);
+        let msg_padded1 = xor!(from_bytes!(&src_padded[16..]), z1);
 
         dst[..16].copy_from_slice(&as_bytes!(msg_padded0));
-        dst[16..32].copy_from_slice(&as_bytes!(msg_padded1));
+        dst[16..].copy_from_slice(&as_bytes!(msg_padded1));
         dst[len..].fill(0);
 
-        let msg0 = from_bytes!(&dst[0..16]);
-        let msg1 = from_bytes!(&dst[16..32]);
+        let msg0 = from_bytes!(&dst[..16]);
+        let msg1 = from_bytes!(&dst[16..]);
         self.update(msg0, msg1);
     }
 
@@ -183,7 +189,7 @@ impl State {
             let blocks = &self.blocks;
             let mut sizes = [0u8; 16];
             sizes[..8].copy_from_slice(&(ad_len as u64 * 8).to_le_bytes());
-            sizes[8..16].copy_from_slice(&(mc_len as u64 * 8).to_le_bytes());
+            sizes[8..].copy_from_slice(&(mc_len as u64 * 8).to_le_bytes());
             xor!(from_bytes!(&sizes), blocks[2])
         };
         for _ in 0..7 {

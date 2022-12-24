@@ -1,35 +1,9 @@
-mod ffi {
-    use core::ffi::c_int;
-
-    extern "C" {
-        pub fn crypto_aead_aegis128l_encrypt_detached(
-            c: *mut u8,
-            mac: *mut u8,
-            m: *const u8,
-            mlen: usize,
-            ad: *const u8,
-            adlen: usize,
-            npub: *const u8,
-            k: *const u8,
-        ) -> c_int;
-
-        pub fn crypto_aead_aegis128l_decrypt_detached(
-            m: *mut u8,
-            c: *const u8,
-            clen: usize,
-            mac: *const u8,
-            ad: *const u8,
-            adlen: usize,
-            npub: *const u8,
-            k: *const u8,
-        ) -> c_int;
-    }
-}
+use core::ffi::c_int;
 
 pub fn encrypt(key: &[u8; 16], nonce: &[u8; 16], ad: &[u8], mc: &mut [u8]) -> [u8; 16] {
     let mut tag = [0u8; 16];
     unsafe {
-        ffi::crypto_aead_aegis128l_encrypt_detached(
+        crypto_aead_aegis128l_encrypt_detached(
             mc.as_mut_ptr(),
             tag.as_mut_ptr(),
             mc.as_ptr(),
@@ -46,7 +20,7 @@ pub fn encrypt(key: &[u8; 16], nonce: &[u8; 16], ad: &[u8], mc: &mut [u8]) -> [u
 pub fn decrypt(key: &[u8; 16], nonce: &[u8; 16], ad: &[u8], mc: &mut [u8]) -> [u8; 16] {
     let mut tag = [0u8; 16];
     unsafe {
-        ffi::crypto_aead_aegis128l_decrypt_detached(
+        crypto_aead_aegis128l_decrypt_detached(
             mc.as_mut_ptr(),
             mc.as_ptr(),
             mc.len(),
@@ -58,6 +32,30 @@ pub fn decrypt(key: &[u8; 16], nonce: &[u8; 16], ad: &[u8], mc: &mut [u8]) -> [u
         )
     };
     tag
+}
+
+extern "C" {
+    fn crypto_aead_aegis128l_encrypt_detached(
+        c: *mut u8,
+        mac: *mut u8,
+        m: *const u8,
+        mlen: usize,
+        ad: *const u8,
+        adlen: usize,
+        npub: *const u8,
+        k: *const u8,
+    ) -> c_int;
+
+    fn crypto_aead_aegis128l_decrypt_detached(
+        m: *mut u8,
+        c: *const u8,
+        clen: usize,
+        mac: *const u8,
+        ad: *const u8,
+        adlen: usize,
+        npub: *const u8,
+        k: *const u8,
+    ) -> c_int;
 }
 
 #[cfg(test)]

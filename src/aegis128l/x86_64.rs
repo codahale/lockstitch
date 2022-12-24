@@ -1,9 +1,10 @@
 pub type AesBlock = core::arch::x86_64::__m128i;
 
 macro_rules! from_bytes {
-    ($bytes:expr) => {
-        unsafe { core::arch::x86_64::_mm_loadu_si128($bytes.as_ptr() as *const _) }
-    };
+    ($bytes:expr) => {{
+        let block: &[u8] = $bytes;
+        unsafe { core::arch::x86_64::_mm_loadu_si128(block.as_ptr() as *const _) }
+    }};
 }
 
 pub(crate) use from_bytes;

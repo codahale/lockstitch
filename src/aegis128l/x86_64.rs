@@ -1,4 +1,3 @@
-pub use core::arch::asm;
 pub use core::arch::x86_64::__m128i as AesBlock;
 pub use core::arch::x86_64::*;
 

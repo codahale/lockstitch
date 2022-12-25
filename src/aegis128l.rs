@@ -54,14 +54,14 @@ pub fn decrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u
     let mut chunks = ad.chunks_exact(32);
     for chunk in chunks.by_ref() {
         src.copy_from_slice(chunk);
-        state.enc(&mut dst, &src);
+        state.absorb(&src);
     }
 
     let chunk = chunks.remainder();
     if !chunk.is_empty() {
         src.fill(0);
         src[..chunk.len()].copy_from_slice(chunk);
-        state.enc(&mut dst, &src);
+        state.absorb(&src);
     }
 
     let mut chunks = mc.chunks_exact_mut(32);

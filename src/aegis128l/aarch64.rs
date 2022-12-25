@@ -24,6 +24,7 @@ macro_rules! xor {
     ($a:expr) => {$a};
     ($a:expr, $b:expr, $c:expr) => {
         unsafe {
+            // TODO replace with veor3q_u8 when that's stable
             let mut ret: AesBlock;
             asm!(
                 "EOR3 {:v}.16B, {:v}.16B, {:v}.16B, {:v}.16B",
@@ -51,6 +52,7 @@ macro_rules! round {
        unsafe {
             let z = vmovq_n_u8(0);
             let mut a = $a;
+            // TODO replace with vaeseq_u8 and vaesmcq_u8 when that's stable
             asm!(
                 "AESE {0:v}.16B, {1:v}.16B",
                 "AESMC {0:v}.16B, {0:v}.16B",

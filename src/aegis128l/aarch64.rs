@@ -1,8 +1,10 @@
-pub type AesBlock = core::arch::aarch64::uint8x16_t;
+pub use core::arch::aarch64::uint8x16_t as AesBlock;
+pub use core::arch::aarch64::*;
+pub use core::arch::asm;
 
 macro_rules! from_bytes {
     ($bytes:expr) => {
-        unsafe { core::arch::aarch64::vld1q_u8($bytes.as_ptr()) }
+        unsafe { vld1q_u8($bytes.as_ptr()) }
     };
 }
 
@@ -11,7 +13,7 @@ pub(crate) use from_bytes;
 macro_rules! as_bytes {
     ($block:expr) => {{
         let mut bytes = [0u8; 16];
-        unsafe { core::arch::aarch64::vst1q_u8(bytes.as_mut_ptr(), $block) };
+        unsafe { vst1q_u8(bytes.as_mut_ptr(), $block) };
         bytes
     }};
 }
@@ -23,14 +25,14 @@ macro_rules! xor {
     ($a:expr, $b:expr, $c:expr) => {
         unsafe {
             let mut ret: AesBlock;
-            core::arch::asm!(
+            asm!(
                 "EOR3 {:v}.16B, {:v}.16B, {:v}.16B, {:v}.16B",
                 out(vreg) ret, in(vreg) $a, in(vreg) $b, in(vreg) $c);
             ret
         }
     };
     ($a:expr, $($rest:expr),*) => {
-        unsafe { core::arch::aarch64::veorq_u8($a, xor!($($rest), *)) }
+        unsafe { veorq_u8($a, xor!($($rest), *)) }
     };
 }
 
@@ -38,7 +40,7 @@ pub(crate) use xor;
 
 macro_rules! and {
     ($a:expr, $b:expr) => {
-        unsafe { core::arch::aarch64::vandq_u8($a, $b) }
+        unsafe { vandq_u8($a, $b) }
     };
 }
 
@@ -47,13 +49,13 @@ pub(crate) use and;
 macro_rules! round {
     ($a:expr, $b:expr) => {
        unsafe {
-            let z = core::arch::aarch64::vmovq_n_u8(0);
+            let z = vmovq_n_u8(0);
             let mut a = $a;
-            core::arch::asm!(
+            asm!(
                 "AESE {0:v}.16B, {1:v}.16B",
                 "AESMC {0:v}.16B, {0:v}.16B",
                 inout(vreg) a, in(vreg) z);
-            core::arch::aarch64::veorq_u8(a, $b)
+            veorq_u8(a, $b)
        }
     };
 }

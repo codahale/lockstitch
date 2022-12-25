@@ -20,6 +20,15 @@ pub(crate) use as_bytes;
 
 macro_rules! xor {
     ($a:expr) => {$a};
+    ($a:expr, $b:expr, $c:expr) => {
+        unsafe {
+            let mut ret: AesBlock;
+            core::arch::asm!(
+                "EOR3 {:v}.16B, {:v}.16B, {:v}.16B, {:v}.16B",
+                out(vreg) ret, in(vreg) $a, in(vreg) $b, in(vreg) $c);
+            ret
+        }
+    };
     ($a:expr, $($rest:expr),*) => {
         unsafe { core::arch::aarch64::veorq_u8($a, xor!($($rest), *)) }
     };

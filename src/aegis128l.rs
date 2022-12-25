@@ -197,7 +197,11 @@ impl State {
             self.update(tmp, tmp);
         }
         let blocks = &self.blocks;
-        as_bytes!(xor!(blocks[0], blocks[1], blocks[2], blocks[3], blocks[4], blocks[5], blocks[6]))
+        as_bytes!(xor!(
+            xor!(blocks[0], blocks[1], blocks[2]),
+            xor!(blocks[3], blocks[4], blocks[5]),
+            blocks[6]
+        ))
     }
 }
 

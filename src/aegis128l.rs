@@ -155,8 +155,10 @@ impl State {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
-        let msg0 = xor!(from_bytes!(&src[..16]), z0);
-        let msg1 = xor!(from_bytes!(&src[16..]), z1);
+        let c0 = from_bytes!(&src[..16]);
+        let c1 = from_bytes!(&src[16..]);
+        let msg0 = xor!(c0, z0);
+        let msg1 = xor!(c1, z1);
         dst[..16].copy_from_slice(&as_bytes!(msg0));
         dst[16..].copy_from_slice(&as_bytes!(msg1));
         self.update(msg0, msg1);
@@ -164,9 +166,8 @@ impl State {
 
     #[allow(unused_unsafe)]
     fn dec_partial(&mut self, dst: &mut [u8; 32], src: &[u8]) {
-        let len = src.len();
         let mut src_padded = [0u8; 32];
-        src_padded[..len].copy_from_slice(src);
+        src_padded[..src.len()].copy_from_slice(src);
 
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
@@ -176,7 +177,7 @@ impl State {
 
         dst[..16].copy_from_slice(&as_bytes!(msg_padded0));
         dst[16..].copy_from_slice(&as_bytes!(msg_padded1));
-        dst[len..].fill(0);
+        dst[src.len()..].fill(0);
 
         let msg0 = from_bytes!(&dst[..16]);
         let msg1 = from_bytes!(&dst[16..]);
@@ -193,12 +194,10 @@ impl State {
             xor!(from_bytes!(&sizes), blocks[2])
         };
         for _ in 0..7 {
-            let tmp2 = tmp;
-            self.update(tmp, tmp2);
+            self.update(tmp, tmp);
         }
         let blocks = &self.blocks;
-        let mac = xor!(blocks[0], blocks[1], blocks[2], blocks[3], blocks[4], blocks[5], blocks[6]);
-        as_bytes!(mac)
+        as_bytes!(xor!(blocks[0], blocks[1], blocks[2], blocks[3], blocks[4], blocks[5], blocks[6]))
     }
 }
 

@@ -95,11 +95,11 @@ fn cloud_create(sh: &Shell) -> Result<()> {
 }
 
 fn cloud_setup(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'sudo apt-get install build-essential git -y'").run()?;
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'source ~/.cargo/env && cargo install cargo-criterion'")
+    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'sudo apt-get install build-essential git -y'").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'source ~/.cargo/env && cargo install cargo-criterion'")
         .run()?;
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command 'git clone https://github.com/codahale/lockstitch'").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'git clone https://github.com/codahale/lockstitch'").run()?;
 
     Ok(())
 }
@@ -107,14 +107,15 @@ fn cloud_setup(sh: &Shell) -> Result<()> {
 fn cloud_bench(sh: &Shell, branch: &str) -> Result<()> {
     cmd!(sh, "rm -rf ./target/criterion-remote").run()?;
     let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull && git checkout {branch} && rm -rf target/criterion && cargo criterion");
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --command {cmd}").run()?;
-    cmd!(sh, " gcloud compute scp --recurse lockstitch-benchmark:~/lockstitch/target/criterion ./target/criterion-remote").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command {cmd}")
+        .run()?;
+    cmd!(sh, " gcloud compute scp --zone=us-central1-a --recurse lockstitch-benchmark:~/lockstitch/target/criterion ./target/criterion-remote").run()?;
 
     Ok(())
 }
 
 fn cloud_ssh(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a").run()?;
 
     Ok(())
 }

@@ -99,30 +99,33 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 
 ## Performance
 
-Both BLAKE3 and AEGIS128L benefit significantly from the use of specific CPU operations. `blake3`
-has optimizations for AVX2, AVX512, SSE2, and SSE4.1 on Intel CPUs and NEON on ARM CPUs.
-Lockstitch's AEGIS128L implementation requires hardware support for AES and is currently only
-implemented for `x86_64` processors with `aes` and `ssse3` features and `aarch64` processors with
-NEON and the `aesmc` and `aese` instructions.
+Both BLAKE3 and AEGIS128L benefit significantly from the use of specific CPU instructions.
 
-The SIMD optimizations in the `blake3` crate requires either enabling the `std` feature of this
-crate or enabling specific CPU features in your build.
+### `x86_64`
 
-To compile a `x86_64` binary with support for AVX2 and SSE2, for example, create a
-`.cargo/config.toml` file with the following:
+On `x86_64` CPUs, Lockstitch achieves its best performance with the `aes` and `ssse3` CPU features
+enabled and the `std` crate feature enabled. This allows the `blake3` create to detect CPU features
+at runtime, ensures AEGIS128L benefits from the AES-NI instructions, and prevents interference
+between AES-NI and AVX2 in the AEGIS128L implementation.
 
-```toml
-[build]
-rustflags = ["-C", "target-features=+avx2,+sse2"]
-```
-
-To compile a non-portable binary which enables all optimizations for the specific CPU on the
-compiling machine, create a `.cargo/config.toml` file with the following:
+To compile a `x86_64` binary with support for these features, create a `.cargo/config.toml` file
+with the following:
 
 ```toml
 [build]
-rustflags = ["-C", "target-cpu=native"]
+rustflags = ["-C", "target-feature=+aes,+ssse3"]
 ```
+
+Or use the following `RUSTFLAGS` environment variable:
+
+```sh
+export RUSTFLAGS="-C target-feature=+aes,+ssse3"
+```
+
+### `aarch64`
+
+Lockstitch includes a NEON-optimized AEGIS128L implementation and the `blake3` crate includes NEON
+optimizations, so no Rust-specific settings are required.
 
 ## Additional Information
 

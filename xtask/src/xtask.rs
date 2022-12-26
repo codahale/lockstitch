@@ -1,7 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{ArgAction, Parser, Subcommand};
 use xshell::{cmd, Shell};
 
@@ -62,7 +62,7 @@ fn main() -> Result<()> {
             CloudCommand::Create => cloud_create(&sh),
             CloudCommand::Setup => cloud_setup(&sh),
             CloudCommand::Bench { branch, download } => cloud_bench(&sh, &branch, download),
-            CloudCommand::Ssh => cloud_ssh(&sh),
+            CloudCommand::Ssh => cloud_ssh(),
             CloudCommand::Delete => cloud_delete(&sh),
         },
     }
@@ -120,10 +120,16 @@ fn cloud_bench(sh: &Shell, branch: &str, download: bool) -> Result<()> {
     Ok(())
 }
 
-fn cloud_ssh(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a").run()?;
-
-    Ok(())
+fn cloud_ssh() -> Result<()> {
+    let mut cmd = std::process::Command::new("gcloud");
+    cmd.args(["compute", "ssh", "lockstitch-benchmark", "--zone=us-central1-a"]);
+    let mut child = cmd.spawn()?;
+    let status = child.wait()?;
+    if status.success() {
+        Ok(())
+    } else {
+        bail!("non-zero exit code returned: {}", status);
+    }
 }
 
 fn cloud_delete(sh: &Shell) -> Result<()> {

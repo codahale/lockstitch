@@ -41,6 +41,9 @@ enum CloudCommand {
     Bench {
         #[arg(long, default_value = "main")]
         branch: String,
+
+        #[arg(long)]
+        download: bool,
     },
     Ssh,
     Delete,
@@ -58,7 +61,7 @@ fn main() -> Result<()> {
         Command::Cloud { cmd } => match cmd {
             CloudCommand::Create => cloud_create(&sh),
             CloudCommand::Setup => cloud_setup(&sh),
-            CloudCommand::Bench { branch } => cloud_bench(&sh, &branch),
+            CloudCommand::Bench { branch, download } => cloud_bench(&sh, &branch, download),
             CloudCommand::Ssh => cloud_ssh(&sh),
             CloudCommand::Delete => cloud_delete(&sh),
         },
@@ -104,12 +107,15 @@ fn cloud_setup(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-fn cloud_bench(sh: &Shell, branch: &str) -> Result<()> {
+fn cloud_bench(sh: &Shell, branch: &str, download: bool) -> Result<()> {
     cmd!(sh, "rm -rf ./target/criterion-remote").run()?;
-    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull && git checkout {branch} && rm -rf target/criterion && cargo criterion");
+    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull && git checkout {branch} && rm -rf target/criterion && RUSTFLAGS='-C target-feature=+aes,+ssse3' cargo criterion");
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command {cmd}")
         .run()?;
-    cmd!(sh, " gcloud compute scp --zone=us-central1-a --recurse lockstitch-benchmark:~/lockstitch/target/criterion ./target/criterion-remote").run()?;
+
+    if download {
+        cmd!(sh, " gcloud compute scp --zone=us-central1-a --recurse lockstitch-benchmark:~/lockstitch/target/criterion ./target/criterion-remote").run()?;
+    }
 
     Ok(())
 }

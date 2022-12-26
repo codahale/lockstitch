@@ -3,9 +3,10 @@ pub use core::arch::aarch64::*;
 pub use core::arch::asm;
 
 macro_rules! from_bytes {
-    ($bytes:expr) => {
-        unsafe { vld1q_u8($bytes.as_ptr()) }
-    };
+    ($bytes:expr) => {{
+        let bytes: &[u8] = $bytes;
+        unsafe { vld1q_u8(bytes.as_ptr()) }
+    }};
 }
 
 pub(crate) use from_bytes;

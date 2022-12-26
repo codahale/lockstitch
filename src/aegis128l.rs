@@ -135,14 +135,16 @@ impl State {
     }
 
     fn new(key: &[u8; 16], nonce: &[u8; 16]) -> Self {
-        let c1 = from_bytes!(&Aligned::<A16, _>([
+        let c1 = Aligned::<A16, _>([
             0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5,
             0x28, 0xdd,
-        ]));
-        let c2 = from_bytes!(&Aligned::<A16, _>([
+        ]);
+        let c2 = Aligned::<A16, _>([
             0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15, 0x22, 0x37, 0x59, 0x90, 0xe9,
             0x79, 0x62,
-        ]));
+        ]);
+        let c1 = from_bytes!(c1.as_slice());
+        let c2 = from_bytes!(c2.as_slice());
         let key_block = from_bytes!(key);
         let nonce_block = from_bytes!(nonce);
         let blocks: [AesBlock; 8] = [
@@ -245,7 +247,7 @@ impl State {
             let mut sizes = Aligned::<A16, _>([0u8; 16]);
             sizes[..8].copy_from_slice(&(ad_len as u64 * 8).to_le_bytes());
             sizes[8..].copy_from_slice(&(mc_len as u64 * 8).to_le_bytes());
-            xor!(from_bytes!(&sizes), blocks[2])
+            xor!(from_bytes!(sizes.as_slice()), blocks[2])
         };
         for _ in 0..7 {
             self.update(tmp, tmp);

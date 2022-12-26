@@ -296,7 +296,7 @@ enum Operation {
     Ratchet = 0x05,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests {
     use std::io::Cursor;
 

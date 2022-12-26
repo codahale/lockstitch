@@ -176,8 +176,8 @@ impl State {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
-        dst[..16].copy_from_slice(&as_bytes!(z0));
-        dst[16..].copy_from_slice(&as_bytes!(z1));
+        dst[..16].copy_from_slice(as_bytes!(z0).as_slice());
+        dst[16..].copy_from_slice(as_bytes!(z1).as_slice());
         {
             let blocks = &mut self.blocks;
             let tmp = blocks[7];
@@ -201,8 +201,8 @@ impl State {
         let msg1 = from_bytes!(&src[16..]);
         let c0 = xor!(msg0, z0);
         let c1 = xor!(msg1, z1);
-        dst[..16].copy_from_slice(&as_bytes!(c0));
-        dst[16..].copy_from_slice(&as_bytes!(c1));
+        dst[..16].copy_from_slice(as_bytes!(c0).as_slice());
+        dst[16..].copy_from_slice(as_bytes!(c1).as_slice());
         self.update(msg0, msg1);
     }
 
@@ -215,8 +215,8 @@ impl State {
         let c1 = from_bytes!(&src[16..]);
         let msg0 = xor!(c0, z0);
         let msg1 = xor!(c1, z1);
-        dst[..16].copy_from_slice(&as_bytes!(msg0));
-        dst[16..].copy_from_slice(&as_bytes!(msg1));
+        dst[..16].copy_from_slice(as_bytes!(msg0).as_slice());
+        dst[16..].copy_from_slice(as_bytes!(msg1).as_slice());
         self.update(msg0, msg1);
     }
 
@@ -231,8 +231,8 @@ impl State {
         let msg_padded0 = xor!(from_bytes!(&src_padded[..16]), z0);
         let msg_padded1 = xor!(from_bytes!(&src_padded[16..]), z1);
 
-        dst[..16].copy_from_slice(&as_bytes!(msg_padded0));
-        dst[16..].copy_from_slice(&as_bytes!(msg_padded1));
+        dst[..16].copy_from_slice(as_bytes!(msg_padded0).as_slice());
+        dst[16..].copy_from_slice(as_bytes!(msg_padded1).as_slice());
         dst[src.len()..].fill(0);
 
         let msg0 = from_bytes!(&dst[..16]);
@@ -253,7 +253,7 @@ impl State {
             self.update(tmp, tmp);
         }
         let blocks = &self.blocks;
-        as_bytes!(xor!(
+        *as_bytes!(xor!(
             xor!(blocks[0], blocks[1], blocks[2]),
             xor!(blocks[3], blocks[4], blocks[5]),
             blocks[6]
@@ -286,7 +286,10 @@ mod tests {
         let b = from_bytes!(b"tuneintotheocho!");
         let c = xor!(a, b);
 
-        assert_eq!(as_bytes!(c), [21, 12, 11, 9, 5, 1, 3, 28, 1, 10, 8, 14, 17, 1, 1, 68]);
+        assert_eq!(
+            as_bytes!(c).as_slice(),
+            [21, 12, 11, 9, 5, 1, 3, 28, 1, 10, 8, 14, 17, 1, 1, 68].as_slice()
+        );
     }
 
     #[test]
@@ -296,8 +299,8 @@ mod tests {
         let c = and!(a, b);
 
         assert_eq!(
-            as_bytes!(c),
-            [96, 113, 100, 100, 104, 110, 116, 99, 116, 96, 101, 97, 98, 104, 110, 33]
+            as_bytes!(c).as_slice(),
+            [96, 113, 100, 100, 104, 110, 116, 99, 116, 96, 101, 97, 98, 104, 110, 33].as_slice()
         );
     }
 
@@ -308,8 +311,8 @@ mod tests {
         let c = round!(a, b);
 
         assert_eq!(
-            as_bytes!(c),
-            [35, 216, 134, 65, 227, 155, 91, 10, 135, 68, 17, 98, 56, 180, 66, 103]
+            as_bytes!(c).as_slice(),
+            [35, 216, 134, 65, 227, 155, 91, 10, 135, 68, 17, 98, 56, 180, 66, 103].as_slice()
         );
     }
 

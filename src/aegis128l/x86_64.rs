@@ -12,7 +12,7 @@ pub(crate) use from_bytes;
 
 macro_rules! as_bytes {
     ($block:expr) => {{
-        let mut bytes = [0u8; 16];
+        let mut bytes = Aligned::<A16, _>([0u8; 16]);
         unsafe { _mm_storeu_si128(bytes.as_mut_ptr() as *mut __m128i, $block) };
         bytes
     }};

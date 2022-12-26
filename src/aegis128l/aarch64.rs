@@ -13,7 +13,7 @@ pub(crate) use from_bytes;
 
 macro_rules! as_bytes {
     ($block:expr) => {{
-        let mut bytes = [0u8; 16];
+        let mut bytes = Aligned::<A16, _>([0u8; 16]);
         unsafe { vst1q_u8(bytes.as_mut_ptr(), $block) };
         bytes
     }};

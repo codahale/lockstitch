@@ -1,3 +1,5 @@
+use aligned::{Aligned, A16};
+
 #[cfg(target_arch = "aarch64")]
 use self::aarch64::*;
 
@@ -12,8 +14,8 @@ mod x86_64;
 
 pub fn prf(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) {
     let mut state = State::new(key, nonce);
-    let mut src = [0u8; 32];
-    let mut dst = [0u8; 32];
+    let mut src = Aligned::<A16, _>([0u8; 32]);
+    let mut dst = Aligned::<A16, _>([0u8; 32]);
 
     let mut chunks = ad.chunks_exact(32);
     for chunk in chunks.by_ref() {
@@ -31,7 +33,7 @@ pub fn prf(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) {
     let mut chunks = mc.chunks_exact_mut(32);
     for chunk in chunks.by_ref() {
         state.prf(&mut dst);
-        chunk.copy_from_slice(&dst);
+        chunk.copy_from_slice(dst.as_slice());
     }
 
     let chunk = chunks.into_remainder();
@@ -43,8 +45,8 @@ pub fn prf(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) {
 
 pub fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 16] {
     let mut state = State::new(key, nonce);
-    let mut src = [0u8; 32];
-    let mut dst = [0u8; 32];
+    let mut src = Aligned::<A16, _>([0u8; 32]);
+    let mut dst = Aligned::<A16, _>([0u8; 32]);
 
     let mut chunks = ad.chunks_exact(32);
     for chunk in chunks.by_ref() {
@@ -63,7 +65,7 @@ pub fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u
     for chunk in chunks.by_ref() {
         src.copy_from_slice(chunk);
         state.enc(&mut dst, &src);
-        chunk.copy_from_slice(&dst);
+        chunk.copy_from_slice(dst.as_slice());
     }
 
     let chunk = chunks.into_remainder();
@@ -79,8 +81,8 @@ pub fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u
 
 pub fn decrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 16] {
     let mut state = State::new(key, nonce);
-    let mut src = [0u8; 32];
-    let mut dst = [0u8; 32];
+    let mut src = Aligned::<A16, _>([0u8; 32]);
+    let mut dst = Aligned::<A16, _>([0u8; 32]);
 
     let mut chunks = ad.chunks_exact(32);
     for chunk in chunks.by_ref() {
@@ -99,7 +101,7 @@ pub fn decrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u
     for chunk in chunks.by_ref() {
         src.copy_from_slice(chunk);
         state.dec(&mut dst, &src);
-        chunk.copy_from_slice(&dst);
+        chunk.copy_from_slice(dst.as_slice());
     }
 
     let chunk = chunks.into_remainder();
@@ -133,14 +135,14 @@ impl State {
     }
 
     fn new(key: &[u8; 16], nonce: &[u8; 16]) -> Self {
-        let c1 = from_bytes!(&[
+        let c1 = from_bytes!(&Aligned::<A16, _>([
             0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5,
             0x28, 0xdd,
-        ]);
-        let c2 = from_bytes!(&[
+        ]));
+        let c2 = from_bytes!(&Aligned::<A16, _>([
             0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15, 0x22, 0x37, 0x59, 0x90, 0xe9,
             0x79, 0x62,
-        ]);
+        ]));
         let key_block = from_bytes!(key);
         let nonce_block = from_bytes!(nonce);
         let blocks: [AesBlock; 8] = [
@@ -218,7 +220,7 @@ impl State {
 
     #[allow(unused_unsafe)]
     fn dec_partial(&mut self, dst: &mut [u8; 32], src: &[u8]) {
-        let mut src_padded = [0u8; 32];
+        let mut src_padded = Aligned::<A16, _>([0u8; 32]);
         src_padded[..src.len()].copy_from_slice(src);
 
         let blocks = &self.blocks;
@@ -240,7 +242,7 @@ impl State {
     fn mac(&mut self, ad_len: usize, mc_len: usize) -> [u8; 16] {
         let tmp = {
             let blocks = &self.blocks;
-            let mut sizes = [0u8; 16];
+            let mut sizes = Aligned::<A16, _>([0u8; 16]);
             sizes[..8].copy_from_slice(&(ad_len as u64 * 8).to_le_bytes());
             sizes[8..].copy_from_slice(&(mc_len as u64 * 8).to_le_bytes());
             xor!(from_bytes!(&sizes), blocks[2])

@@ -21,7 +21,6 @@ rand_core = { version = "0.6.4", default-features = false, optional = true }
 [features]
 default = ["hedge", "std"]
 hedge = ["rand_core"]
-no_aesni = []
 std = ["blake3/std"]
 
 [workspace]

@@ -18,6 +18,10 @@ enum Command {
 
     // Run benchmarks.
     Bench {
+        /// Enable NEON optimization.
+        #[clap(long, default_value = "false")]
+        neon: bool,
+
         /// Additional arguments for criterion.
         #[clap(action(ArgAction::Append), allow_hyphen_values = true)]
         args: Vec<String>,
@@ -53,7 +57,7 @@ fn main() -> Result<()> {
 
     match xtask.cmd.unwrap_or(Command::CI) {
         Command::CI => ci(&sh),
-        Command::Bench { args } => bench(&sh, args),
+        Command::Bench { neon, args } => bench(&sh, neon, args),
         Command::Cloud { cmd } => match cmd {
             CloudCommand::Create => cloud_create(&sh),
             CloudCommand::Setup => cloud_setup(&sh),
@@ -74,9 +78,15 @@ fn ci(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
+fn bench(sh: &Shell, neon: bool, args: Vec<String>) -> Result<()> {
     let args = args.join(" ");
-    cmd!(sh, "cargo criterion {args}").run()?;
+    if neon {
+        cmd!(sh, "cargo criterion --features=neon {args}")
+            .env("RUSTFLAGS", "-C target-cpu=native")
+            .run()?;
+    } else {
+        cmd!(sh, "cargo criterion {args}").env("RUSTFLAGS", "-C target-cpu=native").run()?;
+    }
 
     Ok(())
 }
@@ -99,7 +109,7 @@ fn cloud_setup(sh: &Shell) -> Result<()> {
 
 fn cloud_bench(sh: &Shell, branch: &str, download: bool) -> Result<()> {
     cmd!(sh, "rm -rf ./target/criterion-remote").run()?;
-    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull && git checkout {branch} && rm -rf target/criterion && cargo criterion");
+    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull && git checkout {branch} && rm -rf target/criterion && RUSTFLAGS='-C target-feature=+aes,+ssse3' cargo criterion");
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command {cmd}")
         .run()?;
 

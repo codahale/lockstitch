@@ -103,17 +103,24 @@ Both BLAKE3 and AEGIS128L benefit significantly from the use of specific CPU ins
 
 ### `x86_64`
 
-Lockstitch has the highest performance with the default features enabled. The `std` feature allows
-the `blake3` crate to detect CPU capabilities at runtime and use e.g. AVX2/AVX-512 instructions on
-modern Intel processors. Leaving the `no_aesni` feature disabled ensures the AEGIS128L
-implementation emits AES-NI and SSSE3 instructions.
+On `x86_64` CPUs, Lockstitch achieves its best performance with the `aes` and `ssse3` CPU features
+enabled and the `std` crate feature enabled. This allows the `blake3` create to detect CPU features
+at runtime, ensures AEGIS128L benefits from the AES-NI instructions, and prevents interference
+between AES-NI and AVX2 in the AEGIS128L implementation.
 
-For `no_std` uses, BLAKE3 runs fastest with `target-features=+avx2`, but the resulting AEGIS128L
-code is slower. (I suspect this is due to frequency scaling but I don't know.)
+To compile a `x86_64` binary with support for these features, create a `.cargo/config.toml` file
+with the following:
 
-To compile Lockstitch for `x86_64` processors **without** AES-NI, enable the `no_aesni` crate. The
-resulting code will use LLVM's fallback for AES-NI and SSSE3 instructions, preserving correctness at
-a significant performance penalty.
+```toml
+[build]
+rustflags = ["-C", "target-feature=+aes,+ssse3"]
+```
+
+Or use the following `RUSTFLAGS` environment variable:
+
+```sh
+export RUSTFLAGS="-C target-feature=+aes,+ssse3"
+```
 
 ### `aarch64`
 

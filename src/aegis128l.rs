@@ -13,58 +13,58 @@ mod aarch64;
 mod x86_64;
 
 pub fn prf(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) {
-    let mut state = State::new(key, nonce);
+    let mut state = unsafe { State::new(key, nonce) };
     let mut src = Aligned::<A16, _>([0u8; 32]);
     let mut dst = Aligned::<A16, _>([0u8; 32]);
 
     let mut chunks = ad.chunks_exact(32);
     for chunk in chunks.by_ref() {
         src.copy_from_slice(chunk);
-        state.absorb(&src);
+        unsafe { state.absorb(&src) };
     }
 
     let chunk = chunks.remainder();
     if !chunk.is_empty() {
         src.fill(0);
         src[..chunk.len()].copy_from_slice(chunk);
-        state.absorb(&src);
+        unsafe { state.absorb(&src) };
     }
 
     let mut chunks = mc.chunks_exact_mut(32);
     for chunk in chunks.by_ref() {
-        state.prf(&mut dst);
+        unsafe { state.prf(&mut dst) };
         chunk.copy_from_slice(dst.as_slice());
     }
 
     let chunk = chunks.into_remainder();
     if !chunk.is_empty() {
-        state.prf(&mut dst);
+        unsafe { state.prf(&mut dst) };
         chunk.copy_from_slice(&dst[..chunk.len()]);
     }
 }
 
 pub fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 16] {
-    let mut state = State::new(key, nonce);
+    let mut state = unsafe { State::new(key, nonce) };
     let mut src = Aligned::<A16, _>([0u8; 32]);
     let mut dst = Aligned::<A16, _>([0u8; 32]);
 
     let mut chunks = ad.chunks_exact(32);
     for chunk in chunks.by_ref() {
         src.copy_from_slice(chunk);
-        state.absorb(&src);
+        unsafe { state.absorb(&src) };
     }
 
     let chunk = chunks.remainder();
     if !chunk.is_empty() {
         src.fill(0);
         src[..chunk.len()].copy_from_slice(chunk);
-        state.absorb(&src);
+        unsafe { state.absorb(&src) };
     }
 
     let mut chunks = mc.chunks_exact_mut(32);
     for chunk in chunks.by_ref() {
         src.copy_from_slice(chunk);
-        state.enc(&mut dst, &src);
+        unsafe { state.enc(&mut dst, &src) };
         chunk.copy_from_slice(dst.as_slice());
     }
 
@@ -72,45 +72,45 @@ pub fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u
     if !chunk.is_empty() {
         src.fill(0);
         src[..chunk.len()].copy_from_slice(chunk);
-        state.enc(&mut dst, &src);
+        unsafe { state.enc(&mut dst, &src) };
         chunk.copy_from_slice(&dst[..chunk.len()]);
     }
 
-    state.mac(ad.len(), mc.len())
+    unsafe { state.mac(ad.len(), mc.len()) }
 }
 
 pub fn decrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 16] {
-    let mut state = State::new(key, nonce);
+    let mut state = unsafe { State::new(key, nonce) };
     let mut src = Aligned::<A16, _>([0u8; 32]);
     let mut dst = Aligned::<A16, _>([0u8; 32]);
 
     let mut chunks = ad.chunks_exact(32);
     for chunk in chunks.by_ref() {
         src.copy_from_slice(chunk);
-        state.absorb(&src);
+        unsafe { state.absorb(&src) };
     }
 
     let chunk = chunks.remainder();
     if !chunk.is_empty() {
         src.fill(0);
         src[..chunk.len()].copy_from_slice(chunk);
-        state.absorb(&src);
+        unsafe { state.absorb(&src) };
     }
 
     let mut chunks = mc.chunks_exact_mut(32);
     for chunk in chunks.by_ref() {
         src.copy_from_slice(chunk);
-        state.dec(&mut dst, &src);
+        unsafe { state.dec(&mut dst, &src) };
         chunk.copy_from_slice(dst.as_slice());
     }
 
     let chunk = chunks.into_remainder();
     if !chunk.is_empty() {
-        state.dec_partial(&mut dst, chunk);
+        unsafe { state.dec_partial(&mut dst, chunk) };
         chunk.copy_from_slice(&dst[..chunk.len()]);
     }
 
-    state.mac(ad.len(), mc.len())
+    unsafe { state.mac(ad.len(), mc.len()) }
 }
 
 #[repr(transparent)]
@@ -120,8 +120,11 @@ struct State {
 }
 
 impl State {
-    #[allow(unused_unsafe)]
-    fn update(&mut self, d1: AesBlock, d2: AesBlock) {
+    #[cfg_attr(
+        all(target_arch = "x86_64", not(feature = "no_aesni")),
+        target_feature(enable = "aes,ssse3")
+    )]
+    unsafe fn update(&mut self, d1: AesBlock, d2: AesBlock) {
         let blocks = &mut self.blocks;
         let tmp = blocks[7];
         blocks[7] = round!(blocks[6], blocks[7]);
@@ -134,7 +137,11 @@ impl State {
         blocks[0] = xor!(round!(tmp, blocks[0]), d1);
     }
 
-    fn new(key: &[u8; 16], nonce: &[u8; 16]) -> Self {
+    #[cfg_attr(
+        all(target_arch = "x86_64", not(feature = "no_aesni")),
+        target_feature(enable = "aes,ssse3")
+    )]
+    unsafe fn new(key: &[u8; 16], nonce: &[u8; 16]) -> Self {
         let c1 = Aligned::<A16, _>([
             0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5,
             0x28, 0xdd,
@@ -164,15 +171,21 @@ impl State {
         state
     }
 
-    #[inline(always)]
-    fn absorb(&mut self, src: &[u8; 32]) {
+    #[cfg_attr(
+        all(target_arch = "x86_64", not(feature = "no_aesni")),
+        target_feature(enable = "aes,ssse3")
+    )]
+    unsafe fn absorb(&mut self, src: &[u8; 32]) {
         let msg0 = from_bytes!(&src[..16]);
         let msg1 = from_bytes!(&src[16..]);
         self.update(msg0, msg1);
     }
 
-    #[allow(unused_unsafe)]
-    fn prf(&mut self, dst: &mut [u8; 32]) {
+    #[cfg_attr(
+        all(target_arch = "x86_64", not(feature = "no_aesni")),
+        target_feature(enable = "aes,ssse3")
+    )]
+    unsafe fn prf(&mut self, dst: &mut [u8; 32]) {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
@@ -192,8 +205,11 @@ impl State {
         }
     }
 
-    #[allow(unused_unsafe)]
-    fn enc(&mut self, dst: &mut [u8; 32], src: &[u8; 32]) {
+    #[cfg_attr(
+        all(target_arch = "x86_64", not(feature = "no_aesni")),
+        target_feature(enable = "aes,ssse3")
+    )]
+    unsafe fn enc(&mut self, dst: &mut [u8; 32], src: &[u8; 32]) {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
@@ -206,8 +222,11 @@ impl State {
         self.update(msg0, msg1);
     }
 
-    #[allow(unused_unsafe)]
-    fn dec(&mut self, dst: &mut [u8; 32], src: &[u8; 32]) {
+    #[cfg_attr(
+        all(target_arch = "x86_64", not(feature = "no_aesni")),
+        target_feature(enable = "aes,ssse3")
+    )]
+    unsafe fn dec(&mut self, dst: &mut [u8; 32], src: &[u8; 32]) {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
@@ -220,8 +239,11 @@ impl State {
         self.update(msg0, msg1);
     }
 
-    #[allow(unused_unsafe)]
-    fn dec_partial(&mut self, dst: &mut [u8; 32], src: &[u8]) {
+    #[cfg_attr(
+        all(target_arch = "x86_64", not(feature = "no_aesni")),
+        target_feature(enable = "aes,ssse3")
+    )]
+    unsafe fn dec_partial(&mut self, dst: &mut [u8; 32], src: &[u8]) {
         let mut src_padded = Aligned::<A16, _>([0u8; 32]);
         src_padded[..src.len()].copy_from_slice(src);
 
@@ -240,8 +262,11 @@ impl State {
         self.update(msg0, msg1);
     }
 
-    #[allow(unused_unsafe)]
-    fn mac(&mut self, ad_len: usize, mc_len: usize) -> [u8; 16] {
+    #[cfg_attr(
+        all(target_arch = "x86_64", not(feature = "no_aesni")),
+        target_feature(enable = "aes,ssse3")
+    )]
+    unsafe fn mac(&mut self, ad_len: usize, mc_len: usize) -> [u8; 16] {
         let tmp = {
             let blocks = &self.blocks;
             let mut sizes = Aligned::<A16, _>([0u8; 16]);
@@ -282,38 +307,45 @@ mod tests {
 
     #[test]
     fn block_xor() {
-        let a = from_bytes!(b"ayellowsubmarine");
-        let b = from_bytes!(b"tuneintotheocho!");
-        let c = xor!(a, b);
+        unsafe {
+            let a = from_bytes!(b"ayellowsubmarine");
+            let b = from_bytes!(b"tuneintotheocho!");
+            let c = xor!(a, b);
 
-        assert_eq!(
-            as_bytes!(c).as_slice(),
-            [21, 12, 11, 9, 5, 1, 3, 28, 1, 10, 8, 14, 17, 1, 1, 68].as_slice()
-        );
+            assert_eq!(
+                as_bytes!(c).as_slice(),
+                [21, 12, 11, 9, 5, 1, 3, 28, 1, 10, 8, 14, 17, 1, 1, 68].as_slice()
+            );
+        }
     }
 
     #[test]
     fn block_and() {
-        let a = from_bytes!(b"ayellowsubmarine");
-        let b = from_bytes!(b"tuneintotheocho!");
-        let c = and!(a, b);
+        unsafe {
+            let a = from_bytes!(b"ayellowsubmarine");
+            let b = from_bytes!(b"tuneintotheocho!");
+            let c = and!(a, b);
 
-        assert_eq!(
-            as_bytes!(c).as_slice(),
-            [96, 113, 100, 100, 104, 110, 116, 99, 116, 96, 101, 97, 98, 104, 110, 33].as_slice()
-        );
+            assert_eq!(
+                as_bytes!(c).as_slice(),
+                [96, 113, 100, 100, 104, 110, 116, 99, 116, 96, 101, 97, 98, 104, 110, 33]
+                    .as_slice()
+            );
+        }
     }
 
     #[test]
     fn block_round() {
-        let a = from_bytes!(b"ayellowsubmarine");
-        let b = from_bytes!(b"tuneintotheocho!");
-        let c = round!(a, b);
+        unsafe {
+            let a = from_bytes!(b"ayellowsubmarine");
+            let b = from_bytes!(b"tuneintotheocho!");
+            let c = round!(a, b);
 
-        assert_eq!(
-            as_bytes!(c).as_slice(),
-            [35, 216, 134, 65, 227, 155, 91, 10, 135, 68, 17, 98, 56, 180, 66, 103].as_slice()
-        );
+            assert_eq!(
+                as_bytes!(c).as_slice(),
+                [35, 216, 134, 65, 227, 155, 91, 10, 135, 68, 17, 98, 56, 180, 66, 103].as_slice()
+            );
+        }
     }
 
     #[test]

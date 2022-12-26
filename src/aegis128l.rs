@@ -10,6 +10,37 @@ mod aarch64;
 #[cfg(target_arch = "x86_64")]
 mod x86_64;
 
+pub fn prf(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) {
+    let mut state = State::new(key, nonce);
+    let mut src = [0u8; 32];
+    let mut dst = [0u8; 32];
+
+    let mut chunks = ad.chunks_exact(32);
+    for chunk in chunks.by_ref() {
+        src.copy_from_slice(chunk);
+        state.absorb(&src);
+    }
+
+    let chunk = chunks.remainder();
+    if !chunk.is_empty() {
+        src.fill(0);
+        src[..chunk.len()].copy_from_slice(chunk);
+        state.absorb(&src);
+    }
+
+    let mut chunks = mc.chunks_exact_mut(32);
+    for chunk in chunks.by_ref() {
+        state.prf(&mut dst);
+        chunk.copy_from_slice(&dst);
+    }
+
+    let chunk = chunks.into_remainder();
+    if !chunk.is_empty() {
+        state.prf(&mut dst);
+        chunk.copy_from_slice(&dst[..chunk.len()]);
+    }
+}
+
 pub fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 16] {
     let mut state = State::new(key, nonce);
     let mut src = [0u8; 32];
@@ -134,6 +165,27 @@ impl State {
         let msg0 = from_bytes!(&src[..16]);
         let msg1 = from_bytes!(&src[16..]);
         self.update(msg0, msg1);
+    }
+
+    #[allow(unused_unsafe)]
+    fn prf(&mut self, dst: &mut [u8; 32]) {
+        let blocks = &self.blocks;
+        let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
+        let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
+        dst[..16].copy_from_slice(&as_bytes!(z0));
+        dst[16..].copy_from_slice(&as_bytes!(z1));
+        {
+            let blocks = &mut self.blocks;
+            let tmp = blocks[7];
+            blocks[7] = round!(blocks[6], blocks[7]);
+            blocks[6] = round!(blocks[5], blocks[6]);
+            blocks[5] = round!(blocks[4], blocks[5]);
+            blocks[4] = round!(blocks[3], blocks[4]);
+            blocks[3] = round!(blocks[2], blocks[3]);
+            blocks[2] = round!(blocks[1], blocks[2]);
+            blocks[1] = round!(blocks[0], blocks[1]);
+            blocks[0] = round!(tmp, blocks[0]);
+        }
     }
 
     #[allow(unused_unsafe)]

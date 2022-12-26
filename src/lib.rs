@@ -102,17 +102,14 @@ impl Protocol {
         // Chain the protocol's key and generate an output key.
         let output_key = self.chain();
 
-        // Ensure we're not accidentally encrypting things.
-        out.fill(0);
+        // Fill the buffer with keystream output.
+        aegis128l::prf(&output_key, &[Operation::Derive as u8; 16], out, &[]);
 
-        // Encrypt the all-zeros buffer.
-        let tag = aegis128l::encrypt(&output_key, &[Operation::Derive as u8; 16], out, &[]);
+        // Update the BLAKE3 hasher with the output length.
+        self.state.update(&(out.len() as u64).to_le_bytes());
 
-        // Update the BLAKE3 hasher with the resulting tag.
-        self.state.update(&tag);
-
-        // Update the state with the operation code and tag length.
-        self.end_op(Operation::Derive, TAG_LEN as u64);
+        // Update the state with the operation code and integer length.
+        self.end_op(Operation::Derive, 8);
     }
 
     /// Derive output from the protocol's current state and return it as an array.
@@ -315,7 +312,7 @@ mod tests {
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        assert_eq!("225fa2e797f4b442a41593e800ae19fb83fe", hex::encode(plaintext));
+        assert_eq!("cda793cd0630a4ee770b24ba9bc66993dd21", hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -325,11 +322,11 @@ mod tests {
         protocol.seal(&mut sealed);
 
         assert_eq!(
-            "4928ce70d5244fc339d9f08e235d48ebb659665f859d8b371e8dbb1f5aa861d0a4d3",
+            "841cc6eb83e65fa6d6a1970f7661ed0bcb0621c51372cf51e89f026accea5bb9cc85",
             hex::encode(sealed)
         );
 
-        assert_eq!("4dcf44aa574b8030", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("6f42c5270b31c5b6", hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

@@ -150,9 +150,8 @@ function Derive(state, n):
   state ← BLAKE3::Keyed(K₀)                  // Replace the protocol's state with a new keyed hasher.
   aegis ← AEGIS128L::new(K₁, [0x02; 16])     // Key an AEGIS128L instance using the operation code as a nonce.
   prf ← AEGIS128L::Encrypt(aegis, [0x00; n]) // Produce n bytes of AEGIS128L output.
-  tag ← AEGIS128L::Finalize(aegis)           // Calculate the AEGIS128L tag.
-  state ← BLAKE3::Update(state, tag)         // Update the protocol's state with the tag.
-  state ← BLAKE3::Update(state, RE(16))      // Update the protocol's state with the tag length.
+  state ← BLAKE3::Update(state, LE64(n))     // Update the protocol's state with the output length.
+  state ← BLAKE3::Update(state, RE(16))      // Update the protocol's state with the integer length.
   state ← BLAKE3::Update(state, [0x02])      // Update the protocol's state with the Derive op code.
   return (state, prf) 
 ```
@@ -160,13 +159,11 @@ function Derive(state, n):
 A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
 protocol's state prior to the operation provided BLAKE3 is KDF secure and AEGIS128L is PRF secure.
 The protocol's state after the operation is dependent on both the fact that the operation was a
-`Derive` operation as well as the number of bytes produced. AEGIS128L is compactly committing by
-design, so the final `tag` closes over the key, the nonce, and the plaintext (in this case, `n` zero
-bytes).
+`Derive` operation as well as the number of bytes produced.
 
 `Derive` supports streaming output, thus a shorter `Derive` operation will return a prefix of a
 longer one (e.g.  `Derive(16)` and `Derive(32)` will share the same initial 16 bytes). Once the
-operation is complete, however, the protocols' states will be different.. If a use case requires
+operation is complete, however, the protocols' states will be different. If a use case requires
 `Derive` output to be dependent on its length, include the length in a `Mix` operation beforehand.
 
 ### `Encrypt`/`Decrypt`

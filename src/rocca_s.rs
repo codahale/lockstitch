@@ -13,7 +13,7 @@ mod aarch64;
 mod x86_64;
 
 #[derive(Debug, Clone)]
-pub struct State {
+pub struct RoccaS {
     blocks: [AesBlock; 7],
     k0: AesBlock,
     k1: AesBlock,
@@ -21,7 +21,7 @@ pub struct State {
     mc_len: u128,
 }
 
-impl State {
+impl RoccaS {
     pub fn new(key: &[u8; 32], nonce: &[u8; 16]) -> Self {
         const Z0: Aligned<A16, [u8; 16]> = Aligned::<A16, _>([
             205, 101, 239, 35, 145, 68, 55, 113, 34, 174, 40, 215, 152, 47, 138, 66,
@@ -35,7 +35,7 @@ impl State {
         let k1 = from_bytes!(&key[16..]);
         let nonce = from_bytes!(nonce);
         let blocks: [AesBlock; 7] = [k1, nonce, z0, k0, z1, xor!(nonce, k1), zero!()];
-        let mut state = State { blocks, k0, k1, ad_len: 0, mc_len: 0 };
+        let mut state = RoccaS { blocks, k0, k1, ad_len: 0, mc_len: 0 };
         for _ in 0..16 {
             state.update(z0, z1);
         }
@@ -241,14 +241,14 @@ mod tests {
     use hex_literal::hex;
 
     fn encrypt(key: &[u8; 32], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 32] {
-        let mut state = State::new(key, nonce);
+        let mut state = RoccaS::new(key, nonce);
         state.authenticated_data(ad);
         state.encrypt(mc);
         state.tag()
     }
 
     fn decrypt(key: &[u8; 32], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 32] {
-        let mut state = State::new(key, nonce);
+        let mut state = RoccaS::new(key, nonce);
         state.authenticated_data(ad);
         state.decrypt(mc);
         state.tag()

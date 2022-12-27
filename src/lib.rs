@@ -18,9 +18,9 @@
 use std::io::{self, Read, Write};
 
 use constant_time_eq::constant_time_eq;
-
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
+use rocca_s::RoccaS;
 
 mod rocca_s;
 
@@ -31,15 +31,15 @@ pub const TAG_LEN: usize = 16;
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
 #[derive(Debug, Clone)]
 pub struct Protocol {
-    state: rocca_s::State,
+    state: RoccaS,
 }
 
 impl Protocol {
     /// Create a new protocol with the given domain.
     #[inline(always)]
     pub fn new(domain: &'static str) -> Protocol {
-        // Create a protocol with a ROCCA-S state using a fixed key and nonce.
-        let mut protocol = Protocol { state: rocca_s::State::new(&[0u8; 32], &[0u8; 16]) };
+        // Create a protocol with a Rocca-S state using a fixed key and nonce.
+        let mut protocol = Protocol { state: RoccaS::new(&[0u8; 32], &[0u8; 16]) };
 
         // Include the domain as authenticated data.
         protocol.state.authenticated_data(domain.as_bytes());
@@ -291,12 +291,12 @@ impl Protocol {
     /// Replace the protocol's state with derived output and return an AEGIS128L output key.
     #[inline(always)]
     #[must_use]
-    fn chain(&mut self, operation: Operation) -> rocca_s::State {
+    fn chain(&mut self, operation: Operation) -> RoccaS {
         // Use the current state to calculate a tag.
         let tag = self.state.tag();
 
         // Use the tag as a key for ROCCA-S instance.
-        let mut chain = rocca_s::State::new(&tag, &[0u8; 16]);
+        let mut chain = RoccaS::new(&tag, &[0u8; 16]);
 
         // Generate 32 bytes of PRF output for use as a chain key.
         let mut chain_key = [0u8; 32];
@@ -307,10 +307,10 @@ impl Protocol {
         chain.prf(&mut output_key);
 
         // Replace the protocol's state with a new state keyed with the chain key.
-        self.state = rocca_s::State::new(&chain_key, &[0u8; 16]);
+        self.state = RoccaS::new(&chain_key, &[0u8; 16]);
 
         // Return an output state keyed with the output key and using the operation code as a nonce.
-        rocca_s::State::new(&output_key, &[operation as u8; 16])
+        RoccaS::new(&output_key, &[operation as u8; 16])
     }
 
     /// End an operation, including the number of bytes processed.

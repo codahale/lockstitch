@@ -3,8 +3,10 @@
 Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption)
 in complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, and
-Xoodyak's Cyclist mode, Lockstitch combines BLAKE3 and AEGIS128L to provide GiB/sec performance on
-modern processors at a 128-bit security level.
+Xoodyak's Cyclist mode, Lockstitch uses the [Rocca-S][] authenticated cipher to provide 10+ GiB/sec
+performance on modern processors at a 128-bit security level.
+
+[Rocca-S]: https://www.ietf.org/archive/id/draft-nakano-rocca-s-02.html#name-test-vector
 
 ## ⚠️ WARNING: You should not use this. ⚠️
 
@@ -99,14 +101,13 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 
 ## Performance
 
-Both BLAKE3 and AEGIS128L benefit significantly from the use of specific CPU instructions.
+Lockstitch's Rocca-S implementation benefits significantly from the use of specific CPU
+instructions.
 
 ### `x86_64`
 
 On `x86_64` CPUs, Lockstitch achieves its best performance with the `aes` and `ssse3` CPU features
-enabled and the `std` crate feature enabled. This allows the `blake3` create to detect CPU features
-at runtime, ensures AEGIS128L benefits from the AES-NI instructions, and prevents interference
-between AES-NI and AVX2 in the AEGIS128L implementation.
+enabled.
 
 To compile a `x86_64` binary with support for these features, create a `.cargo/config.toml` file
 with the following:
@@ -124,8 +125,8 @@ export RUSTFLAGS="-C target-feature=+aes,+ssse3"
 
 ### `aarch64`
 
-Lockstitch includes a NEON-optimized AEGIS128L implementation and the `blake3` crate includes NEON
-optimizations, so no Rust-specific settings are required.
+Rust's `aarch64` code generation includes the ARMv8-A cryptography instructions and NEON vector
+instructions. No special configuration is required to achieve full performance.
 
 ## Additional Information
 
@@ -136,7 +137,7 @@ For more information on performance, see [`perf.md`](perf.md).
 
 Copyright © 2022 Coda Hale, Frank Denis
 
-AEGIS128L implementation copied from [rust-aegis](https://github.com/jedisct1/rust-aegis/) with some
-modifications.
+Rocca-S implementation adapted from [rust-aegis](https://github.com/jedisct1/rust-aegis/) and
+[zig-rocca](https://github.com/jedisct1/zig-rocca-s/).
 
 Distributed under the MIT License.

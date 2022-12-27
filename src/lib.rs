@@ -81,7 +81,9 @@ impl Protocol {
         mut reader: impl Read,
         mut writer: impl Write,
     ) -> io::Result<u64> {
-        // ensure we're always reading a full block unless we're at the end of the stream
+        // Ensure we're always reading a full block unless we're at the end of the stream. Reading
+        // partial blocks in the middle of a stream due to short reads will corrupt the protocol's
+        // state via accidental padding.
         fn read_block(mut reader: impl Read, mut buf: &mut [u8]) -> io::Result<usize> {
             let max = buf.len();
             while !buf.is_empty() {
@@ -109,7 +111,6 @@ impl Protocol {
                     writer.write_all(&buf[..x])?;
                     n += u64::try_from(x).expect("unexpected overflow");
                 }
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(e),
             }
         }
@@ -288,15 +289,13 @@ impl Protocol {
         unreachable!("unable to hedge a valid value in 10,000 tries");
     }
 
-    /// Replace the protocol's state with derived output and return an AEGIS128L output key.
+    /// Replace the protocol's state with derived output and return an operation-specific Rocca-S
+    /// instance.
     #[inline(always)]
     #[must_use]
     fn chain(&mut self, operation: Operation) -> RoccaS {
-        // Use the current state to calculate a tag.
-        let tag = self.state.tag();
-
-        // Use the tag as a key for ROCCA-S instance.
-        let mut chain = RoccaS::new(&tag, &[0u8; 16]);
+        // Use the tag of the current state as a key for a chain Rocca-S instance.
+        let mut chain = RoccaS::new(&self.state.tag(), &[0u8; 16]);
 
         // Generate 32 bytes of PRF output for use as a chain key.
         let mut chain_key = [0u8; 32];
@@ -309,16 +308,17 @@ impl Protocol {
         // Replace the protocol's state with a new state keyed with the chain key.
         self.state = RoccaS::new(&chain_key, &[0u8; 16]);
 
-        // Return an output state keyed with the output key and using the operation code as a nonce.
+        // Return a Rocca-S instance keyed with the output key and using the operation code as a
+        // nonce.
         RoccaS::new(&output_key, &[operation as u8; 16])
     }
 
     /// End an operation, including the number of bytes processed.
     fn end_op(&mut self, operation: Operation, n: u64) {
-        // Allocate a buffer for output.
+        // Allocate a message block sized buffer for output.
         let mut buffer = [0u8; 32];
 
-        // Encode the operation length in bits.
+        // Encode the operation length in bits as a little endian 128-bit integer.
         buffer[..16].copy_from_slice(&(n as u128 * 8).to_le_bytes());
 
         // Set the last byte to the operation code.

@@ -318,11 +318,11 @@ impl Protocol {
         // Allocate a buffer for output.
         let mut buffer = [0u8; 32];
 
-        // Encode the operation length.
-        buffer[..8].copy_from_slice(&n.to_le_bytes());
+        // Encode the operation length in bits.
+        buffer[..16].copy_from_slice(&(n as u128 * 8).to_le_bytes());
 
         // Set the last byte to the operation code.
-        buffer[8] = operation as u8;
+        buffer[31] = operation as u8;
 
         // Update the state with the length and operation code.
         self.state.authenticated_data(&buffer);
@@ -352,11 +352,11 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        assert_eq!("b4f10f6749a2294c", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("828ac149aa6c3094", hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        assert_eq!("dd9e2cfcdc40d359ffddbb5c45615b1a0e08", hex::encode(plaintext));
+        assert_eq!("9df092665c2db821db5740dfde00c785f408", hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -366,11 +366,11 @@ mod tests {
         protocol.seal(&mut sealed);
 
         assert_eq!(
-            "6c12f39733dfdaad2cff160b0df4e6180b05b9017ed7f4e79fc8c44b9b67673a360f",
+            "224be298615deeff2a1acecc0cd83c893633b2bec68cfa660da944f5e378ccb61335",
             hex::encode(sealed)
         );
 
-        assert_eq!("5392de873bafd163", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("a79337e08db7ecc7", hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

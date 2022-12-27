@@ -21,9 +21,11 @@ pub(crate) use from_bytes;
 
 macro_rules! as_bytes {
     ($block:expr) => {{
-        let mut bytes = Aligned::<A16, _>([0u8; 16]);
-        unsafe { vst1q_u8(bytes.as_mut_ptr(), $block) };
-        bytes
+        unsafe {
+            let mut bytes = core::mem::MaybeUninit::<[u8; 16]>::uninit();
+            vst1q_u8(bytes.as_mut_ptr() as *mut u8, $block);
+            bytes.assume_init()
+        }
     }};
 }
 
@@ -51,7 +53,7 @@ pub(crate) use xor;
 macro_rules! round {
     ($a:expr, $b:expr) => {
        unsafe {
-            let z = vmovq_n_u8(0);
+            let z = zero!();
             let mut a = $a;
             // TODO replace with vaeseq_u8 and vaesmcq_u8 when that's stable
             asm!(

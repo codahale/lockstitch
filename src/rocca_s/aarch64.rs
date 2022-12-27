@@ -37,7 +37,8 @@ macro_rules! xor {
             let mut ret: AesBlock;
             asm!(
                 "EOR3 {:v}.16B, {:v}.16B, {:v}.16B, {:v}.16B",
-                out(vreg) ret, in(vreg) $a, in(vreg) $b, in(vreg) $c);
+                out(vreg) ret, in(vreg) $a, in(vreg) $b, in(vreg) $c,
+            );
             ret
         }
     };
@@ -57,7 +58,8 @@ macro_rules! round {
             asm!(
                 "AESE {0:v}.16B, {1:v}.16B",
                 "AESMC {0:v}.16B, {0:v}.16B",
-                inout(vreg) a, in(vreg) z);
+                inout(vreg) a, in(vreg) z,
+            );
             veorq_u8(a, $b)
        }
     };

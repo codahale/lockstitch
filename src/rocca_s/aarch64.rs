@@ -2,6 +2,14 @@ pub use core::arch::aarch64::uint8x16_t as AesBlock;
 pub use core::arch::aarch64::*;
 pub use core::arch::asm;
 
+macro_rules! zero {
+    () => {
+        unsafe { vmovq_n_u8(0) }
+    };
+}
+
+pub(crate) use zero;
+
 macro_rules! from_bytes {
     ($bytes:expr) => {{
         let bytes: &[u8] = $bytes;
@@ -39,14 +47,6 @@ macro_rules! xor {
 }
 
 pub(crate) use xor;
-
-macro_rules! and {
-    ($a:expr, $b:expr) => {
-        unsafe { vandq_u8($a, $b) }
-    };
-}
-
-pub(crate) use and;
 
 macro_rules! round {
     ($a:expr, $b:expr) => {

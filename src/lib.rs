@@ -17,13 +17,13 @@
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use blake3::Hasher;
 use constant_time_eq::constant_time_eq;
 
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
 
-mod aegis128l;
+// mod aegis128l;
+mod rocca_s;
 
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
@@ -32,22 +32,30 @@ pub const TAG_LEN: usize = 16;
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
 #[derive(Debug, Clone)]
 pub struct Protocol {
-    state: Hasher,
+    state: rocca_s::State,
 }
 
 impl Protocol {
     /// Create a new protocol with the given domain.
     #[inline(always)]
     pub fn new(domain: &'static str) -> Protocol {
-        // Begin with BLAKE3 in KDF mode.
-        Protocol { state: Hasher::new_derive_key(domain) }
+        // Create a protocol with a ROCCA-S state using a fixed key and nonce.
+        let mut protocol = Protocol { state: rocca_s::State::new(&[0u8; 32], &[0u8; 16]) };
+
+        // Include the domain as authenticated data.
+        protocol.state.authenticated_data(domain.as_bytes());
+
+        // End the INIT operation with the domain string length in bytes.
+        protocol.end_op(Operation::Init, domain.len() as u64);
+
+        protocol
     }
 
     /// Mixes the given slice into the protocol state.
     #[inline(always)]
     pub fn mix(&mut self, data: &[u8]) {
         // Update the state with the given slice.
-        self.state.update(data);
+        self.state.authenticated_data(data);
 
         // Update the state with the operation code and byte count.
         self.end_op(Operation::Mix, data.len() as u64);
@@ -74,14 +82,31 @@ impl Protocol {
         mut reader: impl Read,
         mut writer: impl Write,
     ) -> io::Result<u64> {
-        let mut buf = [0u8; 64 * 1024]; // 64KiB is big enough to enable all possible SIMD optimizations
+        // ensure we're always reading a full block unless we're at the end of the stream
+        fn read_block(mut reader: impl Read, mut buf: &mut [u8]) -> io::Result<usize> {
+            let max = buf.len();
+            while !buf.is_empty() {
+                match reader.read(buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        let tmp = buf;
+                        buf = &mut tmp[n..];
+                    }
+                    Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+                    Err(e) => return Err(e),
+                }
+            }
+            Ok(max - buf.len())
+        }
+
+        let mut buf = [0u8; 64 * 1024];
         let mut n = 0;
 
         loop {
-            match reader.read(&mut buf) {
+            match read_block(&mut reader, &mut buf) {
                 Ok(0) => break, // EOF
                 Ok(x) => {
-                    self.state.update(&buf[..x]);
+                    self.state.authenticated_data(&buf[..x]);
                     writer.write_all(&buf[..x])?;
                     n += u64::try_from(x).expect("unexpected overflow");
                 }
@@ -100,13 +125,13 @@ impl Protocol {
     #[inline(always)]
     pub fn derive(&mut self, out: &mut [u8]) {
         // Chain the protocol's key and generate an output key.
-        let output_key = self.chain();
+        let mut output = self.chain(Operation::Derive);
 
-        // Fill the buffer with keystream output.
-        aegis128l::prf(&output_key, &[Operation::Derive as u8; 16], out, &[]);
+        // Fill the buffer with PRF output.
+        output.prf(out);
 
-        // Update the BLAKE3 hasher with the output length.
-        self.state.update(&(out.len() as u64).to_le_bytes());
+        // Update the state with the output length.
+        self.state.authenticated_data(&(out.len() as u64).to_le_bytes());
 
         // Update the state with the operation code and integer length.
         self.end_op(Operation::Derive, 8);
@@ -124,32 +149,68 @@ impl Protocol {
     #[inline(always)]
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
         // Chain the protocol's key and generate an output key.
-        let output_key = self.chain();
+        let mut output = self.chain(Operation::Crypt);
 
         // Encrypt the plaintext.
-        let tag = aegis128l::encrypt(&output_key, &[Operation::Crypt as u8; 16], in_out, &[]);
+        output.encrypt(in_out);
 
-        // Update the BLAKE3 hasher with the resulting tag.
-        self.state.update(&tag);
+        // Calculate the tag.
+        let tag = output.tag();
+
+        // Update the state with the resulting tag.
+        self.state.authenticated_data(&tag);
 
         // Update the state with the operation code and tag length.
-        self.end_op(Operation::Crypt, TAG_LEN as u64);
+        self.end_op(Operation::Crypt, tag.len() as u64);
     }
 
     /// Decrypt the given slice in place.
     #[inline(always)]
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
         // Chain the protocol's key and generate an output key.
-        let output_key = self.chain();
+        let mut output = self.chain(Operation::Crypt);
 
-        // Decrypt the ciphertext.
-        let tag = aegis128l::decrypt(&output_key, &[Operation::Crypt as u8; 16], in_out, &[]);
+        // Decrypt the plaintext.
+        output.decrypt(in_out);
 
-        // Update the BLAKE3 hasher with the resulting tag.
-        self.state.update(&tag);
+        // Calculate the tag.
+        let tag = output.tag();
+
+        // Update the state with the resulting tag.
+        self.state.authenticated_data(&tag);
 
         // Update the state with the operation code and tag length.
-        self.end_op(Operation::Crypt, TAG_LEN as u64);
+        self.end_op(Operation::Crypt, tag.len() as u64);
+    }
+
+    /// Derive a tag from the protocol's current state and fill the given slice with it.
+    #[inline(always)]
+    pub fn tag(&mut self, out: &mut [u8]) {
+        out.copy_from_slice(&self.tag_array());
+    }
+
+    /// Derive a tag from the protocol's current state and return it as an array.
+    #[inline(always)]
+    pub fn tag_array(&mut self) -> [u8; TAG_LEN] {
+        // Chain the protocol's key and generate an output key.
+        let mut output = self.chain(Operation::Tag);
+
+        let mut tag = [0u8; TAG_LEN];
+        output.prf(&mut tag);
+
+        // Update the state with the output length.
+        self.state.authenticated_data(&(TAG_LEN as u64).to_le_bytes());
+
+        // Update the state with the operation code and integer length.
+        self.end_op(Operation::Tag, 8);
+
+        tag
+    }
+
+    /// Compare a received tag with a derived tag in constant time.
+    #[inline(always)]
+    pub fn check_tag(&mut self, tag: &[u8]) -> bool {
+        constant_time_eq(tag, &self.tag_array())
     }
 
     /// Seals the given mutable slice in place.
@@ -160,18 +221,11 @@ impl Protocol {
         // Split the buffer into plaintext and tag.
         let (in_out, tag_out) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Chain the protocol's key and generate an output key.
-        let output_key = self.chain();
-
         // Encrypt the plaintext.
-        let tag = aegis128l::encrypt(&output_key, &[Operation::AuthCrypt as u8; 16], in_out, &[]);
-        tag_out.copy_from_slice(&tag);
+        self.encrypt(in_out);
 
-        // Update the BLAKE3 hasher with the resulting tag.
-        self.state.update(&tag);
-
-        // Update the state with the operation code and tag length.
-        self.end_op(Operation::AuthCrypt, TAG_LEN as u64);
+        // Fill the tag with derived output.
+        self.tag(tag_out);
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -182,20 +236,11 @@ impl Protocol {
         // Split the buffer into ciphertext and tag.
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Chain the protocol's key and generate an output key.
-        let output_key = self.chain();
-
         // Decrypt the ciphertext.
-        let tag_p = aegis128l::decrypt(&output_key, &[Operation::AuthCrypt as u8; 16], in_out, &[]);
-
-        // Update the BLAKE3 hasher with the resulting tag.
-        self.state.update(&tag_p);
-
-        // Update the state with the operation code and tag length.
-        self.end_op(Operation::AuthCrypt, TAG_LEN as u64);
+        self.decrypt(in_out);
 
         // Check the tag.
-        if constant_time_eq(tag, &tag_p) {
+        if self.check_tag(tag) {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -211,7 +256,7 @@ impl Protocol {
     /// Modifies the protocol's state irreversibly, preventing rollback.
     pub fn ratchet(&mut self) {
         // Chain the protocol's key, ignoring the PRF output.
-        let _ = self.chain();
+        let _ = self.chain(Operation::Ratchet);
 
         // Update the state with the operation code and zero length.
         self.end_op(Operation::Ratchet, 0);
@@ -227,7 +272,7 @@ impl Protocol {
         secrets: &[impl AsRef<[u8]>],
         f: impl Fn(&mut Self) -> Option<R>,
     ) -> R {
-        for _ in 0..1000 {
+        for _ in 0..10_000 {
             // Clone the protocol's state.
             let mut clone = self.clone();
 
@@ -247,53 +292,59 @@ impl Protocol {
             }
         }
 
-        unreachable!("unable to hedge a valid value in 1000 tries");
+        unreachable!("unable to hedge a valid value in 10,000 tries");
     }
 
     /// Replace the protocol's state with derived output and return an AEGIS128L output key.
     #[inline(always)]
     #[must_use]
-    fn chain(&mut self) -> [u8; 16] {
-        // Generate two keys' worth of XOF output from the current state.
-        let mut xof_block = [0u8; blake3::KEY_LEN + 16];
-        self.state.finalize_xof().fill(&mut xof_block);
+    fn chain(&mut self, operation: Operation) -> rocca_s::State {
+        // Use the current state to calculate a tag.
+        let tag = self.state.tag();
 
-        // Split the XOF output into a BLAKE3 chain key and an AEGIS128L output key.
-        let (chain_key, output_key) = xof_block.split_at(blake3::KEY_LEN);
+        // Use the tag as a key for ROCCA-S instance.
+        let mut chain = rocca_s::State::new(&tag, &[0u8; 16]);
 
-        // Use the chain key to replace the protocol's state with a new keyed hasher.
-        self.state = Hasher::new_keyed(&chain_key.try_into().expect("invalid BLAKE3 key"));
+        // Generate 32 bytes of PRF output for use as a chain key.
+        let mut chain_key = [0u8; 32];
+        chain.prf(&mut chain_key);
 
-        // Use the output key to create an AEGIS128L key for output.
-        output_key.try_into().expect("invalid AEGIS128L key")
+        // Generate 32 bytes of PRF output for use as an output key.
+        let mut output_key = [0u8; 32];
+        chain.prf(&mut output_key);
+
+        // Replace the protocol's state with a new state keyed with the chain key.
+        self.state = rocca_s::State::new(&chain_key, &[0u8; 16]);
+
+        // Return an output state keyed with the output key and using the operation code as a nonce.
+        rocca_s::State::new(&output_key, &[operation as u8; 16])
     }
 
     /// End an operation, including the number of bytes processed.
     fn end_op(&mut self, operation: Operation, n: u64) {
         // Allocate a buffer for output.
-        let mut buffer = [0u8; 10];
+        let mut buffer = [0u8; 32];
 
-        // Encode the number of bytes processed using NIST SP-800-185's right_encode.
-        buffer[..8].copy_from_slice(&n.to_be_bytes());
-        let offset = buffer.iter().position(|i| *i != 0).unwrap_or(7);
-        buffer[8] = 8 - offset as u8;
+        // Encode the operation length.
+        buffer[..8].copy_from_slice(&n.to_le_bytes());
 
         // Set the last byte to the operation code.
-        buffer[9] = operation as u8;
+        buffer[8] = operation as u8;
 
         // Update the state with the length and operation code.
-        self.state.update(&buffer[offset..]);
+        self.state.authenticated_data(&buffer);
     }
 }
 
 /// A primitive operation in a protocol with a unique 1-byte code.
 #[derive(Debug, Clone, Copy)]
 enum Operation {
-    Mix = 0x01,
-    Derive = 0x02,
-    Crypt = 0x03,
-    AuthCrypt = 0x04,
-    Ratchet = 0x05,
+    Init = 0x01,
+    Mix = 0x02,
+    Derive = 0x03,
+    Crypt = 0x04,
+    Tag = 0x05,
+    Ratchet = 0x06,
 }
 
 #[cfg(all(test, feature = "std"))]
@@ -308,11 +359,11 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        assert_eq!("0914194389f16590", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("b4f10f6749a2294c", hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        assert_eq!("cda793cd0630a4ee770b24ba9bc66993dd21", hex::encode(plaintext));
+        assert_eq!("dd9e2cfcdc40d359ffddbb5c45615b1a0e08", hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -322,11 +373,11 @@ mod tests {
         protocol.seal(&mut sealed);
 
         assert_eq!(
-            "841cc6eb83e65fa6d6a1970f7661ed0bcb0621c51372cf51e89f026accea5bb9cc85",
+            "ee35cc79aa75ea94c481b195c6cae2b7da7a2ee369affa1a2a6a42f0b5075cfdae10",
             hex::encode(sealed)
         );
 
-        assert_eq!("6f42c5270b31c5b6", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("204a4692e55145e277bfa2f0dcdd677d", hex::encode(protocol.tag_array()));
     }
 
     #[test]
@@ -355,5 +406,20 @@ mod tests {
         });
 
         assert_eq!(tag[0], 0);
+    }
+
+    #[test]
+    fn edge_case() {
+        let mut sender = Protocol::new("");
+        let mut message = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+        sender.encrypt(&mut message);
+        let tag_s = sender.derive_array::<TAG_LEN>();
+
+        let mut receiver = Protocol::new("");
+        receiver.decrypt(&mut message);
+        let tag_r = receiver.derive_array::<TAG_LEN>();
+
+        assert_eq!(message, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+        assert_eq!(tag_s, tag_r);
     }
 }

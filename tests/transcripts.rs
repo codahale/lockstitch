@@ -8,8 +8,7 @@ enum Input {
     Derive(usize),
     Encrypt(Vec<u8>),
     Decrypt(Vec<u8>),
-    Seal(Vec<u8>),
-    Open(Vec<u8>),
+    Tag,
     Ratchet,
 }
 
@@ -18,8 +17,7 @@ enum Output {
     Derived(Vec<u8>),
     Encrypted(Vec<u8>),
     Decrypted(Vec<u8>),
-    Sealed(Vec<u8>),
-    Opened(Vec<u8>),
+    Tagged([u8; TAG_LEN]),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -53,16 +51,7 @@ fn apply_transcript(t: &Transcript) -> Vec<Output> {
                 protocol.decrypt(&mut ciphertext);
                 Some(Output::Decrypted(ciphertext))
             }
-            Input::Seal(plaintext) => {
-                let mut ciphertext = vec![0u8; plaintext.len() + TAG_LEN];
-                ciphertext[..plaintext.len()].copy_from_slice(&plaintext);
-
-                protocol.seal(&mut ciphertext);
-                Some(Output::Sealed(ciphertext))
-            }
-            Input::Open(mut ciphertext) => {
-                protocol.open(&mut ciphertext).map(|p| Output::Opened(p.to_vec()))
-            }
+            Input::Tag => Some(Output::Tagged(protocol.tag_array())),
             Input::Ratchet => {
                 protocol.ratchet();
                 None
@@ -71,11 +60,12 @@ fn apply_transcript(t: &Transcript) -> Vec<Output> {
         .collect()
 }
 
-fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
+fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>, Vec<[u8; 16]>) {
     // Leak the domain so we can pretend we've statically allocated it in this test.
     let domain: &'static str = Box::leak(Box::new(t.domain.clone()).into_boxed_str());
     let mut protocol = Protocol::new(domain);
     let mut derived = Vec::new();
+    let mut tagged = Vec::new();
     let inputs = t
         .inputs
         .iter()
@@ -99,15 +89,9 @@ fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
                 protocol.decrypt(&mut ciphertext);
                 Input::Encrypt(ciphertext)
             }
-            Input::Seal(plaintext) => {
-                let mut ciphertext = vec![0u8; plaintext.len() + TAG_LEN];
-                ciphertext[..plaintext.len()].copy_from_slice(&plaintext);
-
-                protocol.seal(&mut ciphertext);
-                Input::Open(ciphertext)
-            }
-            Input::Open(mut ciphertext) => {
-                Input::Seal(protocol.open(&mut ciphertext).map(|p| p.to_vec()).unwrap_or_default())
+            Input::Tag => {
+                tagged.push(protocol.tag_array());
+                Input::Tag
             }
             Input::Ratchet => {
                 protocol.ratchet();
@@ -116,7 +100,7 @@ fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
         })
         .collect();
 
-    (Transcript { domain: t.domain.clone(), inputs }, derived)
+    (Transcript { domain: t.domain.clone(), inputs }, derived, tagged)
 }
 
 fn data() -> impl Strategy<Value = Vec<u8>> {
@@ -126,47 +110,22 @@ fn data() -> impl Strategy<Value = Vec<u8>> {
 fn input() -> impl Strategy<Value = Input> {
     prop_oneof![
         Just(Input::Ratchet),
+        Just(Input::Tag),
         (1usize..256).prop_map(Input::Derive),
         data().prop_map(Input::Mix),
         data().prop_map(Input::Encrypt),
         data().prop_map(Input::Decrypt),
-        data().prop_map(Input::Seal),
-        vec(any::<u8>(), 16..200).prop_map(Input::Open)
-    ]
-}
-
-fn invertible_input() -> impl Strategy<Value = Input> {
-    prop_oneof![
-        Just(Input::Ratchet),
-        (1usize..256).prop_map(Input::Derive),
-        data().prop_map(Input::Mix),
-        data().prop_map(Input::Encrypt),
-        data().prop_map(Input::Decrypt),
-        data().prop_map(Input::Seal),
-        // we can't generate inputs for Open that are valid
     ]
 }
 
 prop_compose! {
-    /// A transcript of 0..62 arbitrary operations terminated with a `Derive` operation to capture
+    /// A transcript of 0..62 arbitrary operations terminated with a `Tag` operation to capture
     /// the duplex's final state.
     fn transcript()(
         domain: String,
         mut inputs in vec(input(), 0..62),
     ) -> Transcript{
-        inputs.push(Input::Derive(16));
-        Transcript{domain, inputs}
-    }
-}
-
-prop_compose! {
-    /// A transcript of 0..62 invertible operations terminated with a `Derive` operation to capture
-    /// the duplex's final state.
-    fn invertible_transcript()(
-        domain: String,
-        mut inputs in vec(invertible_input(), 0..62),
-    ) -> Transcript{
-        inputs.push(Input::Derive(16));
+        inputs.push(Input::Tag);
         Transcript{domain, inputs}
     }
 }
@@ -194,11 +153,12 @@ proptest! {
 
     /// For any transcript, reversible outputs (e.g. encrypt/decrypt) must be symmetric.
     #[test]
-    fn symmetry(t in invertible_transcript()) {
-        let (t_inv, a_d) = invert_transcript(&t);
-        let (t_p, b_d) = invert_transcript(&t_inv);
+    fn symmetry(t in transcript()) {
+        let (t_inv, a_d, a_t) = invert_transcript(&t);
+        let (t_p, b_d, b_t) = invert_transcript(&t_inv);
 
-        prop_assert_eq!(t, t_p, "unable to invert a transcript");
+        prop_assert_eq!(t, t_p, "unable to invert a transcript: {:?}", t_inv);
         prop_assert_eq!(a_d, b_d, "divergent derived outputs");
+        prop_assert_eq!(a_t, b_t, "divergent tagged outputs");
     }
 }

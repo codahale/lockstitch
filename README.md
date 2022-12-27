@@ -3,10 +3,10 @@
 Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption)
 in complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, and
-Xoodyak's Cyclist mode, Lockstitch uses the [Rocca-S][] authenticated cipher to provide 10+ GiB/sec
+Xoodyak's Cyclist mode, Lockstitch uses the [Rocca-S][] authenticated cipher to provide 100+ Gb/sec
 performance on modern processors at a 128-bit security level.
 
-[Rocca-S]: https://www.ietf.org/archive/id/draft-nakano-rocca-s-02.html#name-test-vector
+[Rocca-S]: https://www.ietf.org/archive/id/draft-nakano-rocca-s-02.html
 
 ## ⚠️ WARNING: You should not use this. ⚠️
 

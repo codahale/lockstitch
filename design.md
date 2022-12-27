@@ -1,27 +1,120 @@
 # The Design Of Lockstitch
 
 Lockstitch provides a single cryptographic service for all symmetric-key operations and an
-incremental, stateful building block for complex schemes, constructions, and protocols.
+incremental, stateful building block for complex schemes, constructions, and protocols, all built on
+top of the [Rocca-S][] authenticated cipher.
+
+[Rocca-S]: https://www.ietf.org/archive/id/draft-nakano-rocca-s-02.html
 
 ## Preliminaries
 
-The overall structure of Lockstitch is inspired by the Stateful Hash Object scheme in Section 6.3 of
-[the BLAKE3 spec][blake3] and the [KDF chain][kdf-chain] of the Signal protocol. Lockstitch's
-interface is inspired by [STROBE][strobe] and [Xoodyak][xoodyak].
+The basic unit of Lockstitch is the protocol, which wraps a Rocca-S instance.  The overall structure
+of Lockstitch is inspired by the Stateful Hash Object scheme in Section 6.3 of [the BLAKE3
+spec][blake3] and the [KDF chain][kdf-chain] of the Signal protocol. Lockstitch's interface is
+inspired by [STROBE][strobe] and [Xoodyak][xoodyak].
 
 [blake3]: https://blake3.io
 [strobe]: https://strobe.sourceforge.io
 [xoodyak]: https://csrc.nist.gov/CSRC/media/Projects/lightweight-cryptography/documents/finalist-round/updated-spec-doc/xoodyak-spec-final.pdf
 
-### Initializing A Protocol
+### Rocca-S
 
-The basic unit of Lockstitch is the protocol, which wraps a BLAKE3 hasher. Every protocol is
-initialized with a domain separation string, used to initialize a BLAKE3 hasher in key derivation
-function (KDF) mode:
+Rocca-S is a new authenticated cipher with a number of important features:
+
+* **Integrated Construction**: Unlike combined AEADs (e.g. AES-GCM combines AES-ECB, CTR mode, and
+  GHASH), Rocca-S is a single, integrated algorithm. As a result, Lockstitch's implementation
+  (including both `x86_64` and `aarch64` vectorization) is less than 400 lines of clear, readable
+  code.
+* **Fully Sequential**: Every input to Rocca-S -- key, nonce, authenticated data, message -- alters
+  its state and changes the next block of output. This allows Rocca-S to be used as a stream
+  cipher and a PRF in addition to an AEAD.
+* **Compactly Committing**: Rocca-S is a compactly committing authenticated cipher, meaning the
+  final authentication tag serves as a cryptographic commitment for all inputs: key, nonce,
+  authenticated data, and message.
+* **Large Keys, Nonces, Tags, and State**: Rocca-S supports 256-bit keys, 128-bit nonces, 256-bit
+  tags, and has a large internal state. This provides a high margin of security for using multiple,
+  derived keys and large inputs.
+* **Very Fast**: By leveraging common SIMD instructions for AES rounds and 128-bit vectors, Rocca-S
+  achieves 100+ Gb/sec speeds on widely-deployed `x86_64` and `aarch64` processors.
+
+### Encoding Operations
+
+Each Lockstitch operation's inputs are encoded so that any two non-equal sequences of operations
+produce non-equal encoded forms:
 
 ```text
-function Initialize(domain):
-  state ← BLAKE3::KDF(domain)
+function Process(state, input, op_code):
+  state ← RoccaS::AD(state, Pad32(input))
+  state ← RoccaS::AD(state, LE128(|input|)ǁ[0x00; 15]ǁ[op_code])
+  return state
+```
+
+First, the operation's input is padded with zeros until the length is evenly divisible by 32,
+Rocca-S's block size. Next, the padded input is processed as authenticated data. Finally, a single
+message block consisting of the input length in bits, encoded as a 128-bit little endian integer,
+followed by fifteen zeros and the operation's 1-byte code is processed as authenticated data.
+
+### Generating Output
+
+To generate any output during an operation, the protocol first finalizes its current Rocca-S state
+into a 32-byte tag. That tag is used to key a chain Rocca-S instance, and two 32-byte keys are
+derived from its PRF output. The protocol's state is replaced with a Rocca-S instance keyed with the
+first; a Rocca-S instance keyed with the second and using the operation code as a nonce is used to
+generate any output:
+
+```text
+function Chain(state):
+  T ← RoccaS::Tag(state)
+  prf ← RoccaS::Init(T, [0x00; 16])
+  K₀ǁK₁ ← RoccaS::PRF(prf , 64)
+  state ← RoccaS::Init(K₀, [0x00; 16])
+  output ← RoccaS::new(K₁, [operation; 16])
+  return state, output
+```
+
+**N.B.**: Each operation is limited to 2^125 bytes of output.
+
+This uses Rocca-S as a PRF in an [HKDF][]-style _extract-then-expand_ construction to first extract
+a uniform key from the protocol's prior state (i.e. the `Tag` call), then use it to produce uniform
+output of a required length (i.e. the `Init` and `PRF` calls).
+
+[HKDF]: https://eprint.iacr.org/2010/264.pdf
+
+If Rocca-S is compactly committing (i.e. the tag `T` is a cryptographic commitment of the key,
+nonce, authenticated data, and ciphertext) and PRF secure (i.e. its outputs are indistinguishable
+from random by an adversary if the key is uniformly random), the resulting construction is KDF
+secure (i.e. its outputs are indistinguishable from random by an adversary in possession of all
+inputs except the keying material, which is not required to be uniformly random), then sequences of
+operations which accept input and output in a protocol form a [KDF chain][kdf-chain], giving
+Lockstitch protocols the following security properties:
+
+[kdf-chain]: https://signal.org/docs/specifications/doubleratchet/doubleratchet.pdf
+
+* **Resilience**: A protocol's outputs will appear random to an adversary so long as one of the
+  inputs is secret, even if the other inputs to the protocol are adversary-controlled.
+* **Forward Security**: A protocol's previous outputs will appear random to an adversary even if the
+  protocol's state is disclosed at some point.
+* **Break-in Recovery**: A protocol's future outputs will appear random to an adversary in
+  possession of the protocol's state as long as one of the future inputs to the protocol is secret.
+
+Finally, if Rocca-S is PRF secure, an adversary in possession of the output will not be able to
+infer anything about the key or, indeed, distinguish the resulting output from a randomly generated
+sequences of bytes of equal length.
+
+## Operations
+
+Lockstitch supports six operations: `Init`, `Mix`, `Derive`, `Encrypt`/`Decrypt`, `Seal`/`Open`, and
+`Ratchet`.
+
+### `Init`
+
+Every protocol is initialized with a domain separation string, used to initialize a fixed-key
+Rocca-S instance:
+
+```text
+function Init(domain):
+  state ← RoccaS::Init([0x00; 32], [0x00; 16]) // Initialize a fixed-key Rocca-S instance.
+  state ← Process(state, domain, 0x01)         // Process the domain string as input with the 0x01 op code.
   return state
 ```
 
@@ -34,97 +127,13 @@ The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch p
 > different applications or components to inadvertently use the same context string. The safest way
 > to guarantee this is to prevent the context string from including input of any kind.
 
-### Encoding An Operation
-
-Given a BLAKE3 hasher, Lockstitch defines an unambiguous encoding for operations (similar to
-TupleHash). Each operation updates the protocol's state with operation-specific data or replaces it
-with a derivative state. Once an operation is complete, the protocol's state is updated with the
-number of bytes processed `n` (encoded with TupleHash's `right_encode` function) and the operation's
-1-byte code:
-
-```text
-state ← BLAKE3::Update(state, RE(n))
-state ← BLAKE3::Update(state, [operation])
-```
-
-This allows for the unambiguous encoding of multiple inputs and different types of operations as
-well as operations which produce outputs but do not directly update the protocol's state.
-
-**N.B.**: Hashing more than 2^69 bytes with BLAKE3 will result in undefined behavior.
-
-### Generating Output
-
-To generate any output during an operation, the protocol produces a 32-byte chain key and a 16-byte
-output key from the first 48 bytes of XOF output from its BLAKE3 hasher. The protocol then replaces
-its BLAKE3 hasher with a keyed BLAKE3 hasher using the first key. Finally, an AEGIS128L instance is
-initialized using the output key and a 128-bit nonce consisting of the operation's 1-byte code
-repeated 16 times.
-
-```text
-K₀ǁK₁ ← BLAKE3::XOF(state, 48)
-state ← BLAKE3::Keyed(K₀)
-aegis ← AEGIS128L::new(K₁, [operation; 16])
-```
-
-**N.B.**: Each operation is limited to 2 EiB of output (2^64 bits).
-
-If BLAKE3 is KDF secure (i.e. its outputs are indistinguishable from random by an adversary in
-possession of all inputs except the keying material, which is not required to be uniformly random),
-then sequences of operations which accept input and output in a protocol form a [KDF
-chain][kdf-chain], giving Lockstitch protocols the following security properties:
-
-* **Resilience**: A protocol's outputs will appear random to an adversary so long as one of the
-  inputs is secret, even if the other inputs to the protocol are adversary-controlled.
-* **Forward Security**: A protocol's previous outputs will appear random to an adversary even if the
-  protocol's state is disclosed at some point.
-* **Break-in Recovery**: A protocol's future outputs will appear random to an adversary in
-  possession of the protocol's state as long as one of the future inputs to the protocol is secret.
-
-[kdf-chain]: https://signal.org/docs/specifications/doubleratchet/doubleratchet.pdf
-
-Finally, if AEGIS128L is PRF secure (i.e. its outputs are indistinguishable from random by an
-adversary if the key is uniformly random), an adversary in possession of the output will not be able
-to infer anything about the key or, indeed, distinguish the output from a randomly generated
-sequences of bytes of equal length.
-
-#### XOF vs PRF
-
-While BLAKE can produce output of arbitrary length via its eXtendable Output Function (XOF),
-Lockstitch uses AEGIS128L exclusively to generate output values. This is done for three reasons.
-
-First, this design provides a clean separation of responsibilities. BLAKE3 effectively functions as
-a chained KDF, a task for which it was designed and for which its fitness can be clearly analyzed.
-AEGIS128L is used as a PRF and AEAD, tasks for which it was designed.
-
-Second, in addition to a key, AEGIS128L requires a nonce which is copied directly into the cipher's
-initial state. The use of the operation code in the nonce ensures that the output of an operation is
-dependent on both the protocol's state prior to that operation as well as the intent of the current
-operation and does so without requiring an additional BLAKE3 update. Because the key is derived from
-the protocol's state and assumed to be unique, the nonce can be used to encode intent without risk
-of key/nonce pair re-use.
-
-Finally, the use of AEGIS128L provides a huge performance benefit over BLAKE3's XOF. A hash
-function will always require more rounds than a PRF at an equivalent safety margin as its job is
-much harder: a hash function begins with a public state, takes a potentially large amount of
-adversarial data as input, and produces a digest which ideally reveals no information about said
-data; in contrast, a PRF begins with a high-entropy secret state, takes a fixed sequence as input,
-and produces an output stream which ideally is indistinguishable from random. As a result, AEGIS128L
-is an order of magnitude faster than BLAKE3's XOF.
-
-## Operations
-
-Lockstitch supports five operations: `Mix`, `Derive`, `Encrypt`/`Decrypt`, `Seal`/`Open`, and
-`Ratchet`.
-
 ### `Mix`
 
 `Mix` takes a byte sequence of arbitrary length and makes the protocol's state dependent on it:
 
 ```text
 function Mix(state, data):
-  state ← BLAKE3::Update(state, data)         // Update the protocol's state with the data.
-  state ← BLAKE3::Update(state, RE(|data|))   // Update the protocol's state with the data's length.
-  state ← BLAKE3::Update(state, [0x01])       // Update the protocol's state with the Mix op code.
+  state ← Process(state, data, 0x02) // Process the data as input with the Mix op code.
   return state
 ```
 
@@ -132,13 +141,17 @@ Unlike a standard hash function, `Mix` operations (as with all other operations)
 associative. That is, `Mix("alpha"); Mix("bet")` is not equivalent to `Mix("alphabet")`. This
 eliminates the possibility of collisions; no additional padding or encoding is required.
 
-`Mix` consists solely of BLAKE3 update operations and as such has collision resistance which reduces
-to the underlying BLAKE3 algorithm: no polynomial algorithm should be able to find two sets of
-inputs which produce the same output except with negligible probability.
+Multiple `Mix` operations in a row are equivalent to a single [encoded](#encoding-operations) block
+of authenticated data. The Rocca-S tag of that state, then, should be collision-resistant, in that
+an adversary with a non-negligible advantage of finding two inputs `(A₀, A₁)` such that
+`E(K, N, A₀, ɛ) = E(K, N, A₁, ɛ)` would be able to forge Rocca-S ciphertexts.
 
-Unlike other operations (which all produce output and therefore replace the BLAKE3 hasher with a
-derived hasher), `Mix` does not replace the hasher, allowing sequential `Mix` operations to be
-batched, leveraging the full throughput potential of BLAKE3.
+Unlike other operations (which all produce output and therefore replace the state with a derived
+Rocca-S instance), `Mix` does not replace the hasher, allowing sequential `Mix` operations to be
+batched, leveraging the full throughput potential of Rocca-S.
+
+**N.B.**: Processing more than 2^61 bytes without generating output will result in undefined
+behavior.
 
 ### `Derive`
 
@@ -146,18 +159,14 @@ batched, leveraging the full throughput potential of BLAKE3.
 
 ```text
 function Derive(state, n):
-  K₀ǁK₁ ← BLAKE3::XOF(state, 48)             // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K₀)                  // Replace the protocol's state with a new keyed hasher.
-  aegis ← AEGIS128L::new(K₁, [0x02; 16])     // Key an AEGIS128L instance using the operation code as a nonce.
-  prf ← AEGIS128L::Encrypt(aegis, [0x00; n]) // Produce n bytes of AEGIS128L output.
-  state ← BLAKE3::Update(state, LE64(n))     // Update the protocol's state with the output length.
-  state ← BLAKE3::Update(state, RE(16))      // Update the protocol's state with the integer length.
-  state ← BLAKE3::Update(state, [0x02])      // Update the protocol's state with the Derive op code.
+  (state, output) ← Chain(state, 0x03)  // Ratchet the protocol state and key an output Rocca-S instance.
+  prf ← RoccaS::PRF(output, n)          // Generate n bytes of Rocca-S PRF.
+  state ← Process(state, LE64(n), 0x03) // Processes the output length with the Derive op code.
   return (state, prf) 
 ```
 
 A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
-protocol's state prior to the operation provided BLAKE3 is KDF secure and AEGIS128L is PRF secure.
+protocol's state prior to the operation provided RoccaS is PRF secure and compactly committing.
 The protocol's state after the operation is dependent on both the fact that the operation was a
 `Derive` operation as well as the number of bytes produced.
 
@@ -168,35 +177,27 @@ operation is complete, however, the protocols' states will be different. If a us
 
 ### `Encrypt`/`Decrypt`
 
-`Encrypt` uses AEGIS128L to encrypt a given plaintext with a key derived from the protocol's current
-state and updates the protocol's state with the final AEGIS128L tag.
+`Encrypt` uses Rocca-S to encrypt a given plaintext with a key derived from the protocol's current
+state and updates the protocol's state with the final Rocca-S tag.
 
 ```text
 function Encrypt(state, plaintext):
-  K₀ǁK₁ ← BLAKE3::XOF(state, 48)                    // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K₀)                         // Replace the protocol's state with a new keyed hasher.
-  aegis ← AEGIS128L::new(K₁, [0x03; 16])            // Key an AEGIS128L instance using the operation code as a nonce.
-  ciphertext ← AEGIS128L::Encrypt(aegis, plaintext) // Encrypt the plaintext with AEGIS128L.
-  tag ← AEGIS128L::Finalize(aegis)                  // Calculate the AEGIS128L tag.
-  state ← BLAKE3::Update(state, tag)                // Update the protocol's state with the tag.
-  state ← BLAKE3::Update(state, RE(16))             // Update the protocol's state with the tag length.
-  state ← BLAKE3::Update(state, [0x03])             // Update the protocol's state with the Crypt op code.
-  return (state, ciphertext) 
+  (state, output) ← Chain(state, 0x04)            // Ratchet the protocol state and key an output Rocca-S instance.
+  ciphertext ← RoccaS::Encrypt(output, plaintext) // Encrypt the plaintext with Rocca-S.
+  tag ← RoccaS::Tag(output)                       // Calculate the Rocca-S tag.
+  state ← Process(state, tag, 0x04)               // Process the tag as input.
+  return (state, ciphertext)
 ```
 
 `Decrypt` is used to decrypt the outputs of `Encrypt`.
 
 ```text
 function Decrypt(state, ciphertext):
-  K₀ǁK₁ ← BLAKE3::XOF(state, 48)                    // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K₀)                         // Replace the protocol's state with a new keyed hasher.
-  aegis ← AEGIS128L::new(K₁, [0x03; 16])            // Key an AEGIS128L instance using the operation code as a nonce.
-  plaintext ← AEGIS128L::Decrypt(aegis, ciphertext) // Decrypt the ciphertext with AEGIS128L.
-  tag ← AEGIS128L::Finalize(aegis)                  // Calculate the AEGIS128L tag.
-  state ← BLAKE3::Update(state, tag)                // Update the protocol's state with the tag.
-  state ← BLAKE3::Update(state, RE(16))             // Update the protocol's state with the tag length.
-  state ← BLAKE3::Update(state, [0x03])             // Update the protocol's state with the Crypt op code.
-  return (state, plaintext) 
+  (state, output) ← Chain(state, 0x04)            // Ratchet the protocol state and key an output Rocca-S instance.
+  plaintext ← RoccaS::Decrypt(output, ciphertext) // Decrypt the plaintext with Rocca-S.
+  tag ← RoccaS::Tag(output)                       // Calculate the Rocca-S tag.
+  state ← Process(state, tag, 0x04)               // Process the tag as input.
+  return (state, plaintext)
 ```
 
 Three points bear mentioning about `Encrypt` and `Decrypt`.
@@ -204,9 +205,9 @@ Three points bear mentioning about `Encrypt` and `Decrypt`.
 First, both `Encrypt` and `Decrypt` use the same `Crypt` operation code to ensure protocols have
 the same state after both encrypting and decrypting data.
 
-Second, despite not updating the BLAKE3 hasher with either the plaintext or ciphertext, the
-inclusion of the AEGIS128L tag ensures the protocol's state is dependent on both because AEGIS128L
-is compactly committing.
+Second, despite not updating the protocol state with either the plaintext or ciphertext, the
+inclusion of the output tag ensures the protocol's state is dependent on both because Rocca-S is
+compactly committing.
 
 Third, `Crypt` operations provide no authentication by themselves. An attacker can modify a
 ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
@@ -214,8 +215,7 @@ they are EAV secure (i.e. a passive adversary will not be able to read plaintext
 protocol's prior state) but not IND-CPA secure (i.e. an active adversary with an encryption oracle
 will be able to detect duplicate plaintexts) or IND-CCA secure (i.e. an active adversary can produce
 modified ciphertexts which successfully decrypt). For IND-CPA and IND-CCA security,
-`Encrypt`/`Decrypt` operations must be part of an integrated protocol (e.g. an
-[AEAD](#authenticated-encryption-and-data-aead)).
+use [`Seal`/`Open`](#sealopen).
 
 As with `Derive`, `Encrypt`'s streaming support means an `Encrypt` operation with a shorter
 plaintext produces a keystream which is a prefix of one with a longer plaintext (e.g.
@@ -226,24 +226,20 @@ beforehand.
 
 ### `Seal`/`Open`
 
-The `Seal` operation uses AEGIS128L to encrypt a given plaintext with a key derived from the
-protocol's current state, updates the protocol's state with the final AEGIS128L tag, and returns the
-tag:
+The `Seal` operation uses Rocca-S to encrypt a given plaintext with a key derived from the
+protocol's current state, updates the protocol's state with the final Rocca-S tag, and returns the
+ciphertext along with a truncated copy of the tag:
 
 ```text
 function Seal(state, plaintext):
-  K₀ǁK₁ ← BLAKE3::XOF(state, 48)                    // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K₀)                         // Replace the protocol's state with a new keyed hasher.
-  aegis ← AEGIS128L::new(K₁, [0x04; 16])            // Key an AEGIS128L instance using the operation code as a nonce.
-  ciphertext ← AEGIS128L::Encrypt(aegis, plaintext) // Encrypt the plaintext with AEGIS128L.
-  tag ← AEGIS128L::Finalize(aegis)                  // Calculate the AEGIS128L tag.
-  state ← BLAKE3::Update(state, tag)                // Update the protocol's state with the tag.
-  state ← BLAKE3::Update(state, RE(16))             // Update the protocol's state with the tag length.
-  state ← BLAKE3::Update(state, [0x04])             // Update the protocol's state with the AuthCrypt op code.
-  return (state, ciphertext, tag) 
+  (state, output) ← Chain(state, 0x05)            // Ratchet the protocol state and key an output Rocca-S instance.
+  ciphertext ← RoccaS::Encrypt(output, plaintext) // Encrypt the plaintext with Rocca-S.
+  tag ← RoccaS::Tag(output)                       // Calculate the Rocca-S tag.
+  state ← Process(state, tag, 0x05)               // Process the tag as input.
+  return (state, ciphertext, tag[..16])           // Return the ciphertext and the first half of the tag.
 ```
 
-This is essentially the same thing as the `Encrypt` operation but includes the AEGIS128L tag in the
+This is essentially the same thing as the `Encrypt` operation but includes the Rocca-S tag in the
 ciphertext.
 
 The `Open` operation decrypts the ciphertext and compares the counterfactual tag against the tag
@@ -251,21 +247,17 @@ included with the ciphertext:
 
 ```text
 function Open(state, ciphertext, tag):
-  K₀ǁK₁ ← BLAKE3::XOF(state, 48)                    // Generate two keys with XOF output from the current state.
-  state ← BLAKE3::Keyed(K₀)                         // Replace the protocol's state with a new keyed hasher.
-  aegis ← AEGIS128L::new(K₁, [0x04; 16])            // Key an AEGIS128L instance using the operation code as a nonce.
-  plaintext ← AEGIS128L::Decrypt(aegis, ciphertext) // Decrypt the ciphertext with AEGIS128L.
-  tag′ ← AEGIS128L::Finalize(aegis)                 // Calculate the counterfactual AEGIS128L tag.
-  state ← BLAKE3::Update(state, tag′)               // Update the protocol's state with the tag.
-  state ← BLAKE3::Update(state, RE(16))             // Update the protocol's state with the tag length.
-  state ← BLAKE3::Update(state, [0x04])             // Update the protocol's state with the AuthCrypt op code.
-  if tag ≠ tag′:
+  (state, output) ← Chain(state, 0x05)            // Ratchet the protocol state and key an output Rocca-S instance.
+  plaintext ← RoccaS::Decrypt(output, ciphertext) // Decrypt the plaintext with Rocca-S.
+  tag′ ← RoccaS::Tag(output)                      // Calculate the counterfactual Rocca-S tag.
+  state ← Process(state, tag′, 0x05)              // Process the tag as input.
+  if tag ≠ tag′[..16]:                            // If the tags are equal, the plaintext is authentic.
     return ⟂ 
   else:
     return (state, plaintext) 
 ```
 
-The resulting construction is CCA secure if BLAKE3 is KDF secure and AEGIS128L is CCA secure.
+The resulting construction is CCA secure if Rocca-S is CCA secure.
 
 ### `Ratchet`
 
@@ -273,10 +265,8 @@ The `Ratchet` operation irreversibly modifies the protocol's state, preventing r
 
 ```text
 function Ratchet(state):
-  K ← BLAKE3::XOF(state, 32)            // Generate one key with XOF output from the current state.
-  state ← BLAKE3::Keyed(K)              // Replace the protocol's state with a new keyed hasher.
-  state ← BLAKE3::Update(state, RE(0))  // Update the protocol's state with zero bytes processed.
-  state ← BLAKE3::Update(state, [0x05]) // Update the protocol's state with the Ratchet op code.
+  (state, _) ← Chain(state, 0x06) // Ratchet the protocol state without generating output.
+  state ← Process(state, ɛ, 0x06) // Process the empty string as input.
   return state
 ```
 
@@ -297,9 +287,6 @@ function MessageDigest(data):
   return digest
 ```
 
-This is essentially equivalent to using BLAKE3 with AEGIS128L's MAC as an XOF. As such, it inherits
-BLAKE3's collision resistance.
-
 ### Message Authentication Codes
 
 Adding a key to the previous construction makes it a MAC:
@@ -313,8 +300,8 @@ function Mac(key, data):
   return tag
 ```
 
-The [operation encoding](#encoding-an-operation) ensures that the key and the data will never
-overlap, even if their lengths vary.
+The [operation encoding](#encoding-operations) ensures that the key and the data will never overlap,
+even if their lengths vary.
 
 Use a constant-time comparison to verify the MAC:
 
@@ -343,12 +330,12 @@ function Seal(key, nonce, ad, plaintext):
 
 The introduction of a nonce makes the scheme probabilistic (which is required for IND-CCA security).
 The final `Seal` operation closes over all inputs--key, nonce, associated data, and plaintext--which
-are also the values used to produce the ciphertext. Forging a tag here would imply that AEGIS128L's
+are also the values used to produce the ciphertext. Forging a tag here would imply that Rocca-S's
 MAC construction is not sUF-CMA secure.
 
 In addition, this construction is compactly committing: finding a ciphertext and tag pair which
-successfully decrypts under multiple keys would imply either BLAKE3 is not collision-resistant or
-AEGIS128L is not compactly committing, and the final tag serves as a commitment for the ciphertext.
+successfully decrypts under multiple keys would imply that Rocca-S is not compactly committing, and
+the final tag serves as a commitment for the ciphertext.
 
 Decryption uses the `Open` operation to decrypt:
 

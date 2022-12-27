@@ -8,18 +8,11 @@ top of the [Rocca-S][] authenticated cipher.
 
 ## Preliminaries
 
-The basic unit of Lockstitch is the protocol, which wraps a Rocca-S instance.  The overall structure
-of Lockstitch is inspired by the Stateful Hash Object scheme in Section 6.3 of [the BLAKE3
-spec][blake3] and the [KDF chain][kdf-chain] of the Signal protocol. Lockstitch's interface is
-inspired by [STROBE][strobe] and [Xoodyak][xoodyak].
-
-[blake3]: https://blake3.io
-[strobe]: https://strobe.sourceforge.io
-[xoodyak]: https://csrc.nist.gov/CSRC/media/Projects/lightweight-cryptography/documents/finalist-round/updated-spec-doc/xoodyak-spec-final.pdf
+The basic unit of Lockstitch is the protocol, which wraps a Rocca-S instance.
 
 ### Rocca-S
 
-Rocca-S is a new authenticated cipher with a number of important features:
+Rocca-S is a new (2021) authenticated cipher with a number of important features:
 
 * **Integrated Construction**: Unlike combined AEADs (e.g. AES-GCM combines AES-ECB, CTR mode, and
   GHASH), Rocca-S is a single, integrated algorithm. As a result, Lockstitch's implementation

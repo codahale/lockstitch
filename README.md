@@ -10,7 +10,12 @@ performance on modern processors at a 128-bit security level.
 
 ## ⚠️ WARNING: You should not use this. ⚠️
 
-Neither the design nor the implementation of this library have been independently evaluated.
+Neither the design nor the implementation of this library have been independently evaluated. It uses
+very recent cryptographic algorithms in slightly heterodox ways and may well be just an absolutely
+terrible idea. The design is documented in [`design.md`](design.md); read it and see if the
+arguments therein are convincing.
+
+In addition, there is absolutely no guarantee of backwards compatibility.
 
 ## Design
 

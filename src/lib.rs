@@ -22,7 +22,6 @@ use constant_time_eq::constant_time_eq;
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
 
-// mod aegis128l;
 mod rocca_s;
 
 /// The length of an authentication tag in bytes.
@@ -183,36 +182,6 @@ impl Protocol {
         self.end_op(Operation::Crypt, tag.len() as u64);
     }
 
-    /// Derive a tag from the protocol's current state and fill the given slice with it.
-    #[inline(always)]
-    pub fn tag(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(&self.tag_array());
-    }
-
-    /// Derive a tag from the protocol's current state and return it as an array.
-    #[inline(always)]
-    pub fn tag_array(&mut self) -> [u8; TAG_LEN] {
-        // Chain the protocol's key and generate an output key.
-        let mut output = self.chain(Operation::Tag);
-
-        let mut tag = [0u8; TAG_LEN];
-        output.prf(&mut tag);
-
-        // Update the state with the output length.
-        self.state.authenticated_data(&(TAG_LEN as u64).to_le_bytes());
-
-        // Update the state with the operation code and integer length.
-        self.end_op(Operation::Tag, 8);
-
-        tag
-    }
-
-    /// Compare a received tag with a derived tag in constant time.
-    #[inline(always)]
-    pub fn check_tag(&mut self, tag: &[u8]) -> bool {
-        constant_time_eq(tag, &self.tag_array())
-    }
-
     /// Seals the given mutable slice in place.
     ///
     /// The last `TAG_LEN` bytes of the slice will be overwritten with the authentication tag.
@@ -221,11 +190,23 @@ impl Protocol {
         // Split the buffer into plaintext and tag.
         let (in_out, tag_out) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Encrypt the plaintext.
-        self.encrypt(in_out);
+        // Chain the protocol's key and generate an output key.
+        let mut output = self.chain(Operation::AuthCrypt);
 
-        // Fill the tag with derived output.
-        self.tag(tag_out);
+        // Encrypt the plaintext.
+        output.encrypt(in_out);
+
+        // Calculate the tag.
+        let tag = output.tag();
+
+        // Append the first half of the tag to the ciphertext.
+        tag_out.copy_from_slice(&tag[..TAG_LEN]);
+
+        // Update the state with the resulting tag.
+        self.state.authenticated_data(&tag);
+
+        // Update the state with the operation code and tag length.
+        self.end_op(Operation::AuthCrypt, tag.len() as u64);
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -236,11 +217,23 @@ impl Protocol {
         // Split the buffer into ciphertext and tag.
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Decrypt the ciphertext.
-        self.decrypt(in_out);
+        // Chain the protocol's key and generate an output key.
+        let mut output = self.chain(Operation::AuthCrypt);
 
-        // Check the tag.
-        if self.check_tag(tag) {
+        // Decrypt the plaintext.
+        output.decrypt(in_out);
+
+        // Calculate the counterfactual tag.
+        let tag_p = output.tag();
+
+        // Update the state with the resulting tag.
+        self.state.authenticated_data(&tag_p);
+
+        // Update the state with the operation code and tag length.
+        self.end_op(Operation::AuthCrypt, tag_p.len() as u64);
+
+        // Check the tag against the first half of the counterfactual tah.
+        if constant_time_eq(tag, &tag_p[..TAG_LEN]) {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -343,7 +336,7 @@ enum Operation {
     Mix = 0x02,
     Derive = 0x03,
     Crypt = 0x04,
-    Tag = 0x05,
+    AuthCrypt = 0x05,
     Ratchet = 0x06,
 }
 
@@ -373,11 +366,11 @@ mod tests {
         protocol.seal(&mut sealed);
 
         assert_eq!(
-            "ee35cc79aa75ea94c481b195c6cae2b7da7a2ee369affa1a2a6a42f0b5075cfdae10",
+            "6c12f39733dfdaad2cff160b0df4e6180b05b9017ed7f4e79fc8c44b9b67673a360f",
             hex::encode(sealed)
         );
 
-        assert_eq!("204a4692e55145e277bfa2f0dcdd677d", hex::encode(protocol.tag_array()));
+        assert_eq!("5392de873bafd163", hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

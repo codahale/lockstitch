@@ -20,9 +20,9 @@ macro_rules! from_bytes {
 pub(crate) use from_bytes;
 
 macro_rules! to_bytes {
-    ($bytes:expr, $block:expr) => {{
-        let bytes: &mut [u8] = $bytes;
-        unsafe { _mm_storeu_si128(bytes.as_mut_ptr() as *mut __m128i, $block) };
+    ($bytes:expr, $idx:expr, $block:expr) => {{
+        let bytes: &mut Aligned<A16, _> = $bytes;
+        unsafe { _mm_storeu_si128(bytes[$idx].as_mut_ptr() as *mut __m128i, $block) };
     }};
 }
 

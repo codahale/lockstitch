@@ -138,17 +138,17 @@ impl RoccaS {
     }
 
     #[allow(unused_unsafe)]
-    fn enc_zeroes(&mut self, dst: &mut [u8; 32]) {
+    fn enc_zeroes(&mut self, dst: &mut Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
         let c0 = round!(xor!(blocks[3], blocks[5]), blocks[0]);
         let c1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
-        to_bytes!(&mut dst[..16], c0);
-        to_bytes!(&mut dst[16..], c1);
+        to_bytes!(dst, ..16, c0);
+        to_bytes!(dst, 16.., c1);
         self.update(zero!(), zero!());
     }
 
     #[allow(unused_unsafe)]
-    fn enc(&mut self, dst: &mut [u8; 32], src: &Aligned<A16, [u8; 32]>) {
+    fn enc(&mut self, dst: &mut Aligned<A16, [u8; 32]>, src: &Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
         let msg0 = from_bytes!(src, ..16);
         let msg1 = from_bytes!(src, 16..);
@@ -156,13 +156,13 @@ impl RoccaS {
         let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
         let c0 = xor!(k0, msg0);
         let c1 = xor!(k1, msg1);
-        to_bytes!(&mut dst[..16], c0);
-        to_bytes!(&mut dst[16..], c1);
+        to_bytes!(dst, ..16, c0);
+        to_bytes!(dst, 16.., c1);
         self.update(msg0, msg1);
     }
 
     #[allow(unused_unsafe)]
-    fn dec(&mut self, dst: &mut [u8; 32], src: &Aligned<A16, [u8; 32]>) {
+    fn dec(&mut self, dst: &mut Aligned<A16, [u8; 32]>, src: &Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
         let c0 = from_bytes!(src, ..16);
         let c1 = from_bytes!(src, 16..);
@@ -170,8 +170,8 @@ impl RoccaS {
         let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
         let msg0 = xor!(k0, c0);
         let msg1 = xor!(k1, c1);
-        to_bytes!(&mut dst[..16], xor!(k0, c0));
-        to_bytes!(&mut dst[16..], xor!(k1, c1));
+        to_bytes!(dst, ..16, xor!(k0, c0));
+        to_bytes!(dst, 16.., xor!(k1, c1));
         self.update(msg0, msg1);
     }
 
@@ -187,9 +187,8 @@ impl RoccaS {
         let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
         let msg_padded0 = xor!(k0, c0);
         let msg_padded1 = xor!(k1, c1);
-        let (dst0, dst1) = dst.split_at_mut(16);
-        to_bytes!(dst0, msg_padded0);
-        to_bytes!(dst1, msg_padded1);
+        to_bytes!(dst, ..16, msg_padded0);
+        to_bytes!(dst, 16.., msg_padded1);
         dst[src.len()..].fill(0);
 
         let msg0 = from_bytes!(dst, ..16);
@@ -212,10 +211,10 @@ impl RoccaS {
         }
 
         let blocks = &self.blocks;
-        let mut tag = [0u8; 32];
-        to_bytes!(&mut tag[..16], xor!(blocks[0], blocks[1], blocks[2], blocks[3]));
-        to_bytes!(&mut tag[16..], xor!(blocks[4], blocks[5], blocks[6]));
-        tag
+        let mut tag = Aligned::<A16, _>([0u8; 32]);
+        to_bytes!(&mut tag, ..16, xor!(blocks[0], blocks[1], blocks[2], blocks[3]));
+        to_bytes!(&mut tag, 16.., xor!(blocks[4], blocks[5], blocks[6]));
+        *tag
     }
 
     #[allow(unused_unsafe)]

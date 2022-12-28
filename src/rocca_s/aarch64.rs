@@ -20,9 +20,9 @@ macro_rules! from_bytes {
 pub(crate) use from_bytes;
 
 macro_rules! to_bytes {
-    ($bytes:expr, $block:expr) => {{
-        let bytes: &mut [u8] = $bytes;
-        unsafe { vst1q_u8(bytes.as_mut_ptr(), $block) };
+    ($bytes:expr, $idx:expr, $block:expr) => {{
+        let bytes: &mut Aligned<A16, _> = $bytes;
+        unsafe { vst1q_u8(bytes[$idx].as_mut_ptr(), $block) };
     }};
 }
 

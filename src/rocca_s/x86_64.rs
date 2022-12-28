@@ -3,7 +3,7 @@ pub use core::arch::x86_64::*;
 
 macro_rules! zero {
     () => {{
-        let block: [u8; 16] = [0u8; 16];
+        let block = Aligned::<A16, _>([0u8; 16]);
         unsafe { _mm_loadu_si128(block.as_ptr() as *const __m128i) }
     }};
 }

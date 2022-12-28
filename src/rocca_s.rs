@@ -56,7 +56,6 @@ impl RoccaS {
         for chunk in chunks.by_ref() {
             src.copy_from_slice(chunk);
             self.absorb(&src);
-            self.ad_len += 32;
         }
 
         let chunk = chunks.remainder();
@@ -64,8 +63,9 @@ impl RoccaS {
             src.fill(0);
             src[..chunk.len()].copy_from_slice(chunk);
             self.absorb(&src);
-            self.ad_len += chunk.len() as u128;
         }
+
+        self.ad_len += ad.len() as u128;
     }
 
     pub fn prf(&mut self, out: &mut [u8]) {
@@ -75,15 +75,15 @@ impl RoccaS {
         for chunk in chunks.by_ref() {
             self.enc_zeroes(&mut dst);
             chunk.copy_from_slice(dst.as_slice());
-            self.mc_len += 32;
         }
 
         let chunk = chunks.into_remainder();
         if !chunk.is_empty() {
             self.enc_zeroes(&mut dst);
             chunk.copy_from_slice(&dst[..chunk.len()]);
-            self.mc_len += chunk.len() as u128;
         }
+
+        self.mc_len += out.len() as u128;
     }
 
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
@@ -95,7 +95,6 @@ impl RoccaS {
             src.copy_from_slice(chunk);
             self.enc(&mut dst, &src);
             chunk.copy_from_slice(dst.as_slice());
-            self.mc_len += 32;
         }
 
         let chunk = chunks.into_remainder();
@@ -104,8 +103,9 @@ impl RoccaS {
             src[..chunk.len()].copy_from_slice(chunk);
             self.enc(&mut dst, &src);
             chunk.copy_from_slice(&dst[..chunk.len()]);
-            self.mc_len += chunk.len() as u128;
         }
+
+        self.mc_len += in_out.len() as u128;
     }
 
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
@@ -117,15 +117,15 @@ impl RoccaS {
             src.copy_from_slice(chunk);
             self.dec(&mut dst, &src);
             chunk.copy_from_slice(dst.as_slice());
-            self.mc_len += 32;
         }
 
         let chunk = chunks.into_remainder();
         if !chunk.is_empty() {
             self.dec_partial(&mut dst, chunk);
             chunk.copy_from_slice(&dst[..chunk.len()]);
-            self.mc_len += chunk.len() as u128;
         }
+
+        self.mc_len += in_out.len() as u128;
     }
 
     #[inline(always)]

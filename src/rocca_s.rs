@@ -142,8 +142,8 @@ impl RoccaS {
         let blocks = &self.blocks;
         let c0 = round!(xor!(blocks[3], blocks[5]), blocks[0]);
         let c1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
-        dst[..16].copy_from_slice(as_bytes!(c0).as_slice());
-        dst[16..].copy_from_slice(as_bytes!(c1).as_slice());
+        to_bytes!(&mut dst[..16], c0);
+        to_bytes!(&mut dst[16..], c1);
         self.update(zero!(), zero!());
     }
 
@@ -156,8 +156,8 @@ impl RoccaS {
         let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
         let c0 = xor!(k0, msg0);
         let c1 = xor!(k1, msg1);
-        dst[..16].copy_from_slice(as_bytes!(c0).as_slice());
-        dst[16..].copy_from_slice(as_bytes!(c1).as_slice());
+        to_bytes!(&mut dst[..16], c0);
+        to_bytes!(&mut dst[16..], c1);
         self.update(msg0, msg1);
     }
 
@@ -170,8 +170,8 @@ impl RoccaS {
         let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
         let msg0 = xor!(k0, c0);
         let msg1 = xor!(k1, c1);
-        dst[..16].copy_from_slice(as_bytes!(msg0).as_slice());
-        dst[16..].copy_from_slice(as_bytes!(msg1).as_slice());
+        to_bytes!(&mut dst[..16], xor!(k0, c0));
+        to_bytes!(&mut dst[16..], xor!(k1, c1));
         self.update(msg0, msg1);
     }
 
@@ -187,8 +187,9 @@ impl RoccaS {
         let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
         let msg_padded0 = xor!(k0, c0);
         let msg_padded1 = xor!(k1, c1);
-        dst[..16].copy_from_slice(as_bytes!(msg_padded0).as_slice());
-        dst[16..].copy_from_slice(as_bytes!(msg_padded1).as_slice());
+        let (dst0, dst1) = dst.split_at_mut(16);
+        to_bytes!(dst0, msg_padded0);
+        to_bytes!(dst1, msg_padded1);
         dst[src.len()..].fill(0);
 
         let msg0 = from_bytes!(&dst[..16]);
@@ -212,10 +213,8 @@ impl RoccaS {
 
         let blocks = &self.blocks;
         let mut tag = [0u8; 32];
-        tag[..16].copy_from_slice(
-            as_bytes!(xor!(blocks[0], blocks[1], blocks[2], blocks[3])).as_slice(),
-        );
-        tag[16..].copy_from_slice(as_bytes!(xor!(blocks[4], blocks[5], blocks[6])).as_slice());
+        to_bytes!(&mut tag[..16], xor!(blocks[0], blocks[1], blocks[2], blocks[3]));
+        to_bytes!(&mut tag[16..], xor!(blocks[4], blocks[5], blocks[6]));
         tag
     }
 

@@ -19,15 +19,14 @@ macro_rules! from_bytes {
 
 pub(crate) use from_bytes;
 
-macro_rules! as_bytes {
-    ($block:expr) => {{
-        let mut bytes = Aligned::<A16, _>([0u8; 16]);
+macro_rules! to_bytes {
+    ($bytes:expr, $block:expr) => {{
+        let bytes: &mut [u8] = $bytes;
         unsafe { vst1q_u8(bytes.as_mut_ptr(), $block) };
-        bytes
     }};
 }
 
-pub(crate) use as_bytes;
+pub(crate) use to_bytes;
 
 macro_rules! xor {
     ($a:expr) => {$a};

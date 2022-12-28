@@ -23,12 +23,10 @@ pub struct RoccaS {
 
 impl RoccaS {
     pub fn new(key: &[u8; 32], nonce: &[u8; 16]) -> Self {
-        const Z0: Aligned<A16, [u8; 16]> = Aligned::<A16, _>([
-            205, 101, 239, 35, 145, 68, 55, 113, 34, 174, 40, 215, 152, 47, 138, 66,
-        ]);
-        const Z1: Aligned<A16, [u8; 16]> = Aligned::<A16, _>([
-            188, 219, 137, 129, 165, 219, 181, 233, 47, 59, 77, 236, 207, 251, 192, 181,
-        ]);
+        const Z0: Aligned<A16, [u8; 16]> =
+            Aligned([205, 101, 239, 35, 145, 68, 55, 113, 34, 174, 40, 215, 152, 47, 138, 66]);
+        const Z1: Aligned<A16, [u8; 16]> =
+            Aligned([188, 219, 137, 129, 165, 219, 181, 233, 47, 59, 77, 236, 207, 251, 192, 181]);
         let z0 = from_bytes!(Z0.as_slice());
         let z1 = from_bytes!(Z1.as_slice());
         let k0 = from_bytes!(&key[..16]);

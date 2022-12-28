@@ -11,9 +11,9 @@ macro_rules! zero {
 pub(crate) use zero;
 
 macro_rules! from_bytes {
-    ($bytes:expr) => {{
-        let block: &[u8] = $bytes; // N.B.: loads are broken without this aliasing
-        unsafe { _mm_loadu_si128(block.as_ptr() as *const __m128i) }
+    ($bytes:expr, $idx:expr) => {{
+        let bytes: &Aligned<A16, _> = $bytes;
+        unsafe { _mm_loadu_si128(bytes[$idx].as_ptr() as *const __m128i) }
     }};
 }
 

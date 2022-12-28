@@ -27,11 +27,13 @@ impl RoccaS {
             Aligned([205, 101, 239, 35, 145, 68, 55, 113, 34, 174, 40, 215, 152, 47, 138, 66]);
         const Z1: Aligned<A16, [u8; 16]> =
             Aligned([188, 219, 137, 129, 165, 219, 181, 233, 47, 59, 77, 236, 207, 251, 192, 181]);
-        let z0 = from_bytes!(Z0.as_slice());
-        let z1 = from_bytes!(Z1.as_slice());
-        let k0 = from_bytes!(&key[..16]);
-        let k1 = from_bytes!(&key[16..]);
-        let nonce = from_bytes!(nonce);
+        let z0 = from_bytes!(&Z0, ..);
+        let z1 = from_bytes!(&Z1, ..);
+        let key = Aligned::<A16, _>(*key);
+        let k0 = from_bytes!(&key, ..16);
+        let k1 = from_bytes!(&key, 16..);
+        let nonce = Aligned::<A16, _>(*nonce);
+        let nonce = from_bytes!(&nonce, ..);
         let blocks: [AesBlock; 7] = [k1, nonce, z0, k0, z1, xor!(nonce, k1), zero!()];
         let mut state = RoccaS { blocks, k0, k1, ad_len: 0, mc_len: 0 };
         for _ in 0..16 {
@@ -129,9 +131,9 @@ impl RoccaS {
     }
 
     #[inline(always)]
-    fn absorb(&mut self, src: &[u8; 32]) {
-        let msg0 = from_bytes!(&src[..16]);
-        let msg1 = from_bytes!(&src[16..]);
+    fn absorb(&mut self, src: &Aligned<A16, [u8; 32]>) {
+        let msg0 = from_bytes!(src, ..16);
+        let msg1 = from_bytes!(src, 16..);
         self.update(msg0, msg1);
     }
 
@@ -146,10 +148,10 @@ impl RoccaS {
     }
 
     #[allow(unused_unsafe)]
-    fn enc(&mut self, dst: &mut [u8; 32], src: &[u8; 32]) {
+    fn enc(&mut self, dst: &mut [u8; 32], src: &Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
-        let msg0 = from_bytes!(&src[..16]);
-        let msg1 = from_bytes!(&src[16..]);
+        let msg0 = from_bytes!(src, ..16);
+        let msg1 = from_bytes!(src, 16..);
         let k0 = round!(xor!(blocks[3], blocks[5]), blocks[0]);
         let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
         let c0 = xor!(k0, msg0);
@@ -160,10 +162,10 @@ impl RoccaS {
     }
 
     #[allow(unused_unsafe)]
-    fn dec(&mut self, dst: &mut [u8; 32], src: &[u8; 32]) {
+    fn dec(&mut self, dst: &mut [u8; 32], src: &Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
-        let c0 = from_bytes!(&src[..16]);
-        let c1 = from_bytes!(&src[16..]);
+        let c0 = from_bytes!(src, ..16);
+        let c1 = from_bytes!(src, 16..);
         let k0 = round!(xor!(blocks[3], blocks[5]), blocks[0]);
         let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
         let msg0 = xor!(k0, c0);
@@ -174,13 +176,13 @@ impl RoccaS {
     }
 
     #[allow(unused_unsafe)]
-    fn dec_partial(&mut self, dst: &mut [u8; 32], src: &[u8]) {
+    fn dec_partial(&mut self, dst: &mut Aligned<A16, [u8; 32]>, src: &[u8]) {
         let mut src_padded = Aligned::<A16, _>([0u8; 32]);
         src_padded[..src.len()].copy_from_slice(src);
 
         let blocks = &self.blocks;
-        let c0 = from_bytes!(&src_padded[..16]);
-        let c1 = from_bytes!(&src_padded[16..]);
+        let c0 = from_bytes!(&src_padded, ..16);
+        let c1 = from_bytes!(&src_padded, 16..);
         let k0 = round!(xor!(blocks[3], blocks[5]), blocks[0]);
         let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
         let msg_padded0 = xor!(k0, c0);
@@ -190,8 +192,8 @@ impl RoccaS {
         to_bytes!(dst1, msg_padded1);
         dst[src.len()..].fill(0);
 
-        let msg0 = from_bytes!(&dst[..16]);
-        let msg1 = from_bytes!(&dst[16..]);
+        let msg0 = from_bytes!(dst, ..16);
+        let msg1 = from_bytes!(dst, 16..);
         self.update(msg0, msg1);
     }
 
@@ -201,9 +203,9 @@ impl RoccaS {
         self.blocks[2] = xor!(self.blocks[2], self.k1);
 
         let ad_block = Aligned::<A16, _>((self.ad_len * 8).to_le_bytes());
-        let ad_block = from_bytes!(ad_block.as_slice());
+        let ad_block = from_bytes!(&ad_block, ..);
         let mc_block = Aligned::<A16, _>((self.mc_len * 8).to_le_bytes());
-        let mc_block = from_bytes!(mc_block.as_slice());
+        let mc_block = from_bytes!(&mc_block, ..);
 
         for _ in 0..16 {
             self.update(ad_block, mc_block);

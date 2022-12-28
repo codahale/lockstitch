@@ -11,9 +11,9 @@ macro_rules! zero {
 pub(crate) use zero;
 
 macro_rules! from_bytes {
-    ($bytes:expr) => {{
-        let bytes: &[u8] = $bytes;
-        unsafe { vld1q_u8(bytes.as_ptr()) }
+    ($bytes:expr,$idx:expr) => {{
+        let bytes: &Aligned<A16, _> = $bytes;
+        unsafe { vld1q_u8(bytes[$idx].as_ptr()) }
     }};
 }
 

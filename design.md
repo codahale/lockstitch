@@ -58,7 +58,7 @@ generate any output:
 ```text
 function Chain(state):
   T ← RoccaS::Tag(state)
-  prf ← RoccaS::Init(T, [0x00; 16])
+  prf ← RoccaS::Init(T, [0x07; 16])
   K₀ǁK₁ ← RoccaS::PRF(prf , 64)
   state ← RoccaS::Init(K₀, [0x00; 16])
   output ← RoccaS::new(K₁, [operation; 16])

@@ -295,7 +295,7 @@ impl Protocol {
     #[must_use]
     fn chain(&mut self, operation: Operation) -> RoccaS {
         // Use the tag of the current state as a key for a chain Rocca-S instance.
-        let mut chain = RoccaS::new(&self.state.tag(), &[0u8; 16]);
+        let mut chain = RoccaS::new(&self.state.tag(), &[Operation::Chain as u8; 16]);
 
         // Generate 32 bytes of PRF output for use as a chain key.
         let mut chain_key = [0u8; 32];
@@ -338,6 +338,7 @@ enum Operation {
     Crypt = 0x04,
     AuthCrypt = 0x05,
     Ratchet = 0x06,
+    Chain = 0x07,
 }
 
 #[cfg(all(test, feature = "std"))]
@@ -352,11 +353,11 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        assert_eq!("828ac149aa6c3094", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("a745643085ee5427", hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        assert_eq!("9df092665c2db821db5740dfde00c785f408", hex::encode(plaintext));
+        assert_eq!("74ebbe99151d63d59ab38ce426c3bd536bd4", hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -366,11 +367,11 @@ mod tests {
         protocol.seal(&mut sealed);
 
         assert_eq!(
-            "224be298615deeff2a1acecc0cd83c893633b2bec68cfa660da944f5e378ccb61335",
+            "eb83519f7d103100e04dc96aecc599dc886e454f3f6c7c66061b46a6c5a4a85389d1",
             hex::encode(sealed)
         );
 
-        assert_eq!("a79337e08db7ecc7", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("ee80700f4b62da0f", hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

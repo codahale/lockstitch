@@ -201,10 +201,8 @@ impl RoccaS {
         self.blocks[1] = xor!(self.blocks[1], self.k0);
         self.blocks[2] = xor!(self.blocks[2], self.k1);
 
-        let ad_block = Aligned::<A16, _>((self.ad_len * 8).to_le_bytes());
-        let ad_block = from_bytes!(&ad_block, ..);
-        let mc_block = Aligned::<A16, _>((self.mc_len * 8).to_le_bytes());
-        let mc_block = from_bytes!(&mc_block, ..);
+        let ad_block = from_bytes!(&Aligned::<A16, _>((self.ad_len * 8).to_le_bytes()), ..);
+        let mc_block = from_bytes!(&Aligned::<A16, _>((self.mc_len * 8).to_le_bytes()), ..);
 
         for _ in 0..16 {
             self.update(ad_block, mc_block);

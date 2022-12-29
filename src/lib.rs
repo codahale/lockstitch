@@ -22,6 +22,12 @@ use constant_time_eq::constant_time_eq;
 use rand_core::{CryptoRng, RngCore};
 use rocca_s::RoccaS;
 
+#[doc = include_str!("../design.md")]
+pub mod design {}
+
+#[doc = include_str!("../perf.md")]
+pub mod perf {}
+
 mod rocca_s;
 
 /// The length of an authentication tag in bytes.

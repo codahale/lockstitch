@@ -14,16 +14,17 @@ The basic unit of Lockstitch is the protocol, which wraps a Rocca-S instance.
 
 Rocca-S is a new (2021) authenticated cipher with a number of important features:
 
-* **Integrated Construction**: Unlike combined AEADs (e.g. AES-GCM combines AES-ECB, CTR mode, and
-  GHASH), Rocca-S is a single, integrated algorithm. As a result, Lockstitch's implementation
-  (including both `x86_64` and `aarch64` vectorization) is less than 400 lines of clear, readable
-  code.
+* **Integrated Construction**: Unlike combined Authenticated Encryption and Associated Data (AEAD)
+  constructions (e.g. AES-GCM combines AES-ECB, CTR mode, and GHASH), Rocca-S is a single,
+  integrated algorithm. As a result, Lockstitch's implementation (including both `x86_64` and
+  `aarch64` vectorization) is less than 400 lines of clear, readable code.
 * **Fully Sequential**: Every input to Rocca-S -- key, nonce, associated data, message -- alters
   its state and changes the next block of output. This allows Rocca-S to be used as a stream
-  cipher and a PRF in addition to an AEAD.
+  cipher and a pseudo-random function (PRF) in addition to an AEAD.
 * **Compactly Committing**: Rocca-S is a compactly committing authenticated cipher, meaning the
   final authentication tag serves as a cryptographic commitment for all inputs: key, nonce,
-  associated data, and message.
+  associated data, and message. This allows Rocca-S to be used as a MAC, where the message is
+  included as associated data with an empty plaintext/ciphertext.
 * **Large Keys, Nonces, Tags, and State**: Rocca-S supports 256-bit keys, 128-bit nonces, 256-bit
   tags, and has a large internal state. This provides a high margin of security for using multiple,
   derived keys and large inputs.
@@ -45,7 +46,10 @@ function Process(state, input, op_code):
 First, the operation's input is padded with zeros until the length is evenly divisible by 32,
 Rocca-S's block size. Next, the padded input is processed as associated data. Finally, a single
 message block consisting of the input length in bits, encoded as a 128-bit little endian integer,
-followed by fifteen zeros and the operation's 1-byte code is processed as associated data.
+followed by fifteen zero bytes and the operation's 1-byte code is processed as associated data.
+
+This encoding ensures that operations of variable-length inputs are always unambiguously encoded, as
+well as eliminating any buffering requirement by using full-size message blocks.
 
 ### Generating Output
 
@@ -67,19 +71,54 @@ function Chain(state):
 
 **N.B.**: Each operation is limited to 2^125 bytes of output.
 
-This uses Rocca-S as a PRF in an [HKDF][]-style _extract-then-expand_ construction to first extract
-a uniform key from the protocol's prior state (i.e. the `Tag` call), then use it to produce uniform
-output of a required length (i.e. the `Init` and `PRF` calls).
+#### KDF Security
+
+This uses Rocca-S as a PRF in an [HKDF][]-style _Extract-then-Expand_ key derivation function (KDF)
+with the protocol's prior state (i.e. the [encoded](#encoding-operations) associated data of the
+previous operations) as the effective keying material.
 
 [HKDF]: https://eprint.iacr.org/2010/264.pdf
 
-If Rocca-S is compactly committing (i.e. the tag `T` is a cryptographic commitment of the key,
-nonce, associated data, and ciphertext) and PRF secure (i.e. its outputs are indistinguishable from
-random by an adversary if the key is uniformly random), the resulting construction is KDF secure
-(i.e. its outputs are indistinguishable from random by an adversary in possession of all inputs
-except the keying material, which is not required to be uniformly random), then sequences of
-operations which accept input and output in a protocol form a [KDF chain][kdf-chain], giving
-Lockstitch protocols the following security properties:
+The KDF security of this construction depends on the specific characteristics of Rocca-S, not on its
+properties as a generic AEAD. To justify this, a further elucidation of the principles behind
+Expand-then-Extract KDFs is required.
+
+Krawczyk defines Extract-then-Expand KDFs as the composition of two distinct parts, each with its
+own distinct requirements:
+
+> An extract-then-expand key derivation function `KDF` comprises two modules: a randomness extractor
+> `XTR` and a variable-length output pseudorandom function `PRF*` […]
+> The extractor `XTR` is assumed to produce "close-to-random", in the statistical or computational
+> sense, outputs on inputs sampled from the source key material distribution […]
+> The key to `PRF*` is denoted by `PRK` (pseudorandom key) and in our scheme it is the output from
+> `XTR` […]
+
+A secure Extract-then-Expand KDF, then, requires `XTR` to be a secure computational extractor with
+respect to the keying material and `PRF` to be a secure PRF. Rocca-S includes PRF security in its
+security claims, so the KDF security of the `Chain` function hinges on the tag `T` being a secure
+computational extractor of the protocol's prior inputs: i.e., is Rocca-S's `Tag` function a secure
+computational extractor of its other parameters.
+
+A secure computational extractor (or strong randomness extractor) takes a uniformly random seed `S`
+and an arbitrary input value `M` and produces an output value with a negligible difference in
+statistical difference from `S`. Rocca-S does not explicitly include strong randomness extraction in
+its security claims, which is not surprising, given that mention of randomness extractors is largely
+limited to random number generator design and theoretical discussions about entropy. Nonetheless, it
+may be reasonably assumed that Rocca-S's `Tag` function is a secure extractor of its associated
+data. Rocca-S is compactly committing--given `T=E(K, D, P)`, a polynomial adversary has a negligible
+advantage in finding any other `K′`, `D′`, or `P′` which produces the same `T`--which allows it to
+function as a sUF-CMA secure message authentication code (MAC) by passing the message as associated
+data and using an empty string as the plaintext. [NIST SP 800-56C][] allows for the use of
+full-length AES-CMAC as a randomness extractor; as a MAC algorithm, Rocca-S has strictly superior
+security claims than AES-CMAC and thus can be considered a suitable randomness extractor.
+
+[NIST SP 800-56C]: https://csrc.nist.gov/publications/detail/sp/800-56c/rev-2/final
+
+#### KDF Chains
+
+Given that this construction is KDF secure, sequences of operations which accept input and output in
+a protocol therefore constitute a [KDF chain][kdf-chain], giving Lockstitch protocols the following
+security properties:
 
 [kdf-chain]: https://signal.org/docs/specifications/doubleratchet/doubleratchet.pdf
 

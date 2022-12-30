@@ -18,12 +18,12 @@ Rocca-S is a new (2021) authenticated cipher with a number of important features
   GHASH), Rocca-S is a single, integrated algorithm. As a result, Lockstitch's implementation
   (including both `x86_64` and `aarch64` vectorization) is less than 400 lines of clear, readable
   code.
-* **Fully Sequential**: Every input to Rocca-S -- key, nonce, authenticated data, message -- alters
+* **Fully Sequential**: Every input to Rocca-S -- key, nonce, associated data, message -- alters
   its state and changes the next block of output. This allows Rocca-S to be used as a stream
   cipher and a PRF in addition to an AEAD.
 * **Compactly Committing**: Rocca-S is a compactly committing authenticated cipher, meaning the
   final authentication tag serves as a cryptographic commitment for all inputs: key, nonce,
-  authenticated data, and message.
+  associated data, and message.
 * **Large Keys, Nonces, Tags, and State**: Rocca-S supports 256-bit keys, 128-bit nonces, 256-bit
   tags, and has a large internal state. This provides a high margin of security for using multiple,
   derived keys and large inputs.
@@ -43,9 +43,9 @@ function Process(state, input, op_code):
 ```
 
 First, the operation's input is padded with zeros until the length is evenly divisible by 32,
-Rocca-S's block size. Next, the padded input is processed as authenticated data. Finally, a single
+Rocca-S's block size. Next, the padded input is processed as associated data. Finally, a single
 message block consisting of the input length in bits, encoded as a 128-bit little endian integer,
-followed by fifteen zeros and the operation's 1-byte code is processed as authenticated data.
+followed by fifteen zeros and the operation's 1-byte code is processed as associated data.
 
 ### Generating Output
 
@@ -74,10 +74,10 @@ output of a required length (i.e. the `Init` and `PRF` calls).
 [HKDF]: https://eprint.iacr.org/2010/264.pdf
 
 If Rocca-S is compactly committing (i.e. the tag `T` is a cryptographic commitment of the key,
-nonce, authenticated data, and ciphertext) and PRF secure (i.e. its outputs are indistinguishable
-from random by an adversary if the key is uniformly random), the resulting construction is KDF
-secure (i.e. its outputs are indistinguishable from random by an adversary in possession of all
-inputs except the keying material, which is not required to be uniformly random), then sequences of
+nonce, associated data, and ciphertext) and PRF secure (i.e. its outputs are indistinguishable from
+random by an adversary if the key is uniformly random), the resulting construction is KDF secure
+(i.e. its outputs are indistinguishable from random by an adversary in possession of all inputs
+except the keying material, which is not required to be uniformly random), then sequences of
 operations which accept input and output in a protocol form a [KDF chain][kdf-chain], giving
 Lockstitch protocols the following security properties:
 
@@ -135,7 +135,7 @@ associative. That is, `Mix("alpha"); Mix("bet")` is not equivalent to `Mix("alph
 eliminates the possibility of collisions; no additional padding or encoding is required.
 
 Multiple `Mix` operations in a row are equivalent to a single [encoded](#encoding-operations) block
-of authenticated data. The Rocca-S tag of that state, then, should be collision-resistant, in that
+of associated data. The Rocca-S tag of that state, then, should be collision-resistant, in that
 an adversary with a non-negligible advantage of finding two inputs `(A₀, A₁)` such that
 `E(K, N, A₀, ɛ) = E(K, N, A₁, ɛ)` would be able to forge Rocca-S ciphertexts.
 
@@ -343,7 +343,7 @@ function Open(key, nonce, ad, ciphertext, tag):
 ```
 
 Unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces of
-authenticated data.
+associated data.
 
 ## Complex Protocols
 

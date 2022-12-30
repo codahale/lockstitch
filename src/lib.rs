@@ -47,8 +47,8 @@ impl Protocol {
         // Create a protocol with a Rocca-S state using a fixed key and nonce.
         let mut protocol = Protocol { state: RoccaS::new(&[0u8; 32], &[0u8; 16]) };
 
-        // Include the domain as authenticated data.
-        protocol.state.authenticated_data(domain.as_bytes());
+        // Include the domain as associated data.
+        protocol.state.ad(domain.as_bytes());
 
         // End the INIT operation with the domain string length in bytes.
         protocol.end_op(Operation::Init, domain.len() as u64);
@@ -60,7 +60,7 @@ impl Protocol {
     #[inline(always)]
     pub fn mix(&mut self, data: &[u8]) {
         // Update the state with the given slice.
-        self.state.authenticated_data(data);
+        self.state.ad(data);
 
         // Update the state with the operation code and byte count.
         self.end_op(Operation::Mix, data.len() as u64);
@@ -113,7 +113,7 @@ impl Protocol {
             match read_block(&mut reader, &mut buf) {
                 Ok(0) => break, // EOF
                 Ok(x) => {
-                    self.state.authenticated_data(&buf[..x]);
+                    self.state.ad(&buf[..x]);
                     writer.write_all(&buf[..x])?;
                     n += u64::try_from(x).expect("unexpected overflow");
                 }
@@ -137,7 +137,7 @@ impl Protocol {
         output.prf(out);
 
         // Update the state with the output length.
-        self.state.authenticated_data(&(out.len() as u64).to_le_bytes());
+        self.state.ad(&(out.len() as u64).to_le_bytes());
 
         // Update the state with the operation code and integer length.
         self.end_op(Operation::Derive, 8);
@@ -164,7 +164,7 @@ impl Protocol {
         let tag = output.tag();
 
         // Update the state with the resulting tag.
-        self.state.authenticated_data(&tag);
+        self.state.ad(&tag);
 
         // Update the state with the operation code and tag length.
         self.end_op(Operation::Crypt, tag.len() as u64);
@@ -183,7 +183,7 @@ impl Protocol {
         let tag = output.tag();
 
         // Update the state with the resulting tag.
-        self.state.authenticated_data(&tag);
+        self.state.ad(&tag);
 
         // Update the state with the operation code and tag length.
         self.end_op(Operation::Crypt, tag.len() as u64);
@@ -210,7 +210,7 @@ impl Protocol {
         tag_out.copy_from_slice(&tag[..TAG_LEN]);
 
         // Update the state with the resulting tag.
-        self.state.authenticated_data(&tag);
+        self.state.ad(&tag);
 
         // Update the state with the operation code and tag length.
         self.end_op(Operation::AuthCrypt, tag.len() as u64);
@@ -234,7 +234,7 @@ impl Protocol {
         let tag_p = output.tag();
 
         // Update the state with the resulting tag.
-        self.state.authenticated_data(&tag_p);
+        self.state.ad(&tag_p);
 
         // Update the state with the operation code and tag length.
         self.end_op(Operation::AuthCrypt, tag_p.len() as u64);
@@ -331,7 +331,7 @@ impl Protocol {
         buffer[31] = operation as u8;
 
         // Update the state with the length and operation code.
-        self.state.authenticated_data(&buffer);
+        self.state.ad(&buffer);
     }
 }
 

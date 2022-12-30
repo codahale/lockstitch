@@ -51,7 +51,7 @@ impl RoccaS {
         state
     }
 
-    pub fn authenticated_data(&mut self, ad: &[u8]) {
+    pub fn ad(&mut self, ad: &[u8]) {
         let mut src = Aligned::<A16, _>([0u8; 32]);
 
         let mut chunks = ad.chunks_exact(32);
@@ -238,14 +238,14 @@ mod tests {
 
     fn encrypt(key: &[u8; 32], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 32] {
         let mut state = RoccaS::new(key, nonce);
-        state.authenticated_data(ad);
+        state.ad(ad);
         state.encrypt(mc);
         state.tag()
     }
 
     fn decrypt(key: &[u8; 32], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 32] {
         let mut state = RoccaS::new(key, nonce);
-        state.authenticated_data(ad);
+        state.ad(ad);
         state.decrypt(mc);
         state.tag()
     }

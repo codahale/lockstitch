@@ -77,14 +77,14 @@ This uses Rocca-S as a PRF in an [HKDF][]-style _Extract-then-Expand_ key deriva
 with the protocol's prior state (i.e. the [encoded](#encoding-operations) associated data of the
 previous operations) as the effective keying material.
 
-[HKDF]: https://eprint.iacr.org/2010/264.pdf
+[HKDF]: https://www.rfc-editor.org/rfc/rfc5869.html
 
 The KDF security of this construction depends on the specific characteristics of Rocca-S, not on its
 properties as a generic AEAD. To justify this, a further elucidation of the principles behind
-Expand-then-Extract KDFs is required.
+Expand-then-Extract KDFs is required. [Krawczyk][] defines Extract-then-Expand KDFs as the
+composition of two distinct parts, each with its own distinct requirements:
 
-Krawczyk defines Extract-then-Expand KDFs as the composition of two distinct parts, each with its
-own distinct requirements:
+[Krawczyk]: https://eprint.iacr.org/2010/264.pdf
 
 > An extract-then-expand key derivation function `KDF` comprises two modules: a randomness extractor
 > `XTR` and a variable-length output pseudorandom function `PRF*` […]
@@ -94,31 +94,30 @@ own distinct requirements:
 > `XTR` […]
 
 A secure Extract-then-Expand KDF, then, requires `XTR` to be a secure computational extractor with
-respect to the keying material and `PRF` to be a secure PRF. Rocca-S includes PRF security in its
-security claims, so the KDF security of the `Chain` function hinges on the tag `T` being a secure
-computational extractor of the protocol's prior inputs: i.e., is Rocca-S's `Tag` function a secure
-computational extractor of its other parameters.
+respect to the keying material and `PRF` to be a secure PRF. A secure computational extractor, or
+strong randomness extractor, takes a uniformly random seed `S` and an arbitrary input value `M` and
+produces an output value with a negligible difference in statistical difference from `S`. Rocca-S
+includes PRF security in its security claims, so the KDF security of the `Chain` function hinges on
+whether or not Rocca-S's `Tag` function is a secure extractor of its key, nonce, associated data,
+and ciphertext.
 
-A secure computational extractor (or strong randomness extractor) takes a uniformly random seed `S`
-and an arbitrary input value `M` and produces an output value with a negligible difference in
-statistical difference from `S`. Rocca-S does not explicitly include strong randomness extraction in
-its security claims, which is not surprising, given that mention of randomness extractors is largely
-limited to random number generator design and theoretical discussions about entropy. Nonetheless, it
-may be reasonably assumed that Rocca-S's `Tag` function is a secure extractor of its associated
-data. Rocca-S is compactly committing--given `T=E(K, D, P)`, a polynomial adversary has a negligible
+Rocca-S does not explicitly include strong randomness extraction in its security claims (which is
+not surprising, given that mention of randomness extractors is largely limited to random number
+generator design and theoretical discussions about entropy) but it may be reasonably assumed that it
+is. Rocca-S is compactly committing--given `T=E(K, D, P)`, a polynomial adversary has a negligible
 advantage in finding any other `K′`, `D′`, or `P′` which produces the same `T`--which allows it to
 function as a sUF-CMA secure message authentication code (MAC) by passing the message as associated
-data and using an empty string as the plaintext. [NIST SP 800-56C][] allows for the use of
-full-length AES-CMAC as a randomness extractor; as a MAC algorithm, Rocca-S has strictly superior
-security claims than AES-CMAC and thus can be considered a suitable randomness extractor.
+data and using an empty string as the plaintext. Similarly, [NIST SP 800-56C][] allows for the
+use of full-length AES-CMAC as a randomness extractor; as a MAC algorithm, Rocca-S has strictly
+superior security claims than AES-CMAC and depends on the same cryptographic primitive.
 
 [NIST SP 800-56C]: https://csrc.nist.gov/publications/detail/sp/800-56c/rev-2/final
 
 #### KDF Chains
 
-Given that this construction is KDF secure, sequences of operations which accept input and output in
-a protocol therefore constitute a [KDF chain][kdf-chain], giving Lockstitch protocols the following
-security properties:
+Given that `Chain` is KDF secure, sequences of Lockstitch operations which accept input and output
+in a protocol therefore constitute a [KDF chain][kdf-chain], giving Lockstitch protocols the
+following security properties:
 
 [kdf-chain]: https://signal.org/docs/specifications/doubleratchet/doubleratchet.pdf
 
@@ -129,9 +128,9 @@ security properties:
 * **Break-in Recovery**: A protocol's future outputs will appear random to an adversary in
   possession of the protocol's state as long as one of the future inputs to the protocol is secret.
 
-Finally, if Rocca-S is PRF secure, an adversary in possession of the output will not be able to
-infer anything about the key or, indeed, distinguish the resulting output from a randomly generated
-sequences of bytes of equal length.
+Finally, assuming that Rocca-S is PRF secure, an adversary in possession of the output will not be
+able to infer anything about the key or, indeed, distinguish the resulting output from a randomly
+generated sequences of bytes of equal length.
 
 ## Operations
 

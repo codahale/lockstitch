@@ -88,30 +88,11 @@ impl Protocol {
         mut reader: impl Read,
         mut writer: impl Write,
     ) -> io::Result<u64> {
-        // Ensure we're always reading a full block unless we're at the end of the stream. Reading
-        // partial blocks in the middle of a stream due to short reads will corrupt the protocol's
-        // state via accidental padding.
-        fn read_block(mut reader: impl Read, mut buf: &mut [u8]) -> io::Result<usize> {
-            let max = buf.len();
-            while !buf.is_empty() {
-                match reader.read(buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        let tmp = buf;
-                        buf = &mut tmp[n..];
-                    }
-                    Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
-                    Err(e) => return Err(e),
-                }
-            }
-            Ok(max - buf.len())
-        }
-
         let mut buf = [0u8; 64 * 1024];
         let mut n = 0;
 
         loop {
-            match read_block(&mut reader, &mut buf) {
+            match reader.read(&mut buf) {
                 Ok(0) => break, // EOF
                 Ok(x) => {
                     self.state.update(&buf[..x]);

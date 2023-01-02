@@ -308,16 +308,18 @@ impl Protocol {
     /// End an operation, including the number of bytes processed.
     fn end_op(&mut self, operation: Operation, n: u64) {
         // Allocate a buffer for output.
-        let mut buffer = [0u8; 16];
+        let mut buffer = [0u8; 10];
 
-        // Encode the operation length in bytes as a little endian 64-bit integer.
-        buffer[..8].copy_from_slice(&n.to_le_bytes());
+        // Encode the number of bytes processed using NIST SP-800-185's right_encode.
+        buffer[..8].copy_from_slice(&n.to_be_bytes());
+        let offset = buffer.iter().position(|i| *i != 0).unwrap_or(7);
+        buffer[8] = 8 - offset as u8;
 
         // Set the last byte to the operation code.
-        buffer[15] = operation as u8;
+        buffer[9] = operation as u8;
 
         // Update the state with the length and operation code.
-        self.state.update(buffer);
+        self.state.update(&buffer[offset..]);
     }
 }
 
@@ -345,11 +347,11 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        assert_eq!("9f901a42cc98ba84", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("33c45a7463fe3e49", hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        assert_eq!("015710a07860a9acc6ea46c0eec86487a7a0", hex::encode(plaintext));
+        assert_eq!("71b6a741da79ee5ffe77dc33182f3774bf38", hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -359,11 +361,11 @@ mod tests {
         protocol.seal(&mut sealed);
 
         assert_eq!(
-            "29dbe72f63092aab29cb92a0d3b8e9b1c94cd1ee589bbc5c5336ab870bf6155f30c1",
+            "f018bba0ecea4e7369f796a330f27e940fb4382bc3aec0ac4ee19d14c64160c7f419",
             hex::encode(sealed)
         );
 
-        assert_eq!("43cddf6569efe3f1", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("4518bd12f63f9577", hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

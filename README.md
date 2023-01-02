@@ -140,7 +140,7 @@ For more information on performance, see [`perf.md`](perf.md).
 
 ## License
 
-Copyright © 2022 Coda Hale, Frank Denis
+Copyright © 2023 Coda Hale, Frank Denis
 
 Rocca-S implementation adapted from [rust-aegis](https://github.com/jedisct1/rust-aegis/) and
 [zig-rocca](https://github.com/jedisct1/zig-rocca-s/).

@@ -101,12 +101,14 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 
 ## Cargo Features
 
+* `asm`: Enables hand-coded assembly for SHA-256 for `x86`, `x86_64`, and `aarch64`. Enabled by
+  default.
 * `std`: Enables features based on the Rust standard library. Enabled by default.
 * `hedge`: Enables hedged random value generation with `rand_core`. Enabled by default.
 
 ## Performance
 
-Lockstitch's Rocca-S implementation benefits significantly from the use of specific CPU
+Lockstitch's SHA-256 and Rocca-S implementations benefit significantly from the use of specific CPU
 instructions.
 
 ### `x86_64`

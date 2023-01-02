@@ -307,14 +307,14 @@ impl Protocol {
 
     /// End an operation, including the number of bytes processed.
     fn end_op(&mut self, operation: Operation, n: u64) {
-        // Allocate a message block sized buffer for output.
-        let mut buffer = [0u8; 32];
+        // Allocate a buffer for output.
+        let mut buffer = [0u8; 16];
 
-        // Encode the operation length in bits as a little endian 128-bit integer.
-        buffer[..16].copy_from_slice(&(n as u128 * 8).to_le_bytes());
+        // Encode the operation length in bytes as a little endian 64-bit integer.
+        buffer[..8].copy_from_slice(&n.to_le_bytes());
 
         // Set the last byte to the operation code.
-        buffer[31] = operation as u8;
+        buffer[15] = operation as u8;
 
         // Update the state with the length and operation code.
         self.state.update(buffer);
@@ -345,11 +345,11 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        assert_eq!("decb5a22d6a55a24", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("9f901a42cc98ba84", hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        assert_eq!("24ecfbe31f7a225c6fc98c5879ef3224eefc", hex::encode(plaintext));
+        assert_eq!("015710a07860a9acc6ea46c0eec86487a7a0", hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -359,11 +359,11 @@ mod tests {
         protocol.seal(&mut sealed);
 
         assert_eq!(
-            "cbeeb91abf7532b0943657fe525fd8e1c9532825bb97b54c456d6248a5dd8fccb0d7",
+            "29dbe72f63092aab29cb92a0d3b8e9b1c94cd1ee589bbc5c5336ab870bf6155f30c1",
             hex::encode(sealed)
         );
 
-        assert_eq!("ea9d75091836ef46", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("43cddf6569efe3f1", hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

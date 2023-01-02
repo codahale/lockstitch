@@ -21,6 +21,7 @@ use constant_time_eq::constant_time_eq;
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
 use rocca_s::RoccaS;
+use sha2::{Digest, Sha256};
 
 #[doc = include_str!("../design.md")]
 pub mod design {}
@@ -37,18 +38,18 @@ pub const TAG_LEN: usize = 16;
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
 #[derive(Debug, Clone)]
 pub struct Protocol {
-    state: RoccaS,
+    state: Sha256,
 }
 
 impl Protocol {
     /// Create a new protocol with the given domain.
     #[inline(always)]
     pub fn new(domain: &'static str) -> Protocol {
-        // Create a protocol with a Rocca-S state using a fixed key and nonce.
-        let mut protocol = Protocol { state: RoccaS::new(&[0u8; 32], &[0u8; 16]) };
+        // Create a protocol with a fresh SHA-256 instance.
+        let mut protocol = Protocol { state: Sha256::new() };
 
-        // Include the domain as associated data.
-        protocol.state.ad(domain.as_bytes());
+        // Update the state with the domain string.
+        protocol.state.update(domain.as_bytes());
 
         // End the INIT operation with the domain string length in bytes.
         protocol.end_op(Operation::Init, domain.len() as u64);
@@ -60,7 +61,7 @@ impl Protocol {
     #[inline(always)]
     pub fn mix(&mut self, data: &[u8]) {
         // Update the state with the given slice.
-        self.state.ad(data);
+        self.state.update(data);
 
         // Update the state with the operation code and byte count.
         self.end_op(Operation::Mix, data.len() as u64);
@@ -113,7 +114,7 @@ impl Protocol {
             match read_block(&mut reader, &mut buf) {
                 Ok(0) => break, // EOF
                 Ok(x) => {
-                    self.state.ad(&buf[..x]);
+                    self.state.update(&buf[..x]);
                     writer.write_all(&buf[..x])?;
                     n += u64::try_from(x).expect("unexpected overflow");
                 }
@@ -137,7 +138,7 @@ impl Protocol {
         output.prf(out);
 
         // Update the state with the output length.
-        self.state.ad(&(out.len() as u64).to_le_bytes());
+        self.state.update((out.len() as u64).to_le_bytes());
 
         // Update the state with the operation code and integer length.
         self.end_op(Operation::Derive, 8);
@@ -164,7 +165,7 @@ impl Protocol {
         let tag = output.tag();
 
         // Update the state with the resulting tag.
-        self.state.ad(&tag);
+        self.state.update(tag);
 
         // Update the state with the operation code and tag length.
         self.end_op(Operation::Crypt, tag.len() as u64);
@@ -183,7 +184,7 @@ impl Protocol {
         let tag = output.tag();
 
         // Update the state with the resulting tag.
-        self.state.ad(&tag);
+        self.state.update(tag);
 
         // Update the state with the operation code and tag length.
         self.end_op(Operation::Crypt, tag.len() as u64);
@@ -210,7 +211,7 @@ impl Protocol {
         tag_out.copy_from_slice(&tag[..TAG_LEN]);
 
         // Update the state with the resulting tag.
-        self.state.ad(&tag);
+        self.state.update(tag);
 
         // Update the state with the operation code and tag length.
         self.end_op(Operation::AuthCrypt, tag.len() as u64);
@@ -234,7 +235,7 @@ impl Protocol {
         let tag_p = output.tag();
 
         // Update the state with the resulting tag.
-        self.state.ad(&tag_p);
+        self.state.update(tag_p);
 
         // Update the state with the operation code and tag length.
         self.end_op(Operation::AuthCrypt, tag_p.len() as u64);
@@ -300,8 +301,11 @@ impl Protocol {
     #[inline(always)]
     #[must_use]
     fn chain(&mut self, operation: Operation) -> RoccaS {
-        // Use the tag of the current state as a key for a chain Rocca-S instance.
-        let mut chain = RoccaS::new(&self.state.tag(), &[Operation::Chain as u8; 16]);
+        // Replace the current state with an uninitialized state.
+        let state = core::mem::replace(&mut self.state, Sha256::new());
+
+        // Use the hash of the current state as a key for a chain Rocca-S instance.
+        let mut chain = RoccaS::new(&state.finalize().into(), &[Operation::Chain as u8; 16]);
 
         // Generate 32 bytes of PRF output for use as a chain key.
         let mut chain_key = [0u8; 32];
@@ -311,8 +315,9 @@ impl Protocol {
         let mut output_key = [0u8; 32];
         chain.prf(&mut output_key);
 
-        // Replace the protocol's state with a new state keyed with the chain key.
-        self.state = RoccaS::new(&chain_key, &[0u8; 16]);
+        // Initialize the current state with the chain key.
+        self.state.update(chain_key);
+        self.end_op(Operation::Init, 32);
 
         // Return a Rocca-S instance keyed with the output key and using the operation code as a
         // nonce.
@@ -331,7 +336,7 @@ impl Protocol {
         buffer[31] = operation as u8;
 
         // Update the state with the length and operation code.
-        self.state.ad(&buffer);
+        self.state.update(buffer);
     }
 }
 
@@ -359,11 +364,11 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        assert_eq!("a745643085ee5427", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("decb5a22d6a55a24", hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        assert_eq!("74ebbe99151d63d59ab38ce426c3bd536bd4", hex::encode(plaintext));
+        assert_eq!("24ecfbe31f7a225c6fc98c5879ef3224eefc", hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -373,11 +378,11 @@ mod tests {
         protocol.seal(&mut sealed);
 
         assert_eq!(
-            "eb83519f7d103100e04dc96aecc599dc886e454f3f6c7c66061b46a6c5a4a85389d1",
+            "cbeeb91abf7532b0943657fe525fd8e1c9532825bb97b54c456d6248a5dd8fccb0d7",
             hex::encode(sealed)
         );
 
-        assert_eq!("ee80700f4b62da0f", hex::encode(protocol.derive_array::<8>()));
+        assert_eq!("ea9d75091836ef46", hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

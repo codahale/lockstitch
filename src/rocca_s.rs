@@ -51,6 +51,7 @@ impl RoccaS {
         state
     }
 
+    #[cfg(test)]
     pub fn ad(&mut self, ad: &[u8]) {
         let mut src = Aligned::<A16, _>([0u8; 32]);
 
@@ -130,7 +131,7 @@ impl RoccaS {
         self.mc_len += in_out.len() as u128;
     }
 
-    #[inline(always)]
+    #[cfg(test)]
     fn absorb(&mut self, src: &Aligned<A16, [u8; 32]>) {
         let msg0 = from_bytes!(src, ..16);
         let msg1 = from_bytes!(src, 16..);

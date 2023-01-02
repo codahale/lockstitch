@@ -2,34 +2,13 @@
 
 Lockstitch provides a single cryptographic service for all symmetric-key operations and an
 incremental, stateful building block for complex schemes, constructions, and protocols, all built on
-top of the [Rocca-S][] authenticated cipher.
+top of SHA-256 and [Rocca-S][], an authenticated cipher.
 
 [Rocca-S]: https://www.ietf.org/archive/id/draft-nakano-rocca-s-02.html
 
 ## Preliminaries
 
-The basic unit of Lockstitch is the protocol, which wraps a Rocca-S instance.
-
-### Rocca-S
-
-Rocca-S is a new (2021) authenticated cipher with a number of important features:
-
-* **Integrated Construction**: Unlike combined Authenticated Encryption and Associated Data (AEAD)
-  constructions (e.g. AES-GCM combines AES-ECB, CTR mode, and GHASH), Rocca-S is a single,
-  integrated algorithm. As a result, Lockstitch's implementation (including both `x86_64` and
-  `aarch64` vectorization) is less than 400 lines of clear, readable code.
-* **Fully Sequential**: Every input to Rocca-S -- key, nonce, associated data, message -- alters
-  its state and changes the next block of output. This allows Rocca-S to be used as a stream
-  cipher and a pseudo-random function (PRF) in addition to an AEAD.
-* **Compactly Committing**: Rocca-S is a compactly committing authenticated cipher, meaning the
-  final authentication tag serves as a cryptographic commitment for all inputs: key, nonce,
-  associated data, and message. This allows Rocca-S to be used as a MAC, where the message is
-  included as associated data with an empty plaintext/ciphertext.
-* **Large Keys, Nonces, Tags, and State**: Rocca-S supports 256-bit keys, 128-bit nonces, 256-bit
-  tags, and has a large internal state. This provides a high margin of security for using multiple,
-  derived keys and large inputs.
-* **Very Fast**: By leveraging common SIMD instructions for AES rounds and 128-bit vectors, Rocca-S
-  achieves 100+ Gb/sec speeds on widely-deployed `x86_64` and `aarch64` processors.
+The basic unit of Lockstitch is the protocol, which wraps an SHA-256 instance.
 
 ### Encoding Operations
 
@@ -38,34 +17,37 @@ produce non-equal encoded forms:
 
 ```text
 function Process(state, input, op_code):
-  state ← RoccaS::AD(state, Pad32(input))
-  state ← RoccaS::AD(state, LE128(|input|)ǁ[0x00; 15]ǁ[op_code])
+  state ← SHA256::Update(state, input)
+  state ← SHA256::Update(state, TupleHash::RightEncode(|input|))
+  state ← SHA256::Update(state, [op_code])
   return state
 ```
 
-First, the operation's input is padded with zeros until the length is evenly divisible by 32,
-Rocca-S's block size. Next, the padded input is processed as associated data. Finally, a single
-message block consisting of the input length in bits, encoded as a 128-bit little endian integer,
-followed by fifteen zero bytes and the operation's 1-byte code is processed as associated data.
+First, the protocol's state is updated with the operation's input. Second, the protocol's state is
+updated with the length of that input encoded using the TupleHash `right_encode` function from
+[NIST SP 800-185][]. Finally, the protocol's state is updated with a 1-byte code specific to the
+type of operation which was performed.
 
-This encoding ensures that operations of variable-length inputs are always unambiguously encoded, as
-well as eliminating any buffering requirement by using full-size message blocks.
+[NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
+
+This encoding ensures that operations of variable-length inputs are always unambiguously encoded.
 
 ### Generating Output
 
-To generate any output during an operation, the protocol first finalizes its current Rocca-S state
-into a 32-byte tag. That tag is used to key a chain Rocca-S instance, and two 32-byte keys are
-derived from its PRF output. The protocol's state is replaced with a Rocca-S instance keyed with the
-first; a Rocca-S instance keyed with the second and using the operation code as a nonce is used to
-generate any output:
+To generate any output during an operation, the protocol first finalizes its current SHA-256 state
+into a 32-byte digest. That digest is used to key a chain Rocca-S instance, and two 32-byte keys are
+derived from its PRF output. The protocol's state is replaced with a new SHA-256 instance and
+updated with the first key; a Rocca-S instance is initialized with the second key using the
+operation code as a nonce and used to generate any output:
 
 ```text
 function Chain(state):
-  T ← RoccaS::Tag(state)
-  prf ← RoccaS::Init(T, [0x07; 16])
+  D ← SHA256::Finalize(state)
+  prf ← RoccaS::Init(D, [0x07; 16])
   K₀ǁK₁ ← RoccaS::PRF(prf , 64)
-  state ← RoccaS::Init(K₀, [0x00; 16])
-  output ← RoccaS::new(K₁, [operation; 16])
+  state ← SHA256::Init()                    // Reset the state.
+  state ← Process(state, K₀, 0x01)          // Update the protocol with the first key and the Init op code.
+  output ← RoccaS::new(K₁, [operation; 16]) // Create an output Rocca-S instance with the second key.
   return state, output
 ```
 
@@ -73,51 +55,18 @@ function Chain(state):
 
 #### KDF Security
 
-This uses Rocca-S as a PRF in an [HKDF][]-style _Extract-then-Expand_ key derivation function (KDF)
-with the protocol's prior state (i.e. the [encoded](#encoding-operations) associated data of the
-previous operations) as the effective keying material.
+`Chain` uses an [HKDF][]-style _Extract-then-Expand_ key derivation function (KDF) with the
+protocol's prior inputs (i.e. the [encoded](#encoding-operations) operations) as the effective
+keying material, SHA-256 as the strong computational extractor for the keying material, and Rocca-S
+as a PRF.
 
 [HKDF]: https://www.rfc-editor.org/rfc/rfc5869.html
 
-The KDF security of this construction depends on the specific characteristics of Rocca-S, not on its
-properties as a generic AEAD. To justify this, a further elucidation of the principles behind
-Expand-then-Extract KDFs is required. [Krawczyk][] defines Extract-then-Expand KDFs as the
-composition of two distinct parts, each with its own distinct requirements:
-
-[Krawczyk]: https://eprint.iacr.org/2010/264.pdf
-
-> An extract-then-expand key derivation function `KDF` comprises two modules: a randomness extractor
-> `XTR` and a variable-length output pseudorandom function `PRF*` […]
-> The extractor `XTR` is assumed to produce "close-to-random", in the statistical or computational
-> sense, outputs on inputs sampled from the source key material distribution […]
-> The key to `PRF*` is denoted by `PRK` (pseudorandom key) and in our scheme it is the output from
-> `XTR` […]
-
-A secure Extract-then-Expand KDF, then, requires `XTR` to be a secure computational extractor with
-respect to the keying material and `PRF` to be a secure PRF. A secure computational extractor, or
-strong randomness extractor, takes a uniformly random seed `S` and an arbitrary input value `M` and
-produces an output value with a negligible difference in statistical difference from `S`. Rocca-S
-includes PRF security in its security claims, so the KDF security of the `Chain` function hinges on
-whether or not Rocca-S's `Tag` function is a secure extractor of its key, nonce, associated data,
-and ciphertext.
-
-Rocca-S does not explicitly include strong randomness extraction in its security claims (which is
-not surprising, given that mention of randomness extractors is largely limited to random number
-generator design and theoretical discussions about entropy) but it may be reasonably assumed that it
-is. Rocca-S is compactly committing--given `T=E(K, D, P)`, a polynomial adversary has a negligible
-advantage in finding any other `K′`, `D′`, or `P′` which produces the same `T`--which allows it to
-function as a sUF-CMA secure message authentication code (MAC) by passing the message as associated
-data and using an empty string as the plaintext. Similarly, [NIST SP 800-56C][] allows for the
-use of full-length AES-CMAC as a randomness extractor; as a MAC algorithm, Rocca-S has strictly
-superior security claims than AES-CMAC and depends on the same cryptographic primitive.
-
-[NIST SP 800-56C]: https://csrc.nist.gov/publications/detail/sp/800-56c/rev-2/final
-
 #### KDF Chains
 
-Given that `Chain` is KDF secure, sequences of Lockstitch operations which accept input and output
-in a protocol therefore constitute a [KDF chain][kdf-chain], giving Lockstitch protocols the
-following security properties:
+Given that `Chain` is KDF secure and replaces the protocol's state with derived output, sequences of
+Lockstitch operations which accept input and output in a protocol therefore constitute a [KDF
+chain][kdf-chain], giving Lockstitch protocols the following security properties:
 
 [kdf-chain]: https://signal.org/docs/specifications/doubleratchet/doubleratchet.pdf
 
@@ -139,13 +88,13 @@ Lockstitch supports six operations: `Init`, `Mix`, `Derive`, `Encrypt`/`Decrypt`
 
 ### `Init`
 
-Every protocol is initialized with a domain separation string, used to initialize a fixed-key
-Rocca-S instance:
+Every protocol is initialized with a domain separation string, used to initialize an SHA-256
+instance:
 
 ```text
 function Init(domain):
-  state ← RoccaS::Init([0x00; 32], [0x00; 16]) // Initialize a fixed-key Rocca-S instance.
-  state ← Process(state, domain, 0x01)         // Process the domain string as input with the 0x01 op code.
+  state ← SHA256::Init()               // Initialize a new SHA-256 instance.
+  state ← Process(state, domain, 0x01) // Process the domain string as input with the Init op code.
   return state
 ```
 
@@ -168,20 +117,16 @@ function Mix(state, data):
   return state
 ```
 
-Unlike a standard hash function, `Mix` operations (as with all other operations) are not
+Unlike inputs to a standard hash function, `Mix` operations (as with all other operations) are not
 associative. That is, `Mix("alpha"); Mix("bet")` is not equivalent to `Mix("alphabet")`. This
 eliminates the possibility of collisions; no additional padding or encoding is required.
 
 Multiple `Mix` operations in a row are equivalent to a single [encoded](#encoding-operations) block
-of associated data. The Rocca-S tag of that state, then, should be collision-resistant, in that
-an adversary with a non-negligible advantage of finding two inputs `(A₀, A₁)` such that
-`E(K, N, A₀, ɛ) = E(K, N, A₁, ɛ)` would be able to forge Rocca-S ciphertexts.
+of input to SHA-256.  Unlike other operations (which all produce output and therefore replace the
+state with derived output), `Mix` does not replace the hasher, allowing sequential `Mix` operations
+to be batched, leveraging the full throughput potential of SHA-256.
 
-Unlike other operations (which all produce output and therefore replace the state with a derived
-Rocca-S instance), `Mix` does not replace the hasher, allowing sequential `Mix` operations to be
-batched, leveraging the full throughput potential of Rocca-S.
-
-**N.B.**: Processing more than 2^61 bytes without generating output will result in undefined
+**N.B.**: Processing more than 2^64 bytes without generating output will result in undefined
 behavior.
 
 ### `Derive`
@@ -197,9 +142,9 @@ function Derive(state, n):
 ```
 
 A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
-protocol's state prior to the operation provided RoccaS is PRF secure and compactly committing.
-The protocol's state after the operation is dependent on both the fact that the operation was a
-`Derive` operation as well as the number of bytes produced.
+protocol's state prior to the operation provided SHA-256 is collision-resistant and RoccaS is PRF
+secure. The protocol's state after the operation is dependent on both the fact that the operation
+was a `Derive` operation as well as the number of bytes produced.
 
 `Derive` supports streaming output, thus a shorter `Derive` operation will return a prefix of a
 longer one (e.g.  `Derive(16)` and `Derive(32)` will share the same initial 16 bytes). Once the
@@ -318,12 +263,7 @@ function MessageDigest(data):
   return digest
 ```
 
-**N.B.:** Because Rocca-S makes no claims in the known-key setting, the security of this
-construction in terms of collision-resistance is unknown. Simple AES-based hashes (e.g. Grindahl)
-can be vulnerable to truncated differential attacks, but the large state of Rocca-S suggests this is
-unlikely. Rebound attacks are a more promising avenue, having been developed during the design of
-SHA-3 finalist Grøstl (a large-state AES-based permutation hash), but this approach has yet to be
-applied to Rocca-S or similar ciphers.
+This construction is collision-resistant if SHA-256 is collision-resistant.
 
 ### Message Authentication Codes
 

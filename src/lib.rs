@@ -282,11 +282,11 @@ impl Protocol {
     #[inline(always)]
     #[must_use]
     fn chain(&mut self, operation: Operation) -> RoccaS {
-        // Replace the current state with an uninitialized state.
-        let state = core::mem::replace(&mut self.state, Sha256::new());
+        // Finalize the current state and replace it with an uninitialized state.
+        let hash = core::mem::take(&mut self.state).finalize();
 
         // Use the hash of the current state as a key for a chain Rocca-S instance.
-        let mut chain = RoccaS::new(&state.finalize().into(), &[Operation::Chain as u8; 16]);
+        let mut chain = RoccaS::new(&hash.into(), &[Operation::Chain as u8; 16]);
 
         // Generate 32 bytes of PRF output for use as a chain key.
         let mut chain_key = [0u8; 32];

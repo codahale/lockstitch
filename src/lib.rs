@@ -21,6 +21,7 @@ use constant_time_eq::constant_time_eq;
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
 use rocca_s::RoccaS;
+use sha2::digest::FixedOutputReset;
 use sha2::{Digest, Sha256};
 
 #[doc = include_str!("../design.md")]
@@ -282,8 +283,8 @@ impl Protocol {
     #[inline(always)]
     #[must_use]
     fn chain(&mut self, operation: Operation) -> RoccaS {
-        // Finalize the current state and replace it with an uninitialized state.
-        let hash = core::mem::take(&mut self.state).finalize();
+        // Finalize the current state and reset it to an uninitialized state.
+        let hash = self.state.finalize_fixed_reset();
 
         // Use the hash of the current state as a key for a chain Rocca-S instance.
         let mut chain = RoccaS::new(&hash.into(), &[Operation::Chain as u8; 16]);

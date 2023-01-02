@@ -22,7 +22,7 @@ sha2 = { version = "0.10.6", default-features = false }
 default = ["asm", "hedge", "std"]
 asm = ["sha2/asm"]
 hedge = ["rand_core"]
-std = ["sha2/std"]
+std = []
 
 [workspace]
 members = ["xtask"]

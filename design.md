@@ -318,6 +318,13 @@ function MessageDigest(data):
   return digest
 ```
 
+**N.B.:** Because Rocca-S makes no claims in the known-key setting, the security of this
+construction in terms of collision-resistance is unknown. Simple AES-based hashes (e.g. Grindahl)
+can be vulnerable to truncated differential attacks, but the large state of Rocca-S suggests this is
+unlikely. Rebound attacks are a more promising avenue, having been developed during the design of
+SHA-3 finalist Grøstl (a large-state AES-based permutation hash), but this approach has yet to be
+applied to Rocca-S or similar ciphers.
+
 ### Message Authentication Codes
 
 Adding a key to the previous construction makes it a MAC:

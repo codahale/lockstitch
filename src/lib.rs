@@ -49,11 +49,8 @@ impl Protocol {
         // Create a protocol with a fresh SHA-256 instance.
         let mut protocol = Protocol { state: Sha256::new() };
 
-        // Update the state with the domain string.
-        protocol.state.update(domain.as_bytes());
-
-        // End the INIT operation with the domain string length in bytes.
-        protocol.end_op(Operation::Init, domain.len() as u64);
+        // Update the protocol with the domain and the INIT operation.
+        protocol.process(domain.as_bytes(), Operation::Init);
 
         protocol
     }
@@ -61,11 +58,8 @@ impl Protocol {
     /// Mixes the given slice into the protocol state.
     #[inline(always)]
     pub fn mix(&mut self, data: &[u8]) {
-        // Update the state with the given slice.
-        self.state.update(data);
-
-        // Update the state with the operation code and byte count.
-        self.end_op(Operation::Mix, data.len() as u64);
+        // Update the state with the data and operation code.
+        self.process(data, Operation::Mix);
     }
 
     /// Mixes the contents of the reader into the protocol state.
@@ -119,11 +113,8 @@ impl Protocol {
         // Fill the buffer with PRF output.
         output.prf(out);
 
-        // Update the state with the output length.
-        self.state.update((out.len() as u64).to_le_bytes());
-
-        // Update the state with the operation code and integer length.
-        self.end_op(Operation::Derive, 8);
+        // Update the state with the output length and the operation code.
+        self.process(&(out.len() as u64).to_le_bytes(), Operation::Derive);
     }
 
     /// Derive output from the protocol's current state and return it as an array.
@@ -146,11 +137,8 @@ impl Protocol {
         // Calculate the tag.
         let tag = output.tag();
 
-        // Update the state with the resulting tag.
-        self.state.update(tag);
-
-        // Update the state with the operation code and tag length.
-        self.end_op(Operation::Crypt, tag.len() as u64);
+        // Update the state with the tag and the operation code.
+        self.process(&tag, Operation::Crypt);
     }
 
     /// Decrypt the given slice in place.
@@ -165,11 +153,8 @@ impl Protocol {
         // Calculate the tag.
         let tag = output.tag();
 
-        // Update the state with the resulting tag.
-        self.state.update(tag);
-
-        // Update the state with the operation code and tag length.
-        self.end_op(Operation::Crypt, tag.len() as u64);
+        // Update the state with the tag and the operation code.
+        self.process(&tag, Operation::Crypt);
     }
 
     /// Seals the given mutable slice in place.
@@ -192,11 +177,8 @@ impl Protocol {
         // Append the first half of the tag to the ciphertext.
         tag_out.copy_from_slice(&tag[..TAG_LEN]);
 
-        // Update the state with the resulting tag.
-        self.state.update(tag);
-
-        // Update the state with the operation code and tag length.
-        self.end_op(Operation::AuthCrypt, tag.len() as u64);
+        // Update the state with the tag and the operation code.
+        self.process(&tag, Operation::AuthCrypt);
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -216,11 +198,8 @@ impl Protocol {
         // Calculate the counterfactual tag.
         let tag_p = output.tag();
 
-        // Update the state with the resulting tag.
-        self.state.update(tag_p);
-
-        // Update the state with the operation code and tag length.
-        self.end_op(Operation::AuthCrypt, tag_p.len() as u64);
+        // Update the state with the tag and the operation code.
+        self.process(&tag_p, Operation::AuthCrypt);
 
         // Check the tag against the first half of the counterfactual tah.
         if constant_time_eq(tag, &tag_p[..TAG_LEN]) {
@@ -303,6 +282,16 @@ impl Protocol {
         // Return a Rocca-S instance keyed with the output key and using the operation code as a
         // nonce.
         RoccaS::new(&output_key.try_into().expect("invalid key len"), &[operation as u8; 16])
+    }
+
+    // Process a single piece of input for an operation.
+    #[inline(always)]
+    fn process(&mut self, input: &[u8], operation: Operation) {
+        // Update the state with the input.
+        self.state.update(input);
+
+        // End the operation with the operation code and input length.
+        self.end_op(operation, input.len() as u64);
     }
 
     /// End an operation, including the number of bytes processed.

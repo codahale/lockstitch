@@ -289,13 +289,12 @@ impl Protocol {
         // Use the hash of the current state as a key for a chain Rocca-S instance.
         let mut chain = RoccaS::new(&hash.into(), &[Operation::Chain as u8; 16]);
 
-        // Generate 32 bytes of PRF output for use as a chain key.
-        let mut chain_key = [0u8; 32];
-        chain.prf(&mut chain_key);
+        // Generate 64 bytes of PRF output.
+        let mut prf = [0u8; 64];
+        chain.prf(&mut prf);
 
-        // Generate 32 bytes of PRF output for use as an output key.
-        let mut output_key = [0u8; 32];
-        chain.prf(&mut output_key);
+        // Use the first 32 bytes as a chain key; use the second as an output key.
+        let (chain_key, output_key) = prf.split_at(32);
 
         // Initialize the current state with the chain key.
         self.state.update(chain_key);
@@ -303,7 +302,7 @@ impl Protocol {
 
         // Return a Rocca-S instance keyed with the output key and using the operation code as a
         // nonce.
-        RoccaS::new(&output_key, &[operation as u8; 16])
+        RoccaS::new(&output_key.try_into().expect("invalid key len"), &[operation as u8; 16])
     }
 
     /// End an operation, including the number of bytes processed.

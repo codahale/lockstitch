@@ -111,13 +111,13 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 Lockstitch's SHA-256 and Rocca-S implementations benefit significantly from the use of specific CPU
 instructions.
 
-### `x86_64`
+### `x86`/`x86_64`
 
-On `x86_64` CPUs, Lockstitch achieves its best performance with the `aes` and `ssse3` CPU features
-enabled.
+On `x86`/`x86_64` CPUs, Lockstitch achieves its best performance with the `aes` and `ssse3` target
+features enabled.
 
-To compile a `x86_64` binary with support for these features, create a `.cargo/config.toml` file
-with the following:
+To compile a binary with support for these features, create a `.cargo/config.toml` file with the
+following:
 
 ```toml
 [build]

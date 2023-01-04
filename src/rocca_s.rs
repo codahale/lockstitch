@@ -3,13 +3,13 @@ use aligned::{Aligned, A16};
 #[cfg(target_arch = "aarch64")]
 use self::aarch64::*;
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
 use self::x86_64::*;
 
 #[cfg(target_arch = "aarch64")]
 mod aarch64;
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
 mod x86_64;
 
 #[derive(Debug, Clone)]

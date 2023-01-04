@@ -1,5 +1,10 @@
-pub use core::arch::x86_64::__m128i as AesBlock;
+#[cfg(target_arch = "x86")]
+pub use core::arch::x86::*;
+
+#[cfg(target_arch = "x86_64")]
 pub use core::arch::x86_64::*;
+
+pub use self::__m128i as AesBlock;
 
 macro_rules! zero {
     () => {{

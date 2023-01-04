@@ -306,6 +306,7 @@ impl Protocol {
     }
 
     /// End an operation, including the number of bytes processed.
+    #[inline(always)]
     fn end_op(&mut self, operation: Operation, n: u64) {
         // Allocate a buffer for output.
         let mut buffer = [0u8; 10];

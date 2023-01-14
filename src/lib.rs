@@ -329,6 +329,8 @@ enum Operation {
 mod tests {
     use std::io::Cursor;
 
+    use expect_test::expect;
+
     use super::*;
 
     #[test]
@@ -337,11 +339,11 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        assert_eq!("33c45a7463fe3e49", hex::encode(protocol.derive_array::<8>()));
+        expect!["33c45a7463fe3e49"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        assert_eq!("71b6a741da79ee5ffe77dc33182f3774bf38", hex::encode(plaintext));
+        expect!["71b6a741da79ee5ffe77dc33182f3774bf38"].assert_eq(&hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -350,12 +352,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(&mut sealed);
 
-        assert_eq!(
-            "f018bba0ecea4e7369f796a330f27e940fb4382bc3aec0ac4ee19d14c64160c7f419",
-            hex::encode(sealed)
-        );
+        expect!["f018bba0ecea4e7369f796a330f27e940fb4382bc3aec0ac4ee19d14c64160c7f419"]
+            .assert_eq(&hex::encode(sealed));
 
-        assert_eq!("4518bd12f63f9577", hex::encode(protocol.derive_array::<8>()));
+        expect!["4518bd12f63f9577"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

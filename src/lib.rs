@@ -17,12 +17,12 @@
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use constant_time_eq::constant_time_eq;
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
 use rocca_s::RoccaS;
 use sha2::digest::FixedOutputReset;
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 #[doc = include_str!("../design.md")]
 pub mod design {}
@@ -202,7 +202,7 @@ impl Protocol {
         self.process(&tag_p, Operation::AuthCrypt);
 
         // Check the tag against the first half of the counterfactual tah.
-        if constant_time_eq(tag, &tag_p[..TAG_LEN]) {
+        if tag.ct_eq(&tag_p[..TAG_LEN]).into() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)

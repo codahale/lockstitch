@@ -13,6 +13,7 @@ readme = "README.md"
 include = ["src/**/*", "benches/**/*", "tests/**/*", "LICENSE", "README.md", "design.md", "perf.md"]
 
 [dependencies]
+aes = { version = "0.8.2", features = ["hazmat"], optional = true }
 aligned = "0.4.1"
 rand_core = { version = "0.6.4", default-features = false, optional = true }
 sha2 = { version = "0.10.6", default-features = false }
@@ -22,6 +23,7 @@ subtle = { version = "2.4.1", default-features = false }
 default = ["asm", "hedge", "std"]
 asm = ["sha2/asm"]
 hedge = ["rand_core"]
+portable = ["aes"]
 std = []
 
 [workspace]

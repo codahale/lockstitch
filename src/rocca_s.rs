@@ -278,10 +278,21 @@ mod tests {
         let mut in_out = [0; 64];
         let tag_a = encrypt(key, nonce, &mut in_out, ad);
 
-        assert_eq!("9ac3326495a8d414fe407f47b54410502481cf79cab8c0a669323e07711e46170de5b2fbba0fae8de7c1fccaeefc362624fcfdc15f8bb3e64457e8b7e37557bb", hex::encode(in_out));
         assert_eq!(
-            "8df934d1483710c9410f6a089c4ced9791901b7e2e661206202db2cc7a24a386",
-            hex::encode(tag_a)
+            hex!(
+                "9a c3 32 64 95 a8 d4 14 fe 40 7f 47 b5 44 10 50"
+                "24 81 cf 79 ca b8 c0 a6 69 32 3e 07 71 1e 46 17"
+                "0d e5 b2 fb ba 0f ae 8d e7 c1 fc ca ee fc 36 26"
+                "24 fc fd c1 5f 8b b3 e6 44 57 e8 b7 e3 75 57 bb"
+            ),
+            in_out
+        );
+        assert_eq!(
+            hex!(
+                "8d f9 34 d1 48 37 10 c9 41 0f 6a 08 9c 4c ed 97"
+                "91 90 1b 7e 2e 66 12 06 20 2d b2 cc 7a 24 a3 86"
+            ),
+            tag_a
         );
     }
 
@@ -293,10 +304,21 @@ mod tests {
         let mut in_out = [0; 64];
         let tag_a = encrypt(key, nonce, &mut in_out, ad);
 
-        assert_eq!("559ecb253bcfe26b483bf00e9c748345978ff921036a6c1fdcb712172836504fbc64d430a73fc67acd3c3b9c1976d80790f48357e7fe0c0682624569d3a658fb", hex::encode(in_out));
         assert_eq!(
-            "b730e6b619f63ccf7e69735914d76ab52f70360c8a654bad991320ef952c40a2",
-            hex::encode(tag_a)
+            hex!(
+                "55 9e cb 25 3b cf e2 6b 48 3b f0 0e 9c 74 83 45"
+                "97 8f f9 21 03 6a 6c 1f dc b7 12 17 28 36 50 4f"
+                "bc 64 d4 30 a7 3f c6 7a cd 3c 3b 9c 19 76 d8 07"
+                "90 f4 83 57 e7 fe 0c 06 82 62 45 69 d3 a6 58 fb"
+            ),
+            in_out
+        );
+        assert_eq!(
+            hex!(
+                "b7 30 e6 b6 19 f6 3c cf 7e 69 73 59 14 d7 6a b5"
+                "2f 70 36 0c 8a 65 4b ad 99 13 20 ef 95 2c 40 a2"
+            ),
+            tag_a
         );
     }
 
@@ -314,10 +336,21 @@ mod tests {
         let mut in_out = [0; 64];
         let tag_a = encrypt(key, nonce, &mut in_out, ad);
 
-        assert_eq!("b5fc4e2a72b86d1a133c0f0202bdf790af14a24b2cdb676e427865e12fcc9d3021d18418fc75dc1912dd2cd79a3beeb2a98b235de2299b9dda93fd2b5ac8f436", hex::encode(in_out));
         assert_eq!(
-            "326e6357e50034a7750fc20131aa6f7619ed23db5bdad0002820cc707f359f8d",
-            hex::encode(tag_a)
+            hex!(
+                "b5 fc 4e 2a 72 b8 6d 1a 13 3c 0f 02 02 bd f7 90"
+                "af 14 a2 4b 2c db 67 6e 42 78 65 e1 2f cc 9d 30"
+                "21 d1 84 18 fc 75 dc 19 12 dd 2c d7 9a 3b ee b2"
+                "a9 8b 23 5d e2 29 9b 9d da 93 fd 2b 5a c8 f4 36"
+            ),
+            in_out
+        );
+        assert_eq!(
+            hex!(
+                "32 6e 63 57 e5 00 34 a7 75 0f c2 01 31 aa 6f 76"
+                "19 ed 23 db 5b da d0 00 28 20 cc 70 7f 35 9f 8d"
+            ),
+            tag_a
         );
     }
 }

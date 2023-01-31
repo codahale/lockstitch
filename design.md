@@ -44,7 +44,7 @@ operation code as a nonce and used to generate any output:
 function Chain(state):
   D ← SHA256::Finalize(state)
   prf ← RoccaS::Init(D, [0x07; 16])
-  K₀ǁK₁ ← RoccaS::PRF(prf , 64)
+  K₀ǁK₁ ← RoccaS::PRF(prf, 64)
   state ← SHA256::Init()                    // Reset the state.
   state ← Process(state, K₀, 0x01)          // Update the protocol with the first key and the Init op code.
   output ← RoccaS::new(K₁, [operation; 16]) // Create an output Rocca-S instance with the second key.

@@ -31,7 +31,7 @@ members = ["xtask"]
 
 [dev-dependencies]
 criterion = { version = "0.4.0", features = ["html_reports"] }
-expect-test = "1.4.0"
+expect-test = "1.4.1"
 hex = "0.4.3"
 hex-literal = "0.3.4"
 proptest = "1.1.0"

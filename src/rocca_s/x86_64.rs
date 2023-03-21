@@ -7,10 +7,9 @@ pub use core::arch::x86_64::*;
 pub use self::__m128i as AesBlock;
 
 macro_rules! zero {
-    () => {{
-        let block = Aligned::<A16, _>([0u8; 16]);
-        unsafe { _mm_load_si128(block.as_ptr() as *const __m128i) }
-    }};
+    () => {
+        unsafe { _mm_setzero_si128() }
+    };
 }
 
 pub(crate) use zero;

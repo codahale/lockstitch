@@ -7,9 +7,9 @@ pub use core::arch::x86_64::*;
 pub use self::__m128i as AesBlock;
 
 macro_rules! zero {
-    () => {
+    () => {{
         unsafe { _mm_setzero_si128() }
-    };
+    }};
 }
 
 pub(crate) use zero;

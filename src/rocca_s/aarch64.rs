@@ -3,9 +3,9 @@ pub use core::arch::aarch64::*;
 pub use core::arch::asm;
 
 macro_rules! zero {
-    () => {
+    () => {{
         unsafe { vmovq_n_u8(0) }
-    };
+    }};
 }
 
 pub(crate) use zero;

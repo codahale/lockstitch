@@ -4,7 +4,7 @@ Lockstitch provides a single cryptographic service for all symmetric-key operati
 incremental, stateful building block for complex schemes, constructions, and protocols, all built on
 top of SHA-256 and [Rocca-S][], an authenticated cipher.
 
-[Rocca-S]: https://www.ietf.org/archive/id/draft-nakano-rocca-s-02.html
+[Rocca-S]: https://www.ietf.org/archive/id/draft-nakano-rocca-s-03.html
 
 ## Preliminaries
 

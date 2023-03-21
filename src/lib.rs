@@ -352,10 +352,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(&mut sealed);
 
-        expect!["f018bba0ecea4e7369f796a330f27e940fb4382bc3aec0ac4ee19d14c64160c7f419"]
+        expect!["8236b7ed081a955e6f038da8c4899611bafcd5edf6c663b95ef7176c16279950f5de"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["4518bd12f63f9577"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["6d4660e6aba6c977"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

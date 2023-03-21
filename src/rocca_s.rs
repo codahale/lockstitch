@@ -21,8 +21,6 @@ mod x86_64;
 #[derive(Debug, Clone)]
 pub struct RoccaS {
     blocks: [AesBlock; 7],
-    k0: AesBlock,
-    k1: AesBlock,
     ad_len: u128,
     mc_len: u128,
 }
@@ -41,7 +39,7 @@ impl RoccaS {
         let nonce = Aligned::<A16, _>(*nonce);
         let nonce = from_bytes!(&nonce, ..);
         let blocks: [AesBlock; 7] = [k1, nonce, z0, k0, z1, xor!(nonce, k1), zero!()];
-        let mut state = RoccaS { blocks, k0, k1, ad_len: 0, mc_len: 0 };
+        let mut state = RoccaS { blocks, ad_len: 0, mc_len: 0 };
         for _ in 0..16 {
             state.update(z0, z1);
         }
@@ -205,9 +203,6 @@ impl RoccaS {
 
     #[allow(unused_unsafe)]
     pub fn tag(&mut self) -> [u8; 32] {
-        self.blocks[1] = xor!(self.blocks[1], self.k0);
-        self.blocks[2] = xor!(self.blocks[2], self.k1);
-
         let ad_block = from_bytes!(&Aligned::<A16, _>((self.ad_len * 8).to_le_bytes()), ..);
         let mc_block = from_bytes!(&Aligned::<A16, _>((self.mc_len * 8).to_le_bytes()), ..);
 
@@ -268,7 +263,7 @@ mod tests {
         assert_eq!(tag_a, tag_b);
     }
 
-    // from https://www.ietf.org/archive/id/draft-nakano-rocca-s-02.html#name-test-vector
+    // from https://www.ietf.org/archive/id/draft-nakano-rocca-s-03.html#name-test-vector
 
     #[test]
     fn test_vector_1() {
@@ -315,8 +310,8 @@ mod tests {
         );
         assert_eq!(
             hex!(
-                "b7 30 e6 b6 19 f6 3c cf 7e 69 73 59 14 d7 6a b5"
-                "2f 70 36 0c 8a 65 4b ad 99 13 20 ef 95 2c 40 a2"
+                "c1 fd f3 97 62 ec a7 7d a8 b0 f1 da e5 ff f7 5a"
+                "92 fb 0a df a7 94 0a 28 c8 ca db bb e8 e4 ca 8d"
             ),
             tag_a
         );
@@ -347,8 +342,8 @@ mod tests {
         );
         assert_eq!(
             hex!(
-                "32 6e 63 57 e5 00 34 a7 75 0f c2 01 31 aa 6f 76"
-                "19 ed 23 db 5b da d0 00 28 20 cc 70 7f 35 9f 8d"
+                "a0 78 e1 35 1e f2 42 0c 8e 3a 93 fd 31 f5 b1 13"
+                "5b 15 31 5a 5f 20 55 34 14 8e fb cd 63 f7 9f 00"
             ),
             tag_a
         );

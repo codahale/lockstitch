@@ -8,23 +8,23 @@ macro_rules! zero {
 
 pub(crate) use zero;
 
-macro_rules! from_bytes {
+macro_rules! load {
     ($bytes:expr, $idx:expr) => {{
         let bytes: &Aligned<A16, _> = $bytes;
         *AesBlock::from_slice(&bytes[$idx])
     }};
 }
 
-pub(crate) use from_bytes;
+pub(crate) use load;
 
-macro_rules! to_bytes {
+macro_rules! store {
     ($bytes:expr, $idx:expr, $block:expr) => {{
         let bytes: &mut Aligned<A16, _> = $bytes;
         bytes[$idx].copy_from_slice(&$block);
     }};
 }
 
-pub(crate) use to_bytes;
+pub(crate) use store;
 
 macro_rules! xor {
     ($a:expr) => {$a};
@@ -43,7 +43,7 @@ pub fn xor_block(a: AesBlock, b: AesBlock) -> AesBlock {
     out
 }
 
-macro_rules! round {
+macro_rules! enc {
     ($a:expr, $b:expr) => {{
         let mut out = $a;
         aes::hazmat::cipher_round(&mut out, &$b);
@@ -51,4 +51,4 @@ macro_rules! round {
     }};
 }
 
-pub(crate) use round;
+pub(crate) use enc;

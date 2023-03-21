@@ -31,13 +31,13 @@ impl RoccaS {
             Aligned([205, 101, 239, 35, 145, 68, 55, 113, 34, 174, 40, 215, 152, 47, 138, 66]);
         const Z1: Aligned<A16, [u8; 16]> =
             Aligned([188, 219, 137, 129, 165, 219, 181, 233, 47, 59, 77, 236, 207, 251, 192, 181]);
-        let z0 = from_bytes!(&Z0, ..);
-        let z1 = from_bytes!(&Z1, ..);
+        let z0 = load!(&Z0, ..);
+        let z1 = load!(&Z1, ..);
         let key = Aligned::<A16, _>(*key);
-        let k0 = from_bytes!(&key, ..16);
-        let k1 = from_bytes!(&key, 16..);
+        let k0 = load!(&key, ..16);
+        let k1 = load!(&key, 16..);
         let nonce = Aligned::<A16, _>(*nonce);
-        let nonce = from_bytes!(&nonce, ..);
+        let nonce = load!(&nonce, ..);
         let blocks: [AesBlock; 7] = [k1, nonce, z0, k0, z1, xor!(nonce, k1), zero!()];
         let mut state = RoccaS { blocks, ad_len: 0, mc_len: 0 };
         for _ in 0..16 {
@@ -137,46 +137,46 @@ impl RoccaS {
 
     #[cfg(test)]
     fn absorb(&mut self, src: &Aligned<A16, [u8; 32]>) {
-        let msg0 = from_bytes!(src, ..16);
-        let msg1 = from_bytes!(src, 16..);
+        let msg0 = load!(src, ..16);
+        let msg1 = load!(src, 16..);
         self.update(msg0, msg1);
     }
 
     #[allow(unused_unsafe)]
     fn enc_zeroes(&mut self, dst: &mut Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
-        let c0 = round!(xor!(blocks[3], blocks[5]), blocks[0]);
-        let c1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
-        to_bytes!(dst, ..16, c0);
-        to_bytes!(dst, 16.., c1);
+        let c0 = enc!(xor!(blocks[3], blocks[5]), blocks[0]);
+        let c1 = enc!(xor!(blocks[4], blocks[6]), blocks[2]);
+        store!(dst, ..16, c0);
+        store!(dst, 16.., c1);
         self.update(zero!(), zero!());
     }
 
     #[allow(unused_unsafe)]
     fn enc(&mut self, dst: &mut Aligned<A16, [u8; 32]>, src: &Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
-        let msg0 = from_bytes!(src, ..16);
-        let msg1 = from_bytes!(src, 16..);
-        let k0 = round!(xor!(blocks[3], blocks[5]), blocks[0]);
-        let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
+        let msg0 = load!(src, ..16);
+        let msg1 = load!(src, 16..);
+        let k0 = enc!(xor!(blocks[3], blocks[5]), blocks[0]);
+        let k1 = enc!(xor!(blocks[4], blocks[6]), blocks[2]);
         let c0 = xor!(k0, msg0);
         let c1 = xor!(k1, msg1);
-        to_bytes!(dst, ..16, c0);
-        to_bytes!(dst, 16.., c1);
+        store!(dst, ..16, c0);
+        store!(dst, 16.., c1);
         self.update(msg0, msg1);
     }
 
     #[allow(unused_unsafe)]
     fn dec(&mut self, dst: &mut Aligned<A16, [u8; 32]>, src: &Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
-        let c0 = from_bytes!(src, ..16);
-        let c1 = from_bytes!(src, 16..);
-        let k0 = round!(xor!(blocks[3], blocks[5]), blocks[0]);
-        let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
+        let c0 = load!(src, ..16);
+        let c1 = load!(src, 16..);
+        let k0 = enc!(xor!(blocks[3], blocks[5]), blocks[0]);
+        let k1 = enc!(xor!(blocks[4], blocks[6]), blocks[2]);
         let msg0 = xor!(k0, c0);
         let msg1 = xor!(k1, c1);
-        to_bytes!(dst, ..16, xor!(k0, c0));
-        to_bytes!(dst, 16.., xor!(k1, c1));
+        store!(dst, ..16, xor!(k0, c0));
+        store!(dst, 16.., xor!(k1, c1));
         self.update(msg0, msg1);
     }
 
@@ -186,25 +186,25 @@ impl RoccaS {
         src_padded[..src.len()].copy_from_slice(src);
 
         let blocks = &self.blocks;
-        let c0 = from_bytes!(&src_padded, ..16);
-        let c1 = from_bytes!(&src_padded, 16..);
-        let k0 = round!(xor!(blocks[3], blocks[5]), blocks[0]);
-        let k1 = round!(xor!(blocks[4], blocks[6]), blocks[2]);
+        let c0 = load!(&src_padded, ..16);
+        let c1 = load!(&src_padded, 16..);
+        let k0 = enc!(xor!(blocks[3], blocks[5]), blocks[0]);
+        let k1 = enc!(xor!(blocks[4], blocks[6]), blocks[2]);
         let msg_padded0 = xor!(k0, c0);
         let msg_padded1 = xor!(k1, c1);
-        to_bytes!(dst, ..16, msg_padded0);
-        to_bytes!(dst, 16.., msg_padded1);
+        store!(dst, ..16, msg_padded0);
+        store!(dst, 16.., msg_padded1);
         dst[src.len()..].fill(0);
 
-        let msg0 = from_bytes!(dst, ..16);
-        let msg1 = from_bytes!(dst, 16..);
+        let msg0 = load!(dst, ..16);
+        let msg1 = load!(dst, 16..);
         self.update(msg0, msg1);
     }
 
     #[allow(unused_unsafe)]
     pub fn tag(&mut self) -> [u8; 32] {
-        let ad_block = from_bytes!(&Aligned::<A16, _>((self.ad_len * 8).to_le_bytes()), ..);
-        let mc_block = from_bytes!(&Aligned::<A16, _>((self.mc_len * 8).to_le_bytes()), ..);
+        let ad_block = load!(&Aligned::<A16, _>((self.ad_len * 8).to_le_bytes()), ..);
+        let mc_block = load!(&Aligned::<A16, _>((self.mc_len * 8).to_le_bytes()), ..);
 
         for _ in 0..16 {
             self.update(ad_block, mc_block);
@@ -212,8 +212,8 @@ impl RoccaS {
 
         let blocks = &self.blocks;
         let mut tag = Aligned::<A16, _>([0u8; 32]);
-        to_bytes!(&mut tag, ..16, xor!(blocks[0], blocks[1], blocks[2], blocks[3]));
-        to_bytes!(&mut tag, 16.., xor!(blocks[4], blocks[5], blocks[6]));
+        store!(&mut tag, ..16, xor!(blocks[0], blocks[1], blocks[2], blocks[3]));
+        store!(&mut tag, 16.., xor!(blocks[4], blocks[5], blocks[6]));
         *tag
     }
 
@@ -221,12 +221,12 @@ impl RoccaS {
     fn update(&mut self, x0: AesBlock, x1: AesBlock) {
         let new_blocks = [
             xor!(self.blocks[6], self.blocks[1]),
-            round!(self.blocks[0], x0),
-            round!(self.blocks[1], self.blocks[0]),
-            round!(self.blocks[2], self.blocks[6]),
-            round!(self.blocks[3], x1),
-            round!(self.blocks[4], self.blocks[3]),
-            round!(self.blocks[5], self.blocks[4]),
+            enc!(self.blocks[0], x0),
+            enc!(self.blocks[1], self.blocks[0]),
+            enc!(self.blocks[2], self.blocks[6]),
+            enc!(self.blocks[3], x1),
+            enc!(self.blocks[4], self.blocks[3]),
+            enc!(self.blocks[5], self.blocks[4]),
         ];
         self.blocks = new_blocks;
     }

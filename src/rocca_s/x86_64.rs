@@ -14,23 +14,23 @@ macro_rules! zero {
 
 pub(crate) use zero;
 
-macro_rules! from_bytes {
+macro_rules! load {
     ($bytes:expr, $idx:expr) => {{
         let bytes: &Aligned<A16, _> = $bytes;
         unsafe { _mm_load_si128(bytes[$idx].as_ptr() as *const __m128i) }
     }};
 }
 
-pub(crate) use from_bytes;
+pub(crate) use load;
 
-macro_rules! to_bytes {
+macro_rules! store {
     ($bytes:expr, $idx:expr, $block:expr) => {{
         let bytes: &mut Aligned<A16, _> = $bytes;
         unsafe { _mm_store_si128(bytes[$idx].as_mut_ptr() as *mut __m128i, $block) };
     }};
 }
 
-pub(crate) use to_bytes;
+pub(crate) use store;
 
 macro_rules! xor {
     ($a:expr) => {$a};
@@ -41,10 +41,10 @@ macro_rules! xor {
 
 pub(crate) use xor;
 
-macro_rules! round {
+macro_rules! enc {
     ($a:expr, $b:expr) => {
         unsafe { _mm_aesenc_si128($a, $b) }
     };
 }
 
-pub(crate) use round;
+pub(crate) use enc;

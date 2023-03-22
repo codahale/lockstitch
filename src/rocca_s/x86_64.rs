@@ -33,18 +33,18 @@ macro_rules! store {
 pub(crate) use store;
 
 macro_rules! xor {
-    ($a:expr) => {$a};
-    ($a:expr, $($rest:expr),*) => {
+    ($a:expr) => {{$a}};
+    ($a:expr, $($rest:expr),*) => {{
         unsafe { _mm_xor_si128($a, xor!($($rest), *)) }
-    };
+    }};
 }
 
 pub(crate) use xor;
 
 macro_rules! enc {
-    ($a:expr, $b:expr) => {
+    ($a:expr, $b:expr) => {{
         unsafe { _mm_aesenc_si128($a, $b) }
-    };
+    }};
 }
 
 pub(crate) use enc;

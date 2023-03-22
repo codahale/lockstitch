@@ -27,14 +27,15 @@ macro_rules! store {
 pub(crate) use store;
 
 macro_rules! xor {
-    ($a:expr) => {$a};
-    ($a:expr, $($rest:expr),*) => {
+    ($a:expr) => {{$a}};
+    ($a:expr, $($rest:expr),*) => {{
         xor_block($a, xor!($($rest), *))
-    };
+    }};
 }
 
 pub(crate) use xor;
 
+#[inline(always)]
 pub fn xor_block(a: AesBlock, b: AesBlock) -> AesBlock {
     let mut out = AesBlock::default();
     for ((z, x), y) in out.iter_mut().zip(a).zip(b) {

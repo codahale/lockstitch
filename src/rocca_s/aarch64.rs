@@ -29,8 +29,8 @@ macro_rules! store {
 pub(crate) use store;
 
 macro_rules! xor {
-    ($a:expr) => {$a};
-    ($a:expr, $b:expr, $c:expr) => {
+    ($a:expr) => {{$a}};
+    ($a:expr, $b:expr, $c:expr) => {{
         unsafe {
             // TODO replace with veor3q_u8 when that's stable
             let mut ret: AesBlock;
@@ -40,16 +40,16 @@ macro_rules! xor {
             );
             ret
         }
-    };
-    ($a:expr, $($rest:expr),*) => {
+    }};
+    ($a:expr, $($rest:expr),*) => {{
         unsafe { veorq_u8($a, xor!($($rest), *)) }
-    };
+    }};
 }
 
 pub(crate) use xor;
 
 macro_rules! enc {
-    ($a:expr, $b:expr) => {
+    ($a:expr, $b:expr) => {{
        unsafe {
             let z = vmovq_n_u8(0);
             let mut a = $a;
@@ -61,7 +61,7 @@ macro_rules! enc {
             );
             veorq_u8(a, $b)
        }
-    };
+    }};
 }
 
 pub(crate) use enc;

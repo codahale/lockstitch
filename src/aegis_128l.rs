@@ -25,111 +25,119 @@ pub struct Aegis128L {
 
 impl Aegis128L {
     pub fn new(key: &[u8; 16], nonce: &[u8; 16]) -> Self {
-        const C0: [u8; 16] = [
+        // Initialize constants.
+        let c0 = load!(&[
             0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15, 0x22, 0x37, 0x59, 0x90, 0xe9,
             0x79, 0x62,
-        ];
-        const C1: [u8; 16] = [
+        ]);
+        let c1 = load!(&[
             0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5,
             0x28, 0xdd,
-        ];
-        let c0 = load!(&C0);
-        let c1 = load!(&C1);
+        ]);
+
+        // Initialize key and nonce blocks.
         let key = load!(key);
         let nonce = load!(nonce);
-        let blocks: [AesBlock; 8] = [
-            xor!(key, nonce),
-            c1,
-            c0,
-            c1,
-            xor!(key, nonce),
-            xor!(key, c0),
-            xor!(key, c1),
-            xor!(key, c0),
-        ];
 
-        let mut state = Aegis128L { blocks, ad_len: 0, mc_len: 0 };
+        // Initialize cipher state.
+        let mut state = Aegis128L {
+            blocks: [
+                xor!(key, nonce),
+                c1,
+                c0,
+                c1,
+                xor!(key, nonce),
+                xor!(key, c0),
+                xor!(key, c1),
+                xor!(key, c0),
+            ],
+            ad_len: 0,
+            mc_len: 0,
+        };
+
+        // Update the state with the nonce and key 10 times.
         for _ in 0..10 {
             state.update(nonce, key);
         }
+
         state
     }
 
     #[cfg(test)]
     pub fn ad(&mut self, ad: &[u8]) {
-        let mut src = [0u8; 32];
+        let mut xi = [0u8; 32];
 
         let mut chunks = ad.chunks_exact(32);
         for chunk in chunks.by_ref() {
-            src.copy_from_slice(chunk);
-            self.absorb(&src);
+            xi.copy_from_slice(chunk);
+            self.absorb(&xi);
         }
 
         let chunk = chunks.remainder();
         if !chunk.is_empty() {
-            src.fill(0);
-            src[..chunk.len()].copy_from_slice(chunk);
-            self.absorb(&src);
+            xi.fill(0);
+            xi[..chunk.len()].copy_from_slice(chunk);
+            self.absorb(&xi);
         }
 
         self.ad_len += ad.len() as u64;
     }
 
     pub fn prf(&mut self, out: &mut [u8]) {
-        let mut dst = [0u8; 32];
+        let mut ci = [0u8; 32];
 
         let mut chunks = out.chunks_exact_mut(32);
         for chunk in chunks.by_ref() {
-            self.enc_zeroes(&mut dst);
-            chunk.copy_from_slice(dst.as_slice());
+            self.enc_zeroes(&mut ci);
+            chunk.copy_from_slice(ci.as_slice());
         }
 
         let chunk = chunks.into_remainder();
         if !chunk.is_empty() {
-            self.enc_zeroes(&mut dst);
-            chunk.copy_from_slice(&dst[..chunk.len()]);
+            self.enc_zeroes(&mut ci);
+            chunk.copy_from_slice(&ci[..chunk.len()]);
         }
 
         self.mc_len += out.len() as u64;
     }
 
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
-        let mut src = [0u8; 32];
-        let mut dst = [0u8; 32];
+        let mut xi = [0u8; 32];
+        let mut ci = [0u8; 32];
 
         let mut chunks = in_out.chunks_exact_mut(32);
         for chunk in chunks.by_ref() {
-            src.copy_from_slice(chunk);
-            self.enc(&mut dst, &src);
-            chunk.copy_from_slice(dst.as_slice());
+            xi.copy_from_slice(chunk);
+            self.enc(&mut ci, &xi);
+            chunk.copy_from_slice(ci.as_slice());
         }
 
         let chunk = chunks.into_remainder();
         if !chunk.is_empty() {
-            src.fill(0);
-            src[..chunk.len()].copy_from_slice(chunk);
-            self.enc(&mut dst, &src);
-            chunk.copy_from_slice(&dst[..chunk.len()]);
+            xi.fill(0);
+            xi[..chunk.len()].copy_from_slice(chunk);
+            self.enc(&mut ci, &xi);
+            chunk.copy_from_slice(&ci[..chunk.len()]);
         }
 
         self.mc_len += in_out.len() as u64;
     }
 
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
-        let mut src = [0u8; 32];
-        let mut dst = [0u8; 32];
+        let mut ci = [0u8; 32];
+        let mut xi = [0u8; 32];
 
         let mut chunks = in_out.chunks_exact_mut(32);
         for chunk in chunks.by_ref() {
-            src.copy_from_slice(chunk);
-            self.dec(&mut dst, &src);
-            chunk.copy_from_slice(dst.as_slice());
+            ci.copy_from_slice(chunk);
+            self.dec(&mut xi, &ci);
+            chunk.copy_from_slice(xi.as_slice());
         }
 
         let chunk = chunks.into_remainder();
         if !chunk.is_empty() {
-            self.dec_partial(&mut dst, chunk);
-            chunk.copy_from_slice(&dst[..chunk.len()]);
+            self.dec_partial(&mut xi, chunk);
+            chunk.copy_from_slice(&xi[..chunk.len()]);
         }
 
         self.mc_len += in_out.len() as u64;
@@ -205,10 +213,10 @@ impl Aegis128L {
         let mut sizes = [0u8; 16];
         sizes[..8].copy_from_slice(&(self.ad_len * 8).to_le_bytes());
         sizes[8..].copy_from_slice(&(self.mc_len * 8).to_le_bytes());
-        let tmp = xor!(load!(&sizes), self.blocks[2]);
+        let t = xor!(load!(&sizes), self.blocks[2]);
 
         for _ in 0..7 {
-            self.update(tmp, tmp);
+            self.update(t, t);
         }
 
         let mut tag = [0u8; 16];
@@ -230,6 +238,7 @@ impl Aegis128L {
     #[allow(unused_unsafe)]
     fn update(&mut self, m0: AesBlock, m1: AesBlock) {
         let blocks = &mut self.blocks;
+        // Keep a temporary copy of block 7 so we can do in-place updates.
         let tmp = blocks[7];
         blocks[7] = enc!(blocks[6], blocks[7]);
         blocks[6] = enc!(blocks[5], blocks[6]);

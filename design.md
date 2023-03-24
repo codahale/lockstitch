@@ -2,9 +2,9 @@
 
 Lockstitch provides a single cryptographic service for all symmetric-key operations and an
 incremental, stateful building block for complex schemes, constructions, and protocols, all built on
-top of SHA-256 and [Rocca-S][], an authenticated cipher.
+top of SHA-256 and [AEGIS-128L][], an authenticated cipher.
 
-[Rocca-S]: https://www.ietf.org/archive/id/draft-nakano-rocca-s-03.html
+[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-01.html
 
 ## Preliminaries
 
@@ -35,30 +35,27 @@ This encoding ensures that operations of variable-length inputs are always unamb
 ### Generating Output
 
 To generate any output during an operation, the protocol first finalizes its current SHA-256 state
-into a 32-byte digest. That digest is used to key a chain Rocca-S instance, and two 32-byte keys are
-derived from its PRF output. The protocol's state is replaced with a new SHA-256 instance and
-updated with the first key; a Rocca-S instance is initialized with the second key using the
-operation code as a nonce and used to generate any output:
+into a 32-byte digest. That digest is split into two 16-byte keys. The protocol's state is replaced
+with a new SHA-256 instance and updated with the first key; an AEGIS-128L instance is initialized
+with the second key using the operation code as a nonce and used to generate any output:
 
 ```text
 function Chain(state):
-  D ← SHA256::Finalize(state)
-  prf ← RoccaS::Init(D, [0x07; 16])
-  K₀ǁK₁ ← RoccaS::PRF(prf, 64)
-  state ← SHA256::Init()                    // Reset the state.
-  state ← Process(state, K₀, 0x01)          // Update the protocol with the first key and the Init op code.
-  output ← RoccaS::new(K₁, [operation; 16]) // Create an output Rocca-S instance with the second key.
+  K₀ǁK₁ ← SHA256::Finalize(state)               // Derive two keys from the current state.
+  state ← SHA256::Init()                        // Reset the state.
+  state ← Process(state, K₀, 0x01)              // Update the protocol with the first key and the Init op code.
+  output ← AEGIS_128L::new(K₁, [operation; 16]) // Create an output AEGIS-128L instance with the second key.
   return state, output
 ```
 
-**N.B.**: Each operation is limited to 2^125 bytes of output.
+**N.B.**: Each operation is limited to 2^61 bytes of output.
 
 #### KDF Security
 
 `Chain` uses an [HKDF][]-style _Extract-then-Expand_ key derivation function (KDF) with the
 protocol's prior inputs (i.e. the [encoded](#encoding-operations) operations) as the effective
-keying material, SHA-256 as the strong computational extractor for the keying material, and Rocca-S
-as a PRF.
+keying material, SHA-256 as both the strong computational extractor for the keying material and a
+fixed-length PRF.
 
 [HKDF]: https://www.rfc-editor.org/rfc/rfc5869.html
 
@@ -76,10 +73,6 @@ chain][kdf-chain], giving Lockstitch protocols the following security properties
   protocol's state is disclosed at some point.
 * **Break-in Recovery**: A protocol's future outputs will appear random to an adversary in
   possession of the protocol's state as long as one of the future inputs to the protocol is secret.
-
-Finally, assuming that Rocca-S is PRF secure, an adversary in possession of the output will not be
-able to infer anything about the key or, indeed, distinguish the resulting output from a randomly
-generated sequences of bytes of equal length.
 
 ## Operations
 
@@ -135,16 +128,16 @@ behavior.
 
 ```text
 function Derive(state, n):
-  (state, output) ← Chain(state, 0x03)  // Ratchet the protocol state and key an output Rocca-S instance.
-  prf ← RoccaS::PRF(output, n)          // Generate n bytes of Rocca-S PRF.
-  state ← Process(state, LE64(n), 0x03) // Processes the output length with the Derive op code.
+  (state, output) ← Chain(state, 0x03)   // Ratchet the protocol state and key an output AEGIS-128L instance.
+  prf ← AEGIS_128L::PRF(output, n)       // Generate n bytes of AEGIS-128L PRF output.
+  state ← Process(state, LE64(n), 0x03)  // Processes the output length with the Derive op code.
   return (state, prf) 
 ```
 
 A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
-protocol's state prior to the operation provided SHA-256 is collision-resistant and RoccaS is PRF
-secure. The protocol's state after the operation is dependent on both the fact that the operation
-was a `Derive` operation as well as the number of bytes produced.
+protocol's state prior to the operation provided SHA-256 is collision-resistant and AEGIS-128L is
+PRF secure. The protocol's state after the operation is dependent on both the fact that the
+operation was a `Derive` operation as well as the number of bytes produced.
 
 `Derive` supports streaming output, thus a shorter `Derive` operation will return a prefix of a
 longer one (e.g.  `Derive(16)` and `Derive(32)` will share the same initial 16 bytes). Once the
@@ -153,15 +146,15 @@ operation is complete, however, the protocols' states will be different. If a us
 
 ### `Encrypt`/`Decrypt`
 
-`Encrypt` uses Rocca-S to encrypt a given plaintext with a key derived from the protocol's current
-state and updates the protocol's state with the final Rocca-S tag.
+`Encrypt` uses AEGIS-128L to encrypt a given plaintext with a key derived from the protocol's
+current state and updates the protocol's state with the final AEGIS-128L tag.
 
 ```text
 function Encrypt(state, plaintext):
-  (state, output) ← Chain(state, 0x04)            // Ratchet the protocol state and key an output Rocca-S instance.
-  ciphertext ← RoccaS::Encrypt(output, plaintext) // Encrypt the plaintext with Rocca-S.
-  tag ← RoccaS::Tag(output)                       // Calculate the Rocca-S tag.
-  state ← Process(state, tag, 0x04)               // Process the tag as input.
+  (state, output) ← Chain(state, 0x04)                // Ratchet the protocol state and key an output AEGIS-128L instance.
+  ciphertext ← AEGIS_128L::Encrypt(output, plaintext) // Encrypt the plaintext with AEGIS-128L.
+  tag ← AEGIS_128L::Tag(output)                       // Calculate the AEGIS-128L tag.
+  state ← Process(state, tag, 0x04)                   // Process the tag as input.
   return (state, ciphertext)
 ```
 
@@ -169,10 +162,10 @@ function Encrypt(state, plaintext):
 
 ```text
 function Decrypt(state, ciphertext):
-  (state, output) ← Chain(state, 0x04)            // Ratchet the protocol state and key an output Rocca-S instance.
-  plaintext ← RoccaS::Decrypt(output, ciphertext) // Decrypt the plaintext with Rocca-S.
-  tag ← RoccaS::Tag(output)                       // Calculate the Rocca-S tag.
-  state ← Process(state, tag, 0x04)               // Process the tag as input.
+  (state, output) ← Chain(state, 0x04)                // Ratchet the protocol state and key an output AEGIS-128L instance.
+  plaintext ← AEGIS_128L::Decrypt(output, ciphertext) // Decrypt the plaintext with AEGIS-128L.
+  tag ← AEGIS_128L::Tag(output)                       // Calculate the AEGIS-128L tag.
+  state ← Process(state, tag, 0x04)                   // Process the tag as input.
   return (state, plaintext)
 ```
 
@@ -182,8 +175,8 @@ First, both `Encrypt` and `Decrypt` use the same `Crypt` operation code to ensur
 the same state after both encrypting and decrypting data.
 
 Second, despite not updating the protocol state with either the plaintext or ciphertext, the
-inclusion of the output tag ensures the protocol's state is dependent on both because Rocca-S is
-compactly committing.
+inclusion of the output tag ensures the protocol's state is dependent on both because AEGIS-128L is
+compactly committing within the limits of a 128-bit tag.
 
 Third, `Crypt` operations provide no authentication by themselves. An attacker can modify a
 ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
@@ -202,20 +195,20 @@ beforehand.
 
 ### `Seal`/`Open`
 
-The `Seal` operation uses Rocca-S to encrypt a given plaintext with a key derived from the
-protocol's current state, updates the protocol's state with the final Rocca-S tag, and returns the
-ciphertext along with a truncated copy of the tag:
+The `Seal` operation uses AEGIS-128L to encrypt a given plaintext with a key derived from the
+protocol's current state, updates the protocol's state with the final AEGIS-128L tag, and returns
+the ciphertext along with the tag:
 
 ```text
 function Seal(state, plaintext):
-  (state, output) ← Chain(state, 0x05)            // Ratchet the protocol state and key an output Rocca-S instance.
-  ciphertext ← RoccaS::Encrypt(output, plaintext) // Encrypt the plaintext with Rocca-S.
-  tag ← RoccaS::Tag(output)                       // Calculate the Rocca-S tag.
-  state ← Process(state, tag, 0x05)               // Process the tag as input.
-  return (state, ciphertext, tag[..16])           // Return the ciphertext and the first half of the tag.
+  (state, output) ← Chain(state, 0x05)                // Ratchet the protocol state and key an output AEGIS-128L instance.
+  ciphertext ← AEGIS_128L::Encrypt(output, plaintext) // Encrypt the plaintext with AEGIS-128L.
+  tag ← AEGIS_128L::Tag(output)                       // Calculate the AEGIS-128L tag.
+  state ← Process(state, tag, 0x05)                   // Process the tag as input.
+  return (state, ciphertext, tag)                     // Return the ciphertext and the tag.
 ```
 
-This is essentially the same thing as the `Encrypt` operation but includes the Rocca-S tag in the
+This is essentially the same thing as the `Encrypt` operation but includes the AEGIS-128L tag in the
 ciphertext.
 
 The `Open` operation decrypts the ciphertext and compares the counterfactual tag against the tag
@@ -223,17 +216,17 @@ included with the ciphertext:
 
 ```text
 function Open(state, ciphertext, tag):
-  (state, output) ← Chain(state, 0x05)            // Ratchet the protocol state and key an output Rocca-S instance.
-  plaintext ← RoccaS::Decrypt(output, ciphertext) // Decrypt the plaintext with Rocca-S.
-  tag′ ← RoccaS::Tag(output)                      // Calculate the counterfactual Rocca-S tag.
-  state ← Process(state, tag′, 0x05)              // Process the tag as input.
-  if tag ≠ tag′[..16]:                            // If the tags are equal, the plaintext is authentic.
+  (state, output) ← Chain(state, 0x05)                // Ratchet the protocol state and key an output AEGIS-128L instance.
+  plaintext ← AEGIS_128L::Decrypt(output, ciphertext) // Decrypt the plaintext with AEGIS-128L.
+  tag′ ← AEGIS_128L::Tag(output)                      // Calculate the counterfactual AEGIS-128L tag.
+  state ← Process(state, tag′, 0x05)                  // Process the tag as input.
+  if tag ≠ tag′:                                      // If the tags are equal, the plaintext is authentic.
     return ⟂ 
   else:
     return (state, plaintext) 
 ```
 
-The resulting construction is CCA secure if Rocca-S is CCA secure.
+The resulting construction is CCA secure if AEGIS-128L is CCA secure.
 
 ### `Ratchet`
 
@@ -308,12 +301,12 @@ function Seal(key, nonce, ad, plaintext):
 
 The introduction of a nonce makes the scheme probabilistic (which is required for IND-CCA security).
 The final `Seal` operation closes over all inputs--key, nonce, associated data, and plaintext--which
-are also the values used to produce the ciphertext. Forging a tag here would imply that Rocca-S's
+are also the values used to produce the ciphertext. Forging a tag here would imply that AEGIS-128L's
 MAC construction is not sUF-CMA secure.
 
 In addition, this construction is compactly committing: finding a ciphertext and tag pair which
-successfully decrypts under multiple keys would imply that Rocca-S is not compactly committing, and
-the final tag serves as a commitment for the ciphertext.
+successfully decrypts under multiple keys would imply that AEGIS-128L is not key committing, and the
+final tag serves as a commitment for the ciphertext.
 
 Decryption uses the `Open` operation to decrypt:
 

@@ -1,4 +1,4 @@
-use lockstitch::{Protocol, TAG_LEN};
+use crate::{Protocol, TAG_LEN};
 use proptest::collection::vec;
 use proptest::prelude::*;
 

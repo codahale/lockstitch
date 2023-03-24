@@ -41,6 +41,14 @@ macro_rules! xor {
 
 pub(crate) use xor;
 
+macro_rules! and {
+    ($a:expr, $b:expr) => {{
+        unsafe { _mm_and_si128($a, $b) }
+    }};
+}
+
+pub(crate) use and;
+
 macro_rules! enc {
     ($a:expr, $b:expr) => {{
         unsafe { _mm_aesenc_si128($a, $b) }

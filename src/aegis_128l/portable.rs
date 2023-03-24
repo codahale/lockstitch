@@ -44,6 +44,23 @@ pub fn xor_block(a: AesBlock, b: AesBlock) -> AesBlock {
     out
 }
 
+macro_rules! and {
+    ($a:expr, $b:expr) => {{
+        and_block($a, $b)
+    }};
+}
+
+pub(crate) use and;
+
+#[inline(always)]
+pub fn and_block(a: AesBlock, b: AesBlock) -> AesBlock {
+    let mut out = AesBlock::default();
+    for ((z, x), y) in out.iter_mut().zip(a).zip(b) {
+        *z = x & y;
+    }
+    out
+}
+
 macro_rules! enc {
     ($a:expr, $b:expr) => {{
         let mut out = $a;

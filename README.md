@@ -3,10 +3,10 @@
 Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption) in
 complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, and Xoodyak's
-Cyclist mode, Lockstitch uses the [Rocca-S][] authenticated cipher and SHA-256 to provide 100+
+Cyclist mode, Lockstitch uses the [AEGIS-128L][] authenticated cipher and SHA-256 to provide 100+
 Gb/sec performance on modern processors at a 128-bit security level.
 
-[Rocca-S]: https://www.ietf.org/archive/id/draft-nakano-rocca-s-03.html
+[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-01.html
 
 ## ⚠️ WARNING: You should not use this. ⚠️
 
@@ -104,13 +104,13 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 * `asm`: Enables hand-coded assembly for SHA-256 for `x86`, `x86_64`, and `aarch64`. Enabled by
   default.
 * `hedge`: Enables hedged random value generation with `rand_core`. Enabled by default.
-* `portable`: Uses the portable `aes` crate for Rocca-S at a steep performance penalty.
+* `portable`: Uses the portable `aes` crate for AEGIS-128L at a steep performance penalty.
 * `std`: Enables features based on the Rust standard library. Enabled by default.
 
 ## Performance
 
-Lockstitch's SHA-256 and Rocca-S implementations benefit significantly from the use of specific CPU
-instructions.
+Lockstitch's SHA-256 and AEGIS-128L implementations benefit significantly from the use of specific
+CPU instructions.
 
 ### `x86`/`x86_64`
 
@@ -145,7 +145,6 @@ For more information on performance, see [`perf.md`](perf.md).
 
 Copyright © 2023 Coda Hale, Frank Denis
 
-Rocca-S implementation adapted from [rust-aegis](https://github.com/jedisct1/rust-aegis/) and
-[zig-rocca](https://github.com/jedisct1/zig-rocca-s/).
+AEGIS-128L implementation adapted from [rust-aegis](https://github.com/jedisct1/rust-aegis/).
 
 Distributed under the MIT License.

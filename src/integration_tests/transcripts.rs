@@ -1,4 +1,4 @@
-use lockstitch::{Protocol, TAG_LEN};
+use crate::{Protocol, TAG_LEN};
 use proptest::collection::vec;
 use proptest::prelude::*;
 
@@ -172,6 +172,8 @@ prop_compose! {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig::with_source_file("transcripts"))]
+
     /// Multiple applications of the same inputs must always produce the same outputs.
     #[test]
     fn determinism(t in transcript()) {
@@ -192,9 +194,10 @@ proptest! {
         prop_assert_ne!(a, b, "different transcripts produced equal outputs");
     }
 
-    /// For any transcript, reversible outputs (e.g. encrypt/decrypt) must be symmetric.
+    /// For any transcript, invertible operations (e.g. encrypt/decrypt, seal/open) must produce
+    /// matching outputs to inputs.
     #[test]
-    fn symmetry(t in invertible_transcript()) {
+    fn invertible(t in invertible_transcript()) {
         let (t_inv, a_d) = invert_transcript(&t);
         let (t_p, b_d) = invert_transcript(&t_inv);
 

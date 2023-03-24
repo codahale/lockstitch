@@ -14,12 +14,13 @@
     clippy::semicolon_if_nothing_returned
 )]
 
+use crate::aegis_128l::Aegis128L;
+
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
-use rocca_s::RoccaS;
 use sha2::digest::FixedOutputReset;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -30,7 +31,8 @@ pub mod design {}
 #[doc = include_str!("../perf.md")]
 pub mod perf {}
 
-mod rocca_s;
+mod aegis_128l;
+mod integration_tests;
 
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
@@ -174,8 +176,8 @@ impl Protocol {
         // Calculate the tag.
         let tag = output.tag();
 
-        // Append the first half of the tag to the ciphertext.
-        tag_out.copy_from_slice(&tag[..TAG_LEN]);
+        // Append the tag to the ciphertext.
+        tag_out.copy_from_slice(&tag);
 
         // Update the state with the tag and the operation code.
         self.process(&tag, Operation::AuthCrypt);
@@ -201,8 +203,8 @@ impl Protocol {
         // Update the state with the tag and the operation code.
         self.process(&tag_p, Operation::AuthCrypt);
 
-        // Check the tag against the first half of the counterfactual tah.
-        if tag.ct_eq(&tag_p[..TAG_LEN]).into() {
+        // Check the tag against the counterfactual tag.
+        if tag.ct_eq(&tag_p).into() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -257,31 +259,24 @@ impl Protocol {
         unreachable!("unable to hedge a valid value in 10,000 tries");
     }
 
-    /// Replace the protocol's state with derived output and return an operation-specific Rocca-S
+    /// Replace the protocol's state with derived output and return an operation-specific AEGIS-128L
     /// instance.
     #[inline(always)]
     #[must_use]
-    fn chain(&mut self, operation: Operation) -> RoccaS {
+    fn chain(&mut self, operation: Operation) -> Aegis128L {
         // Finalize the current state and reset it to an uninitialized state.
         let hash = self.state.finalize_fixed_reset();
 
-        // Use the hash of the current state as a key for a chain Rocca-S instance.
-        let mut chain = RoccaS::new(&hash.into(), &[Operation::Chain as u8; 16]);
-
-        // Generate 64 bytes of PRF output.
-        let mut prf = [0u8; 64];
-        chain.prf(&mut prf);
-
-        // Use the first 32 bytes as a chain key; use the second as an output key.
-        let (chain_key, output_key) = prf.split_at(32);
+        // Use the first 16 bytes as a chain key; use the second as an output key.
+        let (chain_key, output_key) = hash.split_at(16);
 
         // Initialize the current state with the chain key.
         self.state.update(chain_key);
-        self.end_op(Operation::Init, 32);
+        self.end_op(Operation::Init, 16);
 
-        // Return a Rocca-S instance keyed with the output key and using the operation code as a
+        // Return a AEGIS-128L instance keyed with the output key and using the operation code as a
         // nonce.
-        RoccaS::new(&output_key.try_into().expect("invalid key len"), &[operation as u8; 16])
+        Aegis128L::new(&output_key.try_into().expect("invalid output key"), &[operation as u8; 16])
     }
 
     // Process a single piece of input for an operation.
@@ -322,7 +317,6 @@ enum Operation {
     Crypt = 0x04,
     AuthCrypt = 0x05,
     Ratchet = 0x06,
-    Chain = 0x07,
 }
 
 #[cfg(all(test, feature = "std"))]
@@ -339,11 +333,11 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        expect!["33c45a7463fe3e49"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["0841563807acbde2"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        expect!["71b6a741da79ee5ffe77dc33182f3774bf38"].assert_eq(&hex::encode(plaintext));
+        expect!["c130dc9294fda918c1bd7f33dd1164786271"].assert_eq(&hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -352,10 +346,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(&mut sealed);
 
-        expect!["8236b7ed081a955e6f038da8c4899611bafcd5edf6c663b95ef7176c16279950f5de"]
+        expect!["a6c950f9f71c2cf4cc3dd41dc2064d11fe4cbc250e0b1d2748da65c91a7c0b9367b5"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["6d4660e6aba6c977"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["b235cfc5f0f99eab"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

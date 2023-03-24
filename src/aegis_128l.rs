@@ -138,54 +138,54 @@ impl Aegis128L {
     }
 
     #[cfg(test)]
-    fn absorb(&mut self, src: &Aligned<A16, [u8; 32]>) {
-        let msg0 = load!(src, ..16);
-        let msg1 = load!(src, 16..);
+    fn absorb(&mut self, xi: &Aligned<A16, [u8; 32]>) {
+        let msg0 = load!(xi, ..16);
+        let msg1 = load!(xi, 16..);
         self.update(msg0, msg1);
     }
 
     #[allow(unused_unsafe)]
-    fn enc_zeroes(&mut self, dst: &mut Aligned<A16, [u8; 32]>) {
+    fn enc_zeroes(&mut self, ci: &mut Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
-        store!(dst, ..16, z0);
-        store!(dst, 16.., z1);
+        store!(ci, ..16, z0);
+        store!(ci, 16.., z1);
         self.update(zero!(), zero!());
     }
 
     #[allow(unused_unsafe)]
-    fn enc(&mut self, dst: &mut Aligned<A16, [u8; 32]>, src: &Aligned<A16, [u8; 32]>) {
+    fn enc(&mut self, ci: &mut Aligned<A16, [u8; 32]>, xi: &Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
-        let msg0 = load!(src, ..16);
-        let msg1 = load!(src, 16..);
-        let c0 = xor!(msg0, z0);
-        let c1 = xor!(msg1, z1);
-        store!(dst, ..16, c0);
-        store!(dst, 16.., c1);
-        self.update(msg0, msg1);
+        let t0 = load!(xi, ..16);
+        let t1 = load!(xi, 16..);
+        let out0 = xor!(t0, z0);
+        let out1 = xor!(t1, z1);
+        store!(ci, ..16, out0);
+        store!(ci, 16.., out1);
+        self.update(t0, t1);
     }
 
     #[allow(unused_unsafe)]
-    fn dec(&mut self, dst: &mut Aligned<A16, [u8; 32]>, src: &Aligned<A16, [u8; 32]>) {
+    fn dec(&mut self, xi: &mut Aligned<A16, [u8; 32]>, ci: &Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
-        let c0 = load!(src, ..16);
-        let c1 = load!(src, 16..);
-        let msg0 = xor!(z0, c0);
-        let msg1 = xor!(z1, c1);
-        store!(dst, ..16, msg0);
-        store!(dst, 16.., msg1);
-        self.update(msg0, msg1);
+        let t0 = load!(ci, ..16);
+        let t1 = load!(ci, 16..);
+        let out0 = xor!(z0, t0);
+        let out1 = xor!(z1, t1);
+        store!(xi, ..16, out0);
+        store!(xi, 16.., out1);
+        self.update(out0, out1);
     }
 
     #[allow(unused_unsafe)]
-    fn dec_partial(&mut self, dst: &mut Aligned<A16, [u8; 32]>, src: &[u8]) {
+    fn dec_partial(&mut self, xi: &mut Aligned<A16, [u8; 32]>, ci: &[u8]) {
         let mut src_padded = Aligned::<A16, _>([0u8; 32]);
-        src_padded[..src.len()].copy_from_slice(src);
+        src_padded[..ci.len()].copy_from_slice(ci);
 
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
@@ -193,17 +193,17 @@ impl Aegis128L {
         let msg_padded0 = xor!(load!(&src_padded, ..16), z0);
         let msg_padded1 = xor!(load!(&src_padded, 16..), z1);
 
-        store!(dst, ..16, msg_padded0);
-        store!(dst, 16.., msg_padded1);
-        dst[src.len()..].fill(0);
+        store!(xi, ..16, msg_padded0);
+        store!(xi, 16.., msg_padded1);
+        xi[ci.len()..].fill(0);
 
-        let msg0 = load!(dst, ..16);
-        let msg1 = load!(dst, 16..);
+        let msg0 = load!(xi, ..16);
+        let msg1 = load!(xi, 16..);
         self.update(msg0, msg1);
     }
 
     #[allow(unused_unsafe)]
-    pub fn tag(&mut self) -> [u8; 16] {
+    pub fn finalize(&mut self) -> [u8; 16] {
         let mut sizes = Aligned::<A16, _>([0u8; 16]);
         sizes[..8].copy_from_slice(&(self.ad_len * 8).to_le_bytes());
         sizes[8..].copy_from_slice(&(self.mc_len * 8).to_le_bytes());
@@ -231,17 +231,17 @@ impl Aegis128L {
     }
 
     #[allow(unused_unsafe)]
-    fn update(&mut self, d1: AesBlock, d2: AesBlock) {
+    fn update(&mut self, m0: AesBlock, m1: AesBlock) {
         let blocks = &mut self.blocks;
         let tmp = blocks[7];
         blocks[7] = enc!(blocks[6], blocks[7]);
         blocks[6] = enc!(blocks[5], blocks[6]);
         blocks[5] = enc!(blocks[4], blocks[5]);
-        blocks[4] = xor!(enc!(blocks[3], blocks[4]), d2);
+        blocks[4] = xor!(enc!(blocks[3], blocks[4]), m1);
         blocks[3] = enc!(blocks[2], blocks[3]);
         blocks[2] = enc!(blocks[1], blocks[2]);
         blocks[1] = enc!(blocks[0], blocks[1]);
-        blocks[0] = xor!(enc!(tmp, blocks[0]), d1);
+        blocks[0] = xor!(enc!(tmp, blocks[0]), m0);
     }
 }
 
@@ -257,14 +257,14 @@ mod tests {
         let mut state = Aegis128L::new(key, nonce);
         state.ad(ad);
         state.encrypt(mc);
-        state.tag()
+        state.finalize()
     }
 
     fn decrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 16] {
         let mut state = Aegis128L::new(key, nonce);
         state.ad(ad);
         state.decrypt(mc);
-        state.tag()
+        state.finalize()
     }
 
     #[test]

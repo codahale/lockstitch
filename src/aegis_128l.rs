@@ -150,10 +150,10 @@ impl Aegis128L {
     #[allow(unused_unsafe)]
     fn enc_zeroes(&mut self, dst: &mut Aligned<A16, [u8; 32]>) {
         let blocks = &self.blocks;
-        let c0 = enc!(xor!(blocks[3], blocks[5]), blocks[0]);
-        let c1 = enc!(xor!(blocks[4], blocks[6]), blocks[2]);
-        store!(dst, ..16, c0);
-        store!(dst, 16.., c1);
+        let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
+        let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
+        store!(dst, ..16, z0);
+        store!(dst, 16.., z1);
         self.update(zero!(), zero!());
     }
 

@@ -333,7 +333,7 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        expect!["0841563807acbde2"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["1fc8624f782dd69f"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
@@ -349,7 +349,7 @@ mod tests {
         expect!["a6c950f9f71c2cf4cc3dd41dc2064d11fe4cbc250e0b1d2748da65c91a7c0b9367b5"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["b235cfc5f0f99eab"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["032530f327fa5ff0"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

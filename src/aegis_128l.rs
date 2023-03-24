@@ -278,7 +278,87 @@ mod tests {
         assert_eq!(tag_a, tag_b);
     }
 
+    #[test]
+    fn block_xor() {
+        let a = load!(&Aligned::<A16, _>(b"ayellowsubmarine"), ..);
+        let b = load!(&Aligned::<A16, _>(b"tuneintotheocho!"), ..);
+        let c = xor!(a, b);
+
+        let mut c_bytes = Aligned::<A16, _>([0u8; 16]);
+        store!(&mut c_bytes, .., c);
+
+        assert_eq!([21, 12, 11, 9, 5, 1, 3, 28, 1, 10, 8, 14, 17, 1, 1, 68], *c_bytes);
+    }
+
+    #[test]
+    fn block_and() {
+        let a = load!(&Aligned::<A16, _>(b"ayellowsubmarine"), ..);
+        let b = load!(&Aligned::<A16, _>(b"tuneintotheocho!"), ..);
+        let c = and!(a, b);
+
+        let mut c_bytes = Aligned::<A16, _>([0u8; 16]);
+        store!(&mut c_bytes, .., c);
+
+        assert_eq!(
+            [96, 113, 100, 100, 104, 110, 116, 99, 116, 96, 101, 97, 98, 104, 110, 33],
+            *c_bytes
+        );
+    }
+
     // from https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-01.html
+
+    #[test]
+    fn aes_round_test_vector() {
+        let a = load!(&Aligned::<A16, _>(hex!("000102030405060708090a0b0c0d0e0f")), ..);
+        let b = load!(&Aligned::<A16, _>(hex!("101112131415161718191a1b1c1d1e1f")), ..);
+        let out = enc!(a, b);
+        let mut c = Aligned::<A16, _>([0u8; 16]);
+        store!(&mut c, .., out);
+
+        assert_eq!(hex!("7a7b4e5638782546a8c0477a3b813f43"), *c);
+    }
+
+    #[test]
+    fn update_test_vector() {
+        let mut state = Aegis128L {
+            blocks: [
+                load!(&Aligned::<A16, _>(hex!("9b7e60b24cc873ea894ecc07911049a3")), ..),
+                load!(&Aligned::<A16, _>(hex!("330be08f35300faa2ebf9a7b0d274658")), ..),
+                load!(&Aligned::<A16, _>(hex!("7bbd5bd2b049f7b9b515cf26fbe7756c")), ..),
+                load!(&Aligned::<A16, _>(hex!("c35a00f55ea86c3886ec5e928f87db18")), ..),
+                load!(&Aligned::<A16, _>(hex!("9ebccafce87cab446396c4334592c91f")), ..),
+                load!(&Aligned::<A16, _>(hex!("58d83e31f256371e60fc6bb257114601")), ..),
+                load!(&Aligned::<A16, _>(hex!("1639b56ea322c88568a176585bc915de")), ..),
+                load!(&Aligned::<A16, _>(hex!("640818ffb57dc0fbc2e72ae93457e39a")), ..),
+            ],
+            ad_len: 0,
+            mc_len: 0,
+        };
+
+        let d1 = load!(&Aligned::<A16, _>(hex!("033e6975b94816879e42917650955aa0")), ..);
+        let d2 = load!(&Aligned::<A16, _>(hex!("033e6975b94816879e42917650955aa0")), ..);
+
+        state.update(d1, d2);
+
+        let mut blocks = [Aligned::<A16, _>([0u8; 16]); 8];
+        store!(&mut blocks[0], .., state.blocks[0]);
+        store!(&mut blocks[1], .., state.blocks[1]);
+        store!(&mut blocks[2], .., state.blocks[2]);
+        store!(&mut blocks[3], .., state.blocks[3]);
+        store!(&mut blocks[4], .., state.blocks[4]);
+        store!(&mut blocks[5], .., state.blocks[5]);
+        store!(&mut blocks[6], .., state.blocks[6]);
+        store!(&mut blocks[7], .., state.blocks[7]);
+
+        assert_eq!(hex!("596ab773e4433ca0127c73f60536769d"), *blocks[0]);
+        assert_eq!(hex!("790394041a3d26ab697bde865014652d"), *blocks[1]);
+        assert_eq!(hex!("38cf49e4b65248acd533041b64dd0611"), *blocks[2]);
+        assert_eq!(hex!("16d8e58748f437bfff1797f780337cee"), *blocks[3]);
+        assert_eq!(hex!("69761320f7dd738b281cc9f335ac2f5a"), *blocks[4]);
+        assert_eq!(hex!("a21746bb193a569e331e1aa985d0d729"), *blocks[5]);
+        assert_eq!(hex!("09d714e6fcf9177a8ed1cde7e3d259a6"), *blocks[6]);
+        assert_eq!(hex!("61279ba73167f0ab76f0a11bf203bdff"), *blocks[7]);
+    }
 
     #[test]
     fn test_vector_1() {

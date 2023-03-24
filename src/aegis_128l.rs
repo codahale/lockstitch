@@ -27,32 +27,29 @@ pub struct Aegis128L {
 
 impl Aegis128L {
     pub fn new(key: &[u8; 16], nonce: &[u8; 16]) -> Self {
-        let c1 = load!(
-            &Aligned::<A16, _>([
-                0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5,
-                0x28, 0xdd,
-            ]),
-            ..
-        );
-        let c2 = load!(
-            &Aligned::<A16, _>([
-                0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15, 0x22, 0x37, 0x59, 0x90, 0xe9,
-                0x79, 0x62,
-            ]),
-            ..
-        );
+        const C0: Aligned<A16, [u8; 16]> = Aligned::<A16, _>([
+            0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15, 0x22, 0x37, 0x59, 0x90, 0xe9,
+            0x79, 0x62,
+        ]);
+        const C1: Aligned<A16, [u8; 16]> = Aligned::<A16, _>([
+            0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5,
+            0x28, 0xdd,
+        ]);
+        let c0 = load!(&C0, ..);
+        let c1 = load!(&C1, ..);
         let key = load!(&Aligned::<A16, _>(*key), ..);
         let nonce = load!(&Aligned::<A16, _>(*nonce), ..);
         let blocks: [AesBlock; 8] = [
             xor!(key, nonce),
             c1,
-            c2,
+            c0,
             c1,
             xor!(key, nonce),
-            xor!(key, c2),
+            xor!(key, c0),
             xor!(key, c1),
-            xor!(key, c2),
+            xor!(key, c0),
         ];
+
         let mut state = Aegis128L { blocks, ad_len: 0, mc_len: 0 };
         for _ in 0..10 {
             state.update(nonce, key);

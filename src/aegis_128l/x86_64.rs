@@ -15,18 +15,17 @@ macro_rules! zero {
 pub(crate) use zero;
 
 macro_rules! load {
-    ($bytes:expr, $idx:expr) => {{
-        let bytes: &Aligned<A16, _> = $bytes;
-        unsafe { _mm_load_si128(bytes[$idx].as_ptr() as *const __m128i) }
+    ($bytes:expr) => {{
+        let block: &[u8] = $bytes; // N.B.: loads are broken without this aliasing
+        unsafe { _mm_loadu_si128(block.as_ptr() as *const __m128i) }
     }};
 }
 
 pub(crate) use load;
 
 macro_rules! store {
-    ($bytes:expr, $idx:expr, $block:expr) => {{
-        let bytes: &mut Aligned<A16, _> = $bytes;
-        unsafe { _mm_store_si128(bytes[$idx].as_mut_ptr() as *mut __m128i, $block) };
+    ($bytes:expr, $block:expr) => {{
+        unsafe { _mm_storeu_si128($bytes.as_mut_ptr() as *mut __m128i, $block) };
     }};
 }
 

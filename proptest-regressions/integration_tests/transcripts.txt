@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 91fb541c9adf8f6c7201b4bc18bc032a31eb19ed9fae1b5d343769036797977b # shrinks to t = Transcript { domain: "", inputs: [Encrypt([1]), Derive(16)] }
+cc 8ce32335c6eb55d98e39313eec7d2e265b8a57393f62da6e279fb27ae61fd595 # shrinks to t0 = Transcript { domain: "", inputs: [Derive(16)] }, t1 = Transcript { domain: "0", inputs: [Derive(16)] }

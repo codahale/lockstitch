@@ -9,18 +9,16 @@ macro_rules! zero {
 pub(crate) use zero;
 
 macro_rules! load {
-    ($bytes:expr, $idx:expr) => {{
-        let bytes: &Aligned<A16, _> = $bytes;
-        *AesBlock::from_slice(&bytes[$idx])
+    ($bytes:expr) => {{
+        *AesBlock::from_slice($bytes)
     }};
 }
 
 pub(crate) use load;
 
 macro_rules! store {
-    ($bytes:expr, $idx:expr, $block:expr) => {{
-        let bytes: &mut Aligned<A16, _> = $bytes;
-        bytes[$idx].copy_from_slice(&$block);
+    ($bytes:expr, $block:expr) => {{
+        $bytes.copy_from_slice(&$block);
     }};
 }
 

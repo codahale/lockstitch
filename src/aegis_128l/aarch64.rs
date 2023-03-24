@@ -11,18 +11,16 @@ macro_rules! zero {
 pub(crate) use zero;
 
 macro_rules! load {
-    ($bytes:expr,$idx:expr) => {{
-        let bytes: &Aligned<A16, _> = $bytes;
-        unsafe { vld1q_u8(bytes[$idx].as_ptr()) }
+    ($bytes:expr) => {{
+        unsafe { vld1q_u8($bytes.as_ptr()) }
     }};
 }
 
 pub(crate) use load;
 
 macro_rules! store {
-    ($bytes:expr, $idx:expr, $block:expr) => {{
-        let bytes: &mut Aligned<A16, _> = $bytes;
-        unsafe { vst1q_u8(bytes[$idx].as_mut_ptr(), $block) };
+    ($bytes:expr, $block:expr) => {{
+        unsafe { vst1q_u8($bytes.as_mut_ptr(), $block) };
     }};
 }
 

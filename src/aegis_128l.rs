@@ -1,5 +1,3 @@
-use aligned::{Aligned, A16};
-
 #[cfg(all(target_arch = "aarch64", not(feature = "portable")))]
 use self::aarch64::*;
 
@@ -27,18 +25,18 @@ pub struct Aegis128L {
 
 impl Aegis128L {
     pub fn new(key: &[u8; 16], nonce: &[u8; 16]) -> Self {
-        const C0: Aligned<A16, [u8; 16]> = Aligned::<A16, _>([
+        const C0: [u8; 16] = [
             0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15, 0x22, 0x37, 0x59, 0x90, 0xe9,
             0x79, 0x62,
-        ]);
-        const C1: Aligned<A16, [u8; 16]> = Aligned::<A16, _>([
+        ];
+        const C1: [u8; 16] = [
             0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5,
             0x28, 0xdd,
-        ]);
-        let c0 = load!(&C0, ..);
-        let c1 = load!(&C1, ..);
-        let key = load!(&Aligned::<A16, _>(*key), ..);
-        let nonce = load!(&Aligned::<A16, _>(*nonce), ..);
+        ];
+        let c0 = load!(&C0);
+        let c1 = load!(&C1);
+        let key = load!(key);
+        let nonce = load!(nonce);
         let blocks: [AesBlock; 8] = [
             xor!(key, nonce),
             c1,
@@ -59,7 +57,7 @@ impl Aegis128L {
 
     #[cfg(test)]
     pub fn ad(&mut self, ad: &[u8]) {
-        let mut src = Aligned::<A16, _>([0u8; 32]);
+        let mut src = [0u8; 32];
 
         let mut chunks = ad.chunks_exact(32);
         for chunk in chunks.by_ref() {
@@ -78,7 +76,7 @@ impl Aegis128L {
     }
 
     pub fn prf(&mut self, out: &mut [u8]) {
-        let mut dst = Aligned::<A16, _>([0u8; 32]);
+        let mut dst = [0u8; 32];
 
         let mut chunks = out.chunks_exact_mut(32);
         for chunk in chunks.by_ref() {
@@ -96,8 +94,8 @@ impl Aegis128L {
     }
 
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
-        let mut src = Aligned::<A16, _>([0u8; 32]);
-        let mut dst = Aligned::<A16, _>([0u8; 32]);
+        let mut src = [0u8; 32];
+        let mut dst = [0u8; 32];
 
         let mut chunks = in_out.chunks_exact_mut(32);
         for chunk in chunks.by_ref() {
@@ -118,8 +116,8 @@ impl Aegis128L {
     }
 
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
-        let mut src = Aligned::<A16, _>([0u8; 32]);
-        let mut dst = Aligned::<A16, _>([0u8; 32]);
+        let mut src = [0u8; 32];
+        let mut dst = [0u8; 32];
 
         let mut chunks = in_out.chunks_exact_mut(32);
         for chunk in chunks.by_ref() {
@@ -138,85 +136,84 @@ impl Aegis128L {
     }
 
     #[cfg(test)]
-    fn absorb(&mut self, xi: &Aligned<A16, [u8; 32]>) {
-        let msg0 = load!(xi, ..16);
-        let msg1 = load!(xi, 16..);
+    fn absorb(&mut self, xi: &[u8; 32]) {
+        let msg0 = load!(&xi[..16]);
+        let msg1 = load!(&xi[16..]);
         self.update(msg0, msg1);
     }
 
     #[allow(unused_unsafe)]
-    fn enc_zeroes(&mut self, ci: &mut Aligned<A16, [u8; 32]>) {
+    fn enc_zeroes(&mut self, ci: &mut [u8; 32]) {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
-        store!(ci, ..16, z0);
-        store!(ci, 16.., z1);
+        store!(&mut ci[..16], z0);
+        store!(&mut ci[16..], z1);
         self.update(zero!(), zero!());
     }
 
     #[allow(unused_unsafe)]
-    fn enc(&mut self, ci: &mut Aligned<A16, [u8; 32]>, xi: &Aligned<A16, [u8; 32]>) {
+    fn enc(&mut self, ci: &mut [u8; 32], xi: &[u8; 32]) {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
-        let t0 = load!(xi, ..16);
-        let t1 = load!(xi, 16..);
+        let t0 = load!(&xi[..16]);
+        let t1 = load!(&xi[16..]);
         let out0 = xor!(t0, z0);
         let out1 = xor!(t1, z1);
-        store!(ci, ..16, out0);
-        store!(ci, 16.., out1);
+        store!(&mut ci[..16], out0);
+        store!(&mut ci[16..], out1);
         self.update(t0, t1);
     }
 
     #[allow(unused_unsafe)]
-    fn dec(&mut self, xi: &mut Aligned<A16, [u8; 32]>, ci: &Aligned<A16, [u8; 32]>) {
+    fn dec(&mut self, xi: &mut [u8; 32], ci: &[u8; 32]) {
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
-        let t0 = load!(ci, ..16);
-        let t1 = load!(ci, 16..);
+        let t0 = load!(&ci[..16]);
+        let t1 = load!(&ci[16..]);
         let out0 = xor!(z0, t0);
         let out1 = xor!(z1, t1);
-        store!(xi, ..16, out0);
-        store!(xi, 16.., out1);
+        store!(&mut xi[..16], out0);
+        store!(&mut xi[16..], out1);
         self.update(out0, out1);
     }
 
     #[allow(unused_unsafe)]
-    fn dec_partial(&mut self, xi: &mut Aligned<A16, [u8; 32]>, ci: &[u8]) {
-        let mut src_padded = Aligned::<A16, _>([0u8; 32]);
+    fn dec_partial(&mut self, xi: &mut [u8; 32], ci: &[u8]) {
+        let mut src_padded = [0u8; 32];
         src_padded[..ci.len()].copy_from_slice(ci);
 
         let blocks = &self.blocks;
         let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
         let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
-        let msg_padded0 = xor!(load!(&src_padded, ..16), z0);
-        let msg_padded1 = xor!(load!(&src_padded, 16..), z1);
+        let msg_padded0 = xor!(load!(&src_padded[..16]), z0);
+        let msg_padded1 = xor!(load!(&src_padded[16..]), z1);
 
-        store!(xi, ..16, msg_padded0);
-        store!(xi, 16.., msg_padded1);
+        store!(&mut xi[..16], msg_padded0);
+        store!(&mut xi[16..], msg_padded1);
         xi[ci.len()..].fill(0);
 
-        let msg0 = load!(xi, ..16);
-        let msg1 = load!(xi, 16..);
+        let msg0 = load!(&xi[..16]);
+        let msg1 = load!(&xi[16..]);
         self.update(msg0, msg1);
     }
 
     #[allow(unused_unsafe)]
     pub fn finalize(&mut self) -> [u8; 16] {
-        let mut sizes = Aligned::<A16, _>([0u8; 16]);
+        let mut sizes = [0u8; 16];
         sizes[..8].copy_from_slice(&(self.ad_len * 8).to_le_bytes());
         sizes[8..].copy_from_slice(&(self.mc_len * 8).to_le_bytes());
-        let tmp = xor!(load!(&sizes, ..), self.blocks[2]);
+        let tmp = xor!(load!(&sizes), self.blocks[2]);
 
         for _ in 0..7 {
             self.update(tmp, tmp);
         }
 
-        let mut tag = Aligned::<A16, _>([0u8; 16]);
+        let mut tag = [0u8; 16];
         store!(
             &mut tag,
-            ..,
             xor!(
                 self.blocks[0],
                 self.blocks[1],
@@ -227,7 +224,7 @@ impl Aegis128L {
                 self.blocks[6]
             )
         );
-        *tag
+        tag
     }
 
     #[allow(unused_unsafe)]
@@ -280,28 +277,28 @@ mod tests {
 
     #[test]
     fn block_xor() {
-        let a = load!(&Aligned::<A16, _>(b"ayellowsubmarine"), ..);
-        let b = load!(&Aligned::<A16, _>(b"tuneintotheocho!"), ..);
+        let a = load!(b"ayellowsubmarine");
+        let b = load!(b"tuneintotheocho!");
         let c = xor!(a, b);
 
-        let mut c_bytes = Aligned::<A16, _>([0u8; 16]);
-        store!(&mut c_bytes, .., c);
+        let mut c_bytes = [0u8; 16];
+        store!(&mut c_bytes, c);
 
-        assert_eq!([21, 12, 11, 9, 5, 1, 3, 28, 1, 10, 8, 14, 17, 1, 1, 68], *c_bytes);
+        assert_eq!([21, 12, 11, 9, 5, 1, 3, 28, 1, 10, 8, 14, 17, 1, 1, 68], c_bytes);
     }
 
     #[test]
     fn block_and() {
-        let a = load!(&Aligned::<A16, _>(b"ayellowsubmarine"), ..);
-        let b = load!(&Aligned::<A16, _>(b"tuneintotheocho!"), ..);
+        let a = load!(b"ayellowsubmarine");
+        let b = load!(b"tuneintotheocho!");
         let c = and!(a, b);
 
-        let mut c_bytes = Aligned::<A16, _>([0u8; 16]);
-        store!(&mut c_bytes, .., c);
+        let mut c_bytes = [0u8; 16];
+        store!(&mut c_bytes, c);
 
         assert_eq!(
             [96, 113, 100, 100, 104, 110, 116, 99, 116, 96, 101, 97, 98, 104, 110, 33],
-            *c_bytes
+            c_bytes
         );
     }
 
@@ -309,55 +306,55 @@ mod tests {
 
     #[test]
     fn aes_round_test_vector() {
-        let a = load!(&Aligned::<A16, _>(hex!("000102030405060708090a0b0c0d0e0f")), ..);
-        let b = load!(&Aligned::<A16, _>(hex!("101112131415161718191a1b1c1d1e1f")), ..);
+        let a = load!(&hex!("000102030405060708090a0b0c0d0e0f"));
+        let b = load!(&hex!("101112131415161718191a1b1c1d1e1f"));
         let out = enc!(a, b);
-        let mut c = Aligned::<A16, _>([0u8; 16]);
-        store!(&mut c, .., out);
+        let mut c = [0u8; 16];
+        store!(&mut c, out);
 
-        assert_eq!(hex!("7a7b4e5638782546a8c0477a3b813f43"), *c);
+        assert_eq!(hex!("7a7b4e5638782546a8c0477a3b813f43"), c);
     }
 
     #[test]
     fn update_test_vector() {
         let mut state = Aegis128L {
             blocks: [
-                load!(&Aligned::<A16, _>(hex!("9b7e60b24cc873ea894ecc07911049a3")), ..),
-                load!(&Aligned::<A16, _>(hex!("330be08f35300faa2ebf9a7b0d274658")), ..),
-                load!(&Aligned::<A16, _>(hex!("7bbd5bd2b049f7b9b515cf26fbe7756c")), ..),
-                load!(&Aligned::<A16, _>(hex!("c35a00f55ea86c3886ec5e928f87db18")), ..),
-                load!(&Aligned::<A16, _>(hex!("9ebccafce87cab446396c4334592c91f")), ..),
-                load!(&Aligned::<A16, _>(hex!("58d83e31f256371e60fc6bb257114601")), ..),
-                load!(&Aligned::<A16, _>(hex!("1639b56ea322c88568a176585bc915de")), ..),
-                load!(&Aligned::<A16, _>(hex!("640818ffb57dc0fbc2e72ae93457e39a")), ..),
+                load!(&hex!("9b7e60b24cc873ea894ecc07911049a3")),
+                load!(&hex!("330be08f35300faa2ebf9a7b0d274658")),
+                load!(&hex!("7bbd5bd2b049f7b9b515cf26fbe7756c")),
+                load!(&hex!("c35a00f55ea86c3886ec5e928f87db18")),
+                load!(&hex!("9ebccafce87cab446396c4334592c91f")),
+                load!(&hex!("58d83e31f256371e60fc6bb257114601")),
+                load!(&hex!("1639b56ea322c88568a176585bc915de")),
+                load!(&hex!("640818ffb57dc0fbc2e72ae93457e39a")),
             ],
             ad_len: 0,
             mc_len: 0,
         };
 
-        let d1 = load!(&Aligned::<A16, _>(hex!("033e6975b94816879e42917650955aa0")), ..);
-        let d2 = load!(&Aligned::<A16, _>(hex!("033e6975b94816879e42917650955aa0")), ..);
+        let d1 = load!(&hex!("033e6975b94816879e42917650955aa0"));
+        let d2 = load!(&hex!("033e6975b94816879e42917650955aa0"));
 
         state.update(d1, d2);
 
-        let mut blocks = [Aligned::<A16, _>([0u8; 16]); 8];
-        store!(&mut blocks[0], .., state.blocks[0]);
-        store!(&mut blocks[1], .., state.blocks[1]);
-        store!(&mut blocks[2], .., state.blocks[2]);
-        store!(&mut blocks[3], .., state.blocks[3]);
-        store!(&mut blocks[4], .., state.blocks[4]);
-        store!(&mut blocks[5], .., state.blocks[5]);
-        store!(&mut blocks[6], .., state.blocks[6]);
-        store!(&mut blocks[7], .., state.blocks[7]);
+        let mut blocks = [[0u8; 16]; 8];
+        store!(&mut blocks[0], state.blocks[0]);
+        store!(&mut blocks[1], state.blocks[1]);
+        store!(&mut blocks[2], state.blocks[2]);
+        store!(&mut blocks[3], state.blocks[3]);
+        store!(&mut blocks[4], state.blocks[4]);
+        store!(&mut blocks[5], state.blocks[5]);
+        store!(&mut blocks[6], state.blocks[6]);
+        store!(&mut blocks[7], state.blocks[7]);
 
-        assert_eq!(hex!("596ab773e4433ca0127c73f60536769d"), *blocks[0]);
-        assert_eq!(hex!("790394041a3d26ab697bde865014652d"), *blocks[1]);
-        assert_eq!(hex!("38cf49e4b65248acd533041b64dd0611"), *blocks[2]);
-        assert_eq!(hex!("16d8e58748f437bfff1797f780337cee"), *blocks[3]);
-        assert_eq!(hex!("69761320f7dd738b281cc9f335ac2f5a"), *blocks[4]);
-        assert_eq!(hex!("a21746bb193a569e331e1aa985d0d729"), *blocks[5]);
-        assert_eq!(hex!("09d714e6fcf9177a8ed1cde7e3d259a6"), *blocks[6]);
-        assert_eq!(hex!("61279ba73167f0ab76f0a11bf203bdff"), *blocks[7]);
+        assert_eq!(hex!("596ab773e4433ca0127c73f60536769d"), blocks[0]);
+        assert_eq!(hex!("790394041a3d26ab697bde865014652d"), blocks[1]);
+        assert_eq!(hex!("38cf49e4b65248acd533041b64dd0611"), blocks[2]);
+        assert_eq!(hex!("16d8e58748f437bfff1797f780337cee"), blocks[3]);
+        assert_eq!(hex!("69761320f7dd738b281cc9f335ac2f5a"), blocks[4]);
+        assert_eq!(hex!("a21746bb193a569e331e1aa985d0d729"), blocks[5]);
+        assert_eq!(hex!("09d714e6fcf9177a8ed1cde7e3d259a6"), blocks[6]);
+        assert_eq!(hex!("61279ba73167f0ab76f0a11bf203bdff"), blocks[7]);
     }
 
     #[test]

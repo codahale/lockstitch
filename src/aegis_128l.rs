@@ -328,7 +328,7 @@ mod tests {
         let mut c = [0u8; 16];
         store!(&mut c, out);
 
-        assert_eq!(hex!("7a7b4e5638782546a8c0477a3b813f43"), c);
+        expect!["7a7b4e5638782546a8c0477a3b813f43"].assert_eq(&hex::encode(c));
     }
 
     #[test]
@@ -363,14 +363,14 @@ mod tests {
         store!(&mut blocks[6], state.blocks[6]);
         store!(&mut blocks[7], state.blocks[7]);
 
-        assert_eq!(hex!("596ab773e4433ca0127c73f60536769d"), blocks[0]);
-        assert_eq!(hex!("790394041a3d26ab697bde865014652d"), blocks[1]);
-        assert_eq!(hex!("38cf49e4b65248acd533041b64dd0611"), blocks[2]);
-        assert_eq!(hex!("16d8e58748f437bfff1797f780337cee"), blocks[3]);
-        assert_eq!(hex!("69761320f7dd738b281cc9f335ac2f5a"), blocks[4]);
-        assert_eq!(hex!("a21746bb193a569e331e1aa985d0d729"), blocks[5]);
-        assert_eq!(hex!("09d714e6fcf9177a8ed1cde7e3d259a6"), blocks[6]);
-        assert_eq!(hex!("61279ba73167f0ab76f0a11bf203bdff"), blocks[7]);
+        expect!["596ab773e4433ca0127c73f60536769d"].assert_eq(&hex::encode(blocks[0]));
+        expect!["790394041a3d26ab697bde865014652d"].assert_eq(&hex::encode(blocks[1]));
+        expect!["38cf49e4b65248acd533041b64dd0611"].assert_eq(&hex::encode(blocks[2]));
+        expect!["16d8e58748f437bfff1797f780337cee"].assert_eq(&hex::encode(blocks[3]));
+        expect!["69761320f7dd738b281cc9f335ac2f5a"].assert_eq(&hex::encode(blocks[4]));
+        expect!["a21746bb193a569e331e1aa985d0d729"].assert_eq(&hex::encode(blocks[5]));
+        expect!["09d714e6fcf9177a8ed1cde7e3d259a6"].assert_eq(&hex::encode(blocks[6]));
+        expect!["61279ba73167f0ab76f0a11bf203bdff"].assert_eq(&hex::encode(blocks[7]));
     }
 
     #[test]
@@ -384,8 +384,8 @@ mod tests {
             (msg, tag)
         };
 
-        assert_eq!(hex!("c1c0e58bd913006feba00f4b3cc3594e"), ct);
-        assert_eq!(hex!("abe0ece80c24868a226a35d16bdae37a"), tag);
+        expect!["c1c0e58bd913006feba00f4b3cc3594e"].assert_eq(&hex::encode(ct));
+        expect!["abe0ece80c24868a226a35d16bdae37a"].assert_eq(&hex::encode(tag));
     }
 
     #[test]
@@ -400,7 +400,7 @@ mod tests {
         };
 
         assert_eq!([0u8; 0], ct);
-        assert_eq!(hex!("c2b879a67def9d74e6c14f708bbcc9b4"), tag);
+        expect!["c2b879a67def9d74e6c14f708bbcc9b4"].assert_eq(&hex::encode(tag));
     }
 
     #[test]
@@ -424,7 +424,7 @@ mod tests {
             ),
             ct
         );
-        assert_eq!(hex!("cc6f3372f6aa1bb82388d695c3962d9a"), tag);
+        expect!["cc6f3372f6aa1bb82388d695c3962d9a"].assert_eq(&hex::encode(tag));
     }
 
     #[test]
@@ -438,8 +438,8 @@ mod tests {
             (msg, tag)
         };
 
-        assert_eq!(hex!("79d94593d8c2119d7e8fd9b8fc77"), ct);
-        assert_eq!(hex!("5c04b3dba849b2701effbe32c7f0fab7"), tag);
+        expect!["79d94593d8c2119d7e8fd9b8fc77"].assert_eq(&hex::encode(ct));
+        expect!["5c04b3dba849b2701effbe32c7f0fab7"].assert_eq(&hex::encode(tag));
     }
 
     #[test]
@@ -469,7 +469,7 @@ mod tests {
             ),
             ct
         );
-        assert_eq!(hex!("7542a745733014f9474417b337399507"), tag);
+        expect!["7542a745733014f9474417b337399507"].assert_eq(&hex::encode(tag));
     }
 
     #[test]

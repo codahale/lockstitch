@@ -480,7 +480,7 @@ mod tests {
         let mut ct = hex!("79d94593d8c2119d7e8fd9b8fc77");
         let tag = decrypt(&key, &nonce, &mut ct, &ad);
 
-        assert_ne!(hex!("5c04b3dba849b2701effbe32c7f0fab7"), tag);
+        assert_ne!("5c04b3dba849b2701effbe32c7f0fab7", hex::encode(tag));
     }
 
     #[test]
@@ -491,7 +491,7 @@ mod tests {
         let mut ct = hex!("79d94593d8c2119d7e8fd9b8fc78");
         let tag = decrypt(&key, &nonce, &mut ct, &ad);
 
-        assert_ne!(hex!("5c04b3dba849b2701effbe32c7f0fab7"), tag);
+        assert_ne!("5c04b3dba849b2701effbe32c7f0fab7", hex::encode(tag));
     }
 
     #[test]
@@ -502,7 +502,7 @@ mod tests {
         let mut ct = hex!("79d94593d8c2119d7e8fd9b8fc77");
         let tag = decrypt(&key, &nonce, &mut ct, &ad);
 
-        assert_ne!(hex!("5c04b3dba849b2701effbe32c7f0fab7"), tag);
+        assert_ne!("5c04b3dba849b2701effbe32c7f0fab7", hex::encode(tag));
     }
 
     #[test]
@@ -513,7 +513,7 @@ mod tests {
         let mut ct = hex!("79d94593d8c2119d7e8fd9b8fc77");
         let tag = decrypt(&key, &nonce, &mut ct, &ad);
 
-        assert_ne!(hex!("6c04b3dba849b2701effbe32c7f0fab8"), tag);
+        assert_ne!("6c04b3dba849b2701effbe32c7f0fab8", hex::encode(tag));
     }
 
     proptest! {

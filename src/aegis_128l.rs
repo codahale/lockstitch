@@ -251,6 +251,7 @@ impl Aegis128L {
 mod tests {
     use super::*;
 
+    use expect_test::expect;
     use hex_literal::hex;
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -289,7 +290,20 @@ mod tests {
         let mut c_bytes = [0u8; 16];
         store!(&mut c_bytes, c);
 
-        assert_eq!([21, 12, 11, 9, 5, 1, 3, 28, 1, 10, 8, 14, 17, 1, 1, 68], c_bytes);
+        expect!["150c0b090501031c010a080e11010144"].assert_eq(&hex::encode(c_bytes));
+    }
+
+    #[test]
+    fn block_xor3() {
+        let a = load!(b"ayellowsubmarine");
+        let b = load!(b"tuneintotheocho!");
+        let c = load!(b"mambonumbereight");
+        let d = xor!(a, b, c);
+
+        let mut d_bytes = [0u8; 16];
+        store!(&mut d_bytes, d);
+
+        expect!["786d666b6a6f7671636f7a6b78666930"].assert_eq(&hex::encode(d_bytes));
     }
 
     #[test]
@@ -301,10 +315,7 @@ mod tests {
         let mut c_bytes = [0u8; 16];
         store!(&mut c_bytes, c);
 
-        assert_eq!(
-            [96, 113, 100, 100, 104, 110, 116, 99, 116, 96, 101, 97, 98, 104, 110, 33],
-            c_bytes
-        );
+        expect!["60716464686e74637460656162686e21"].assert_eq(&hex::encode(c_bytes));
     }
 
     // from https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-01.html

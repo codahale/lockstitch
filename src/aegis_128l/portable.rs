@@ -25,9 +25,11 @@ macro_rules! store {
 pub(crate) use store;
 
 macro_rules! xor {
-    ($a:expr) => {{$a}};
-    ($a:expr, $($rest:expr),*) => {{
-        xor_block($a, xor!($($rest), *))
+    ($a:expr, $b:expr) => {{
+        xor_block($a, $b)
+    }};
+    ($a:expr, $b:expr, $c:expr) => {{
+        xor_block($a, xor!($b, $c))
     }};
 }
 

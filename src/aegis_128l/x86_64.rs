@@ -32,9 +32,11 @@ macro_rules! store {
 pub(crate) use store;
 
 macro_rules! xor {
-    ($a:expr) => {{$a}};
-    ($a:expr, $($rest:expr),*) => {{
-        unsafe { _mm_xor_si128($a, xor!($($rest), *)) }
+    ($a:expr, $b:expr) => {{
+        unsafe { _mm_xor_si128($a, $b) }
+    }};
+    ($a:expr, $b:expr, $c:expr) => {{
+        unsafe { _mm_xor_si128($a, xor!($b, $c)) }
     }};
 }
 

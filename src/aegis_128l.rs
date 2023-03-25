@@ -223,12 +223,8 @@ impl Aegis128L {
         store!(
             &mut tag,
             xor!(
-                self.blocks[0],
-                self.blocks[1],
-                self.blocks[2],
-                self.blocks[3],
-                self.blocks[4],
-                self.blocks[5],
+                xor!(self.blocks[0], self.blocks[1], self.blocks[2]),
+                xor!(self.blocks[3], self.blocks[4], self.blocks[5]),
                 self.blocks[6]
             )
         );

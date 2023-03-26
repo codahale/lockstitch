@@ -152,9 +152,8 @@ impl Aegis128L {
 
     #[allow(unused_unsafe)]
     fn enc_zeroes(&mut self, ci: &mut [u8; 32]) {
-        let blocks = &self.blocks;
-        let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
-        let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
+        let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
+        let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
         store!(&mut ci[..16], z0);
         store!(&mut ci[16..], z1);
         self.update(zero!(), zero!());
@@ -162,9 +161,8 @@ impl Aegis128L {
 
     #[allow(unused_unsafe)]
     fn enc(&mut self, ci: &mut [u8; 32], xi: &[u8; 32]) {
-        let blocks = &self.blocks;
-        let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
-        let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
+        let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
+        let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
         let t0 = load!(&xi[..16]);
         let t1 = load!(&xi[16..]);
         let out0 = xor!(t0, z0);
@@ -176,9 +174,8 @@ impl Aegis128L {
 
     #[allow(unused_unsafe)]
     fn dec(&mut self, xi: &mut [u8; 32], ci: &[u8; 32]) {
-        let blocks = &self.blocks;
-        let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
-        let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
+        let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
+        let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
         let t0 = load!(&ci[..16]);
         let t1 = load!(&ci[16..]);
         let out0 = xor!(z0, t0);
@@ -190,12 +187,11 @@ impl Aegis128L {
 
     #[allow(unused_unsafe)]
     fn dec_partial(&mut self, xi: &mut [u8; 32], ci: &[u8]) {
+        let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
+        let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
+
         let mut src_padded = [0u8; 32];
         src_padded[..ci.len()].copy_from_slice(ci);
-
-        let blocks = &self.blocks;
-        let z0 = xor!(blocks[6], blocks[1], and!(blocks[2], blocks[3]));
-        let z1 = xor!(blocks[2], blocks[5], and!(blocks[6], blocks[7]));
         let msg_padded0 = xor!(load!(&src_padded[..16]), z0);
         let msg_padded1 = xor!(load!(&src_padded[16..]), z1);
 

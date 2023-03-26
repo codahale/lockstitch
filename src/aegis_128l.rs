@@ -233,17 +233,16 @@ impl Aegis128L {
 
     #[allow(unused_unsafe)]
     fn update(&mut self, m0: AesBlock, m1: AesBlock) {
-        let blocks = &mut self.blocks;
-        // Keep a temporary copy of block 7 so we can do in-place updates.
-        let tmp = blocks[7];
-        blocks[7] = enc!(blocks[6], blocks[7]);
-        blocks[6] = enc!(blocks[5], blocks[6]);
-        blocks[5] = enc!(blocks[4], blocks[5]);
-        blocks[4] = xor!(enc!(blocks[3], blocks[4]), m1);
-        blocks[3] = enc!(blocks[2], blocks[3]);
-        blocks[2] = enc!(blocks[1], blocks[2]);
-        blocks[1] = enc!(blocks[0], blocks[1]);
-        blocks[0] = xor!(enc!(tmp, blocks[0]), m0);
+        self.blocks = [
+            xor!(enc!(self.blocks[7], self.blocks[0]), m0), // S0
+            enc!(self.blocks[0], self.blocks[1]),           // S1
+            enc!(self.blocks[1], self.blocks[2]),           // S2
+            enc!(self.blocks[2], self.blocks[3]),           // S3
+            xor!(enc!(self.blocks[3], self.blocks[4]), m1), // S4
+            enc!(self.blocks[4], self.blocks[5]),           // S5
+            enc!(self.blocks[5], self.blocks[6]),           // S6
+            enc!(self.blocks[6], self.blocks[7]),           // S7
+        ];
     }
 }
 

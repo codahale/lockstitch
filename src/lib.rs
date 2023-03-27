@@ -35,7 +35,7 @@ mod aegis_128l;
 mod integration_tests;
 
 /// The length of an authentication tag in bytes.
-pub const TAG_LEN: usize = 16;
+pub const TAG_LEN: usize = aegis_128l::AES_BLOCK_LEN;
 
 /// A stateful object providing fine-grained symmetric-key cryptographic services like hashing,
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.

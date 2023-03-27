@@ -1,3 +1,5 @@
+use core::mem;
+
 #[cfg(all(target_arch = "aarch64", not(feature = "portable")))]
 use self::aarch64::*;
 
@@ -16,6 +18,12 @@ mod portable;
 #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "portable")))]
 mod x86_64;
 
+/// The length of an AEGIS-128L block.
+pub const BLOCK_LEN: usize = 32;
+
+/// The length of an AES block.
+pub const AES_BLOCK_LEN: usize = 16;
+
 #[derive(Debug, Clone)]
 pub struct Aegis128L {
     blocks: [AesBlock; 8],
@@ -24,7 +32,7 @@ pub struct Aegis128L {
 }
 
 impl Aegis128L {
-    pub fn new(key: &[u8; 16], nonce: &[u8; 16]) -> Self {
+    pub fn new(key: &[u8; AES_BLOCK_LEN], nonce: &[u8; AES_BLOCK_LEN]) -> Self {
         // Initialize constants.
         let c0 = load!(&[
             0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15, 0x22, 0x37, 0x59, 0x90, 0xe9,
@@ -65,14 +73,16 @@ impl Aegis128L {
 
     #[cfg(test)]
     pub fn ad(&mut self, ad: &[u8]) {
-        let mut xi = [0u8; 32];
+        let mut xi = [0u8; BLOCK_LEN];
 
-        let mut chunks = ad.chunks_exact(32);
+        // Process whole blocks of associated data.
+        let mut chunks = ad.chunks_exact(BLOCK_LEN);
         for chunk in chunks.by_ref() {
             xi.copy_from_slice(chunk);
             self.absorb(&xi);
         }
 
+        // Process the remainder of the associated data, if any.
         let chunk = chunks.remainder();
         if !chunk.is_empty() {
             xi.fill(0);
@@ -84,14 +94,16 @@ impl Aegis128L {
     }
 
     pub fn prf(&mut self, out: &mut [u8]) {
-        let mut ci = [0u8; 32];
+        let mut ci = [0u8; BLOCK_LEN];
 
-        let mut chunks = out.chunks_exact_mut(32);
+        // Process whole blocks of output.
+        let mut chunks = out.chunks_exact_mut(BLOCK_LEN);
         for chunk in chunks.by_ref() {
             self.enc_zeroes(&mut ci);
             chunk.copy_from_slice(ci.as_slice());
         }
 
+        // Process the remainder of the output, if any.
         let chunk = chunks.into_remainder();
         if !chunk.is_empty() {
             self.enc_zeroes(&mut ci);
@@ -102,16 +114,18 @@ impl Aegis128L {
     }
 
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
-        let mut xi = [0u8; 32];
-        let mut ci = [0u8; 32];
+        let mut xi = [0u8; BLOCK_LEN];
+        let mut ci = [0u8; BLOCK_LEN];
 
-        let mut chunks = in_out.chunks_exact_mut(32);
+        // Process whole blocks of plaintext.
+        let mut chunks = in_out.chunks_exact_mut(BLOCK_LEN);
         for chunk in chunks.by_ref() {
             xi.copy_from_slice(chunk);
             self.enc(&mut ci, &xi);
             chunk.copy_from_slice(ci.as_slice());
         }
 
+        // Process the remainder of the plaintext, if any.
         let chunk = chunks.into_remainder();
         if !chunk.is_empty() {
             xi.fill(0);
@@ -124,16 +138,18 @@ impl Aegis128L {
     }
 
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
-        let mut ci = [0u8; 32];
-        let mut xi = [0u8; 32];
+        let mut ci = [0u8; BLOCK_LEN];
+        let mut xi = [0u8; BLOCK_LEN];
 
-        let mut chunks = in_out.chunks_exact_mut(32);
+        // Process whole blocks of ciphertext.
+        let mut chunks = in_out.chunks_exact_mut(BLOCK_LEN);
         for chunk in chunks.by_ref() {
             ci.copy_from_slice(chunk);
             self.dec(&mut xi, &ci);
             chunk.copy_from_slice(xi.as_slice());
         }
 
+        // Process the remainder of the ciphertext, if any.
         let chunk = chunks.into_remainder();
         if !chunk.is_empty() {
             self.dec_partial(&mut xi, chunk);
@@ -144,18 +160,18 @@ impl Aegis128L {
     }
 
     #[cfg(test)]
-    fn absorb(&mut self, xi: &[u8; 32]) {
+    fn absorb(&mut self, xi: &[u8; BLOCK_LEN]) {
         // Split the input into two blocks.
-        let (xi0, xi1) = xi.split_at(16);
+        let (xi0, xi1) = xi.split_at(AES_BLOCK_LEN);
 
         // Update the cipher state with the two blocks.
         self.update(load!(xi0), load!(xi1));
     }
 
     #[allow(unused_unsafe)]
-    fn enc_zeroes(&mut self, ci: &mut [u8; 32]) {
+    fn enc_zeroes(&mut self, ci: &mut [u8; BLOCK_LEN]) {
         // Split the output into blocks.
-        let (ci0, ci1) = ci.split_at_mut(16);
+        let (ci0, ci1) = ci.split_at_mut(AES_BLOCK_LEN);
 
         // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
@@ -170,10 +186,10 @@ impl Aegis128L {
     }
 
     #[allow(unused_unsafe)]
-    fn enc(&mut self, ci: &mut [u8; 32], xi: &[u8; 32]) {
+    fn enc(&mut self, ci: &mut [u8; BLOCK_LEN], xi: &[u8; BLOCK_LEN]) {
         // Split the output and input into blocks.
-        let (ci0, ci1) = ci.split_at_mut(16);
-        let (xi0, xi1) = xi.split_at(16);
+        let (ci0, ci1) = ci.split_at_mut(AES_BLOCK_LEN);
+        let (xi0, xi1) = xi.split_at(AES_BLOCK_LEN);
 
         // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
@@ -196,10 +212,10 @@ impl Aegis128L {
     }
 
     #[allow(unused_unsafe)]
-    fn dec(&mut self, xi: &mut [u8; 32], ci: &[u8; 32]) {
+    fn dec(&mut self, xi: &mut [u8; BLOCK_LEN], ci: &[u8; BLOCK_LEN]) {
         // Split the output and input into blocks.
-        let (ci0, ci1) = ci.split_at(16);
-        let (xi0, xi1) = xi.split_at_mut(16);
+        let (ci0, ci1) = ci.split_at(AES_BLOCK_LEN);
+        let (xi0, xi1) = xi.split_at_mut(AES_BLOCK_LEN);
 
         // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
@@ -222,14 +238,14 @@ impl Aegis128L {
     }
 
     #[allow(unused_unsafe)]
-    fn dec_partial(&mut self, xi: &mut [u8; 32], ci: &[u8]) {
+    fn dec_partial(&mut self, xi: &mut [u8; BLOCK_LEN], ci: &[u8]) {
         // Pad the ciphertext with zeros to form two blocks.
-        let mut ci_padded = [0u8; 32];
+        let mut ci_padded = [0u8; BLOCK_LEN];
         ci_padded[..ci.len()].copy_from_slice(ci);
 
         // Split the output and padded input into blocks.
-        let (xi0, xi1) = xi.split_at_mut(16);
-        let (ci0, ci1) = ci_padded.split_at(16);
+        let (xi0, xi1) = xi.split_at_mut(AES_BLOCK_LEN);
+        let (ci0, ci1) = ci_padded.split_at(AES_BLOCK_LEN);
 
         // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
@@ -250,17 +266,17 @@ impl Aegis128L {
 
         // Re-split the padding-less plaintext output, load it into blocks, and use it to update the
         // state.
-        let (xi0, xi1) = xi.split_at_mut(16);
+        let (xi0, xi1) = xi.split_at_mut(AES_BLOCK_LEN);
         let msg0 = load!(xi0);
         let msg1 = load!(xi1);
         self.update(msg0, msg1);
     }
 
     #[allow(unused_unsafe)]
-    pub fn finalize(&mut self) -> [u8; 16] {
+    pub fn finalize(&mut self) -> [u8; AES_BLOCK_LEN] {
         // Create a block from the associated data and message lengths, in bits.
-        let mut sizes = [0u8; 16];
-        let (ad_block, mc_block) = sizes.split_at_mut(8);
+        let mut sizes = [0u8; AES_BLOCK_LEN];
+        let (ad_block, mc_block) = sizes.split_at_mut(mem::size_of::<u64>());
         ad_block.copy_from_slice(&(self.ad_len * 8).to_le_bytes());
         mc_block.copy_from_slice(&(self.mc_len * 8).to_le_bytes());
         let sizes = load!(&sizes);
@@ -272,7 +288,7 @@ impl Aegis128L {
         }
 
         // XOR all the state blocks into a single block and use it as the tag.
-        let mut tag = [0u8; 16];
+        let mut tag = [0u8; AES_BLOCK_LEN];
         store!(
             &mut tag,
             xor!(

@@ -145,76 +145,133 @@ impl Aegis128L {
 
     #[cfg(test)]
     fn absorb(&mut self, xi: &[u8; 32]) {
-        let msg0 = load!(&xi[..16]);
-        let msg1 = load!(&xi[16..]);
-        self.update(msg0, msg1);
+        // Split the input into two blocks.
+        let (xi0, xi1) = xi.split_at(16);
+
+        // Update the cipher state with the two blocks.
+        self.update(load!(xi0), load!(xi1));
     }
 
     #[allow(unused_unsafe)]
     fn enc_zeroes(&mut self, ci: &mut [u8; 32]) {
+        // Split the output into blocks.
+        let (ci0, ci1) = ci.split_at_mut(16);
+
+        // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
         let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
-        store!(&mut ci[..16], z0);
-        store!(&mut ci[16..], z1);
+
+        // Store the keystream blocks in the output.
+        store!(ci0, z0);
+        store!(ci1, z1);
+
+        // Update the cipher state as if two all-zero blocks were encrypted.
         self.update(zero!(), zero!());
     }
 
     #[allow(unused_unsafe)]
     fn enc(&mut self, ci: &mut [u8; 32], xi: &[u8; 32]) {
+        // Split the output and input into blocks.
+        let (ci0, ci1) = ci.split_at_mut(16);
+        let (xi0, xi1) = xi.split_at(16);
+
+        // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
         let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
-        let t0 = load!(&xi[..16]);
-        let t1 = load!(&xi[16..]);
+
+        // Load the plaintext blocks.
+        let t0 = load!(xi0);
+        let t1 = load!(xi1);
+
+        // XOR the plaintext blocks with the keystream to produce ciphertext blocks.
         let out0 = xor!(t0, z0);
         let out1 = xor!(t1, z1);
-        store!(&mut ci[..16], out0);
-        store!(&mut ci[16..], out1);
+
+        // Store ciphertext blocks in the output slice.
+        store!(ci0, out0);
+        store!(ci1, out1);
+
+        // Update the state with the plaintext blocks.
         self.update(t0, t1);
     }
 
     #[allow(unused_unsafe)]
     fn dec(&mut self, xi: &mut [u8; 32], ci: &[u8; 32]) {
+        // Split the output and input into blocks.
+        let (ci0, ci1) = ci.split_at(16);
+        let (xi0, xi1) = xi.split_at_mut(16);
+
+        // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
         let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
-        let t0 = load!(&ci[..16]);
-        let t1 = load!(&ci[16..]);
+
+        // Load the ciphertext blocks.
+        let t0 = load!(ci0);
+        let t1 = load!(ci1);
+
+        // XOR the ciphertext blocks with the keystream to produce plaintext blocks.
         let out0 = xor!(z0, t0);
         let out1 = xor!(z1, t1);
-        store!(&mut xi[..16], out0);
-        store!(&mut xi[16..], out1);
+
+        // Store plaintext blocks in the output slice.
+        store!(xi0, out0);
+        store!(xi1, out1);
+
+        // Update the state with the plaintext blocks.
         self.update(out0, out1);
     }
 
     #[allow(unused_unsafe)]
     fn dec_partial(&mut self, xi: &mut [u8; 32], ci: &[u8]) {
+        // Pad the ciphertext with zeros to form two blocks.
+        let mut ci_padded = [0u8; 32];
+        ci_padded[..ci.len()].copy_from_slice(ci);
+
+        // Split the output and padded input into blocks.
+        let (xi0, xi1) = xi.split_at_mut(16);
+        let (ci0, ci1) = ci_padded.split_at(16);
+
+        // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
         let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
 
-        let mut src_padded = [0u8; 32];
-        src_padded[..ci.len()].copy_from_slice(ci);
-        let msg_padded0 = xor!(load!(&src_padded[..16]), z0);
-        let msg_padded1 = xor!(load!(&src_padded[16..]), z1);
+        // Load the padded ciphertext blocks.
+        let t0 = load!(ci0);
+        let t1 = load!(ci1);
 
-        store!(&mut xi[..16], msg_padded0);
-        store!(&mut xi[16..], msg_padded1);
+        // XOR the ciphertext blocks with the keystream to produce padded plaintext blocks.
+        let out0 = xor!(t0, z0);
+        let out1 = xor!(t1, z1);
+
+        // Store plaintext blocks in the output slice and zero out the padding.
+        store!(xi0, out0);
+        store!(xi1, out1);
         xi[ci.len()..].fill(0);
 
-        let msg0 = load!(&xi[..16]);
-        let msg1 = load!(&xi[16..]);
+        // Re-split the padding-less plaintext output, load it into blocks, and use it to update the
+        // state.
+        let (xi0, xi1) = xi.split_at_mut(16);
+        let msg0 = load!(xi0);
+        let msg1 = load!(xi1);
         self.update(msg0, msg1);
     }
 
     #[allow(unused_unsafe)]
     pub fn finalize(&mut self) -> [u8; 16] {
+        // Create a block from the associated data and message lengths, in bits.
         let mut sizes = [0u8; 16];
-        sizes[..8].copy_from_slice(&(self.ad_len * 8).to_le_bytes());
-        sizes[8..].copy_from_slice(&(self.mc_len * 8).to_le_bytes());
-        let t = xor!(load!(&sizes), self.blocks[2]);
+        let (ad_block, mc_block) = sizes.split_at_mut(8);
+        ad_block.copy_from_slice(&(self.ad_len * 8).to_le_bytes());
+        mc_block.copy_from_slice(&(self.mc_len * 8).to_le_bytes());
+        let sizes = load!(&sizes);
 
+        // XOR the size block with the 3rd state block and update the state with that value.
+        let t = xor!(sizes, self.blocks[2]);
         for _ in 0..7 {
             self.update(t, t);
         }
 
+        // XOR all the state blocks into a single block and use it as the tag.
         let mut tag = [0u8; 16];
         store!(
             &mut tag,

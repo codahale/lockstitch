@@ -339,17 +339,6 @@ mod tests {
     }
 
     #[test]
-    fn round_trip() {
-        let key = &[12; 16];
-        let nonce = &[13; 16];
-        let mut in_out = [69u8; 17];
-        let tag_a = encrypt(key, nonce, &mut in_out, &[69]);
-        let tag_b = decrypt(key, nonce, &mut in_out, &[69]);
-        assert_eq!(in_out, [69u8; 17]);
-        assert_eq!(tag_a, tag_b);
-    }
-
-    #[test]
     fn block_xor() {
         let a = load!(b"ayellowsubmarine");
         let b = load!(b"tuneintotheocho!");
@@ -586,7 +575,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn symmetric(
+        fn round_trip(
             k: [u8; 16],
             n: [u8; 16],
             ad in vec(any::<u8>(), 0..200),

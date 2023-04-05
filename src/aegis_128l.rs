@@ -275,11 +275,13 @@ impl Aegis128L {
     #[allow(unused_unsafe)]
     pub fn finalize(&mut self) -> [u8; AES_BLOCK_LEN] {
         // Create a block from the associated data and message lengths, in bits.
-        let mut sizes = [0u8; AES_BLOCK_LEN];
-        let (ad_block, mc_block) = sizes.split_at_mut(mem::size_of::<u64>());
-        ad_block.copy_from_slice(&(self.ad_len * 8).to_le_bytes());
-        mc_block.copy_from_slice(&(self.mc_len * 8).to_le_bytes());
-        let sizes = load!(&sizes);
+        let sizes = {
+            let mut sizes = [0u8; AES_BLOCK_LEN];
+            let (ad_block, mc_block) = sizes.split_at_mut(mem::size_of::<u64>());
+            ad_block.copy_from_slice(&(self.ad_len * 8).to_le_bytes());
+            mc_block.copy_from_slice(&(self.mc_len * 8).to_le_bytes());
+            load!(&sizes)
+        };
 
         // XOR the size block with the 3rd state block and update the state with that value.
         let t = xor!(sizes, self.blocks[2]);

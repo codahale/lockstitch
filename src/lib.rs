@@ -271,8 +271,7 @@ impl Protocol {
         let (chain_key, output_key) = hash.split_at(16);
 
         // Initialize the current state with the chain key.
-        self.state.update(chain_key);
-        self.end_op(Operation::Init, 16);
+        self.process(chain_key, Operation::Chain);
 
         // Return a AEGIS-128L instance keyed with the output key and using the operation code as a
         // nonce.
@@ -317,6 +316,7 @@ enum Operation {
     Crypt = 0x04,
     AuthCrypt = 0x05,
     Ratchet = 0x06,
+    Chain = 0x07,
 }
 
 #[cfg(all(test, feature = "std"))]
@@ -337,7 +337,7 @@ mod tests {
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        expect!["c130dc9294fda918c1bd7f33dd1164786271"].assert_eq(&hex::encode(plaintext));
+        expect!["dc42f54a52dba16d523935c9aa2ece29cf6e"].assert_eq(&hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -346,10 +346,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(&mut sealed);
 
-        expect!["a6c950f9f71c2cf4cc3dd41dc2064d11fe4cbc250e0b1d2748da65c91a7c0b9367b5"]
+        expect!["4fa414ef3eed2814ae6a95ee85033bf7b9db7bb7ab8f68a87fcb217f40154ecfd325"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["032530f327fa5ff0"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["f6ea8081fc861175"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

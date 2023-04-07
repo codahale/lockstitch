@@ -100,7 +100,7 @@ impl Aegis128L {
         let mut chunks = out.chunks_exact_mut(BLOCK_LEN);
         for chunk in chunks.by_ref() {
             self.enc_zeroes(&mut ci);
-            chunk.copy_from_slice(ci.as_slice());
+            chunk.copy_from_slice(&ci);
         }
 
         // Process the remainder of the output, if any.
@@ -122,7 +122,7 @@ impl Aegis128L {
         for chunk in chunks.by_ref() {
             xi.copy_from_slice(chunk);
             self.enc(&mut ci, &xi);
-            chunk.copy_from_slice(ci.as_slice());
+            chunk.copy_from_slice(&ci);
         }
 
         // Process the remainder of the plaintext, if any.
@@ -146,7 +146,7 @@ impl Aegis128L {
         for chunk in chunks.by_ref() {
             ci.copy_from_slice(chunk);
             self.dec(&mut xi, &ci);
-            chunk.copy_from_slice(xi.as_slice());
+            chunk.copy_from_slice(&xi);
         }
 
         // Process the remainder of the ciphertext, if any.

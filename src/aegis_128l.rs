@@ -24,6 +24,21 @@ pub const BLOCK_LEN: usize = 32;
 /// The length of an AES block.
 pub const AES_BLOCK_LEN: usize = 16;
 
+macro_rules! split {
+    ($bytes:expr) => {{
+        let (hi, lo) = $bytes.split_at(AES_BLOCK_LEN);
+        (load!(hi), load!(lo))
+    }};
+}
+
+macro_rules! merge {
+    ($bytes:expr, $hi:expr, $lo:expr) => {{
+        let (hi, lo) = $bytes.split_at_mut(AES_BLOCK_LEN);
+        store!(hi, $hi);
+        store!(lo, $lo);
+    }};
+}
+
 #[derive(Debug, Clone)]
 pub struct Aegis128L {
     blocks: [AesBlock; 8],
@@ -162,79 +177,64 @@ impl Aegis128L {
     #[cfg(test)]
     fn absorb(&mut self, xi: &[u8; BLOCK_LEN]) {
         // Split the input into two blocks.
-        let (xi0, xi1) = xi.split_at(AES_BLOCK_LEN);
+        let (xi0, xi1) = split!(xi);
 
         // Update the cipher state with the two blocks.
-        self.update(load!(xi0), load!(xi1));
+        self.update(xi0, xi1);
     }
 
     #[allow(unused_unsafe)]
     fn enc_zeroes(&mut self, ci: &mut [u8; BLOCK_LEN]) {
-        // Split the output into blocks.
-        let (ci0, ci1) = ci.split_at_mut(AES_BLOCK_LEN);
-
         // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
         let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
 
         // Store the keystream blocks in the output.
-        store!(ci0, z0);
-        store!(ci1, z1);
+        merge!(ci, z0, z1);
 
         // Update the cipher state as if two all-zero blocks were encrypted.
-        self.update(zero!(), zero!());
+        let xi = zero!();
+        self.update(xi, xi);
     }
 
     #[allow(unused_unsafe)]
     fn enc(&mut self, ci: &mut [u8; BLOCK_LEN], xi: &[u8; BLOCK_LEN]) {
-        // Split the output and input into blocks.
-        let (ci0, ci1) = ci.split_at_mut(AES_BLOCK_LEN);
-        let (xi0, xi1) = xi.split_at(AES_BLOCK_LEN);
-
         // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
         let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
 
         // Load the plaintext blocks.
-        let t0 = load!(xi0);
-        let t1 = load!(xi1);
+        let (xi0, xi1) = split!(xi);
 
         // XOR the plaintext blocks with the keystream to produce ciphertext blocks.
-        let out0 = xor!(t0, z0);
-        let out1 = xor!(t1, z1);
+        let ci0 = xor!(xi0, z0);
+        let ci1 = xor!(xi1, z1);
 
         // Store ciphertext blocks in the output slice.
-        store!(ci0, out0);
-        store!(ci1, out1);
+        merge!(ci, ci0, ci1);
 
         // Update the state with the plaintext blocks.
-        self.update(t0, t1);
+        self.update(xi0, xi1);
     }
 
     #[allow(unused_unsafe)]
     fn dec(&mut self, xi: &mut [u8; BLOCK_LEN], ci: &[u8; BLOCK_LEN]) {
-        // Split the output and input into blocks.
-        let (ci0, ci1) = ci.split_at(AES_BLOCK_LEN);
-        let (xi0, xi1) = xi.split_at_mut(AES_BLOCK_LEN);
-
         // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
         let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
 
         // Load the ciphertext blocks.
-        let t0 = load!(ci0);
-        let t1 = load!(ci1);
+        let (ci0, ci1) = split!(ci);
 
         // XOR the ciphertext blocks with the keystream to produce plaintext blocks.
-        let out0 = xor!(z0, t0);
-        let out1 = xor!(z1, t1);
+        let xi0 = xor!(z0, ci0);
+        let xi1 = xor!(z1, ci1);
 
         // Store plaintext blocks in the output slice.
-        store!(xi0, out0);
-        store!(xi1, out1);
+        merge!(xi, xi0, xi1);
 
         // Update the state with the plaintext blocks.
-        self.update(out0, out1);
+        self.update(xi0, xi1);
     }
 
     #[allow(unused_unsafe)]
@@ -243,33 +243,25 @@ impl Aegis128L {
         let mut ci_padded = [0u8; BLOCK_LEN];
         ci_padded[..ci.len()].copy_from_slice(ci);
 
-        // Split the output and padded input into blocks.
-        let (xi0, xi1) = xi.split_at_mut(AES_BLOCK_LEN);
-        let (ci0, ci1) = ci_padded.split_at(AES_BLOCK_LEN);
-
         // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
         let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
 
         // Load the padded ciphertext blocks.
-        let t0 = load!(ci0);
-        let t1 = load!(ci1);
+        let (ci0, ci1) = split!(ci_padded);
 
         // XOR the ciphertext blocks with the keystream to produce padded plaintext blocks.
-        let out0 = xor!(t0, z0);
-        let out1 = xor!(t1, z1);
+        let xi0 = xor!(ci0, z0);
+        let xi1 = xor!(ci1, z1);
 
         // Store plaintext blocks in the output slice and zero out the padding.
-        store!(xi0, out0);
-        store!(xi1, out1);
+        merge!(xi, xi0, xi1);
         xi[ci.len()..].fill(0);
 
         // Re-split the padding-less plaintext output, load it into blocks, and use it to update the
         // state.
-        let (xi0, xi1) = xi.split_at_mut(AES_BLOCK_LEN);
-        let msg0 = load!(xi0);
-        let msg1 = load!(xi1);
-        self.update(msg0, msg1);
+        let (xi0, xi1) = split!(xi);
+        self.update(xi0, xi1);
     }
 
     #[allow(unused_unsafe)]

@@ -92,8 +92,9 @@ impl Protocol {
             match reader.read(&mut buf) {
                 Ok(0) => break, // EOF
                 Ok(x) => {
-                    self.state.update(&buf[..x]);
-                    writer.write_all(&buf[..x])?;
+                    let block = &buf[..x];
+                    self.state.update(block);
+                    writer.write_all(block)?;
                     n += u64::try_from(x).expect("unexpected overflow");
                 }
                 Err(e) => return Err(e),

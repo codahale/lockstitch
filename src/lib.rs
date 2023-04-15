@@ -85,7 +85,7 @@ impl Protocol {
         mut reader: impl Read,
         mut writer: impl Write,
     ) -> io::Result<u64> {
-        let mut buf = [0u8; 8 * 1024];
+        let mut buf = [0u8; 64 * 1024];
         let mut n = 0;
 
         loop {

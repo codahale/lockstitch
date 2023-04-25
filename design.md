@@ -153,8 +153,8 @@ current state and updates the protocol's state with the final AEGIS-128L tag.
 function Encrypt(state, plaintext):
   (state, output) ← Chain(state, 0x04)                // Ratchet the protocol state and key an output AEGIS-128L instance.
   ciphertext ← AEGIS_128L::Encrypt(output, plaintext) // Encrypt the plaintext with AEGIS-128L.
-  tag ← AEGIS_128L::Tag(output)                       // Calculate the AEGIS-128L tag.
-  state ← Process(state, tag, 0x04)                   // Process the tag as input.
+  (s_tag, l_tag) ← AEGIS_128L::Tag(output)            // Calculate the short and long AEGIS-128L tags.
+  state ← Process(state, l_tag, 0x04)                 // Process the long tag as input.
   return (state, ciphertext)
 ```
 
@@ -164,8 +164,8 @@ function Encrypt(state, plaintext):
 function Decrypt(state, ciphertext):
   (state, output) ← Chain(state, 0x04)                // Ratchet the protocol state and key an output AEGIS-128L instance.
   plaintext ← AEGIS_128L::Decrypt(output, ciphertext) // Decrypt the plaintext with AEGIS-128L.
-  tag ← AEGIS_128L::Tag(output)                       // Calculate the AEGIS-128L tag.
-  state ← Process(state, tag, 0x04)                   // Process the tag as input.
+  (s_tag, l_tag) ← AEGIS_128L::Tag(output)            // Calculate the short and long AEGIS-128L tags.
+  state ← Process(state, l_tag, 0x04)                 // Process the long tag as input.
   return (state, plaintext)
 ```
 
@@ -175,8 +175,8 @@ First, both `Encrypt` and `Decrypt` use the same `Crypt` operation code to ensur
 the same state after both encrypting and decrypting data.
 
 Second, despite not updating the protocol state with either the plaintext or ciphertext, the
-inclusion of the output tag ensures the protocol's state is dependent on both because AEGIS-128L is
-compactly committing within the limits of a 128-bit tag.
+inclusion of the long tag ensures the protocol's state is dependent on both because AEGIS-128L is
+compactly committing.
 
 Third, `Crypt` operations provide no authentication by themselves. An attacker can modify a
 ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
@@ -203,9 +203,9 @@ the ciphertext along with the tag:
 function Seal(state, plaintext):
   (state, output) ← Chain(state, 0x05)                // Ratchet the protocol state and key an output AEGIS-128L instance.
   ciphertext ← AEGIS_128L::Encrypt(output, plaintext) // Encrypt the plaintext with AEGIS-128L.
-  tag ← AEGIS_128L::Tag(output)                       // Calculate the AEGIS-128L tag.
-  state ← Process(state, tag, 0x05)                   // Process the tag as input.
-  return (state, ciphertext, tag)                     // Return the ciphertext and the tag.
+  (s_tag, l_tag) ← AEGIS_128L::Tag(output)            // Calculate the short and long AEGIS-128L tags.
+  state ← Process(state, l_tag, 0x05)                 // Process the long tag as input.
+  return (state, ciphertext, s_tag)                   // Return the ciphertext and the short tag.
 ```
 
 This is essentially the same thing as the `Encrypt` operation but includes the AEGIS-128L tag in the
@@ -218,9 +218,9 @@ included with the ciphertext:
 function Open(state, ciphertext, tag):
   (state, output) ← Chain(state, 0x05)                // Ratchet the protocol state and key an output AEGIS-128L instance.
   plaintext ← AEGIS_128L::Decrypt(output, ciphertext) // Decrypt the plaintext with AEGIS-128L.
-  tag′ ← AEGIS_128L::Tag(output)                      // Calculate the counterfactual AEGIS-128L tag.
-  state ← Process(state, tag′, 0x05)                  // Process the tag as input.
-  if tag ≠ tag′:                                      // If the tags are equal, the plaintext is authentic.
+  (s_tag′, l_tag) ← AEGIS_128L::Tag(output)           // Calculate the counterfactual short and long AEGIS-128L tags.
+  state ← Process(state, l_tag, 0x05)                 // Process the long tag as input.
+  if tag ≠ s_tag′:                                    // If the short tags are equal, the plaintext is authentic.
     return ⟂ 
   else:
     return (state, plaintext) 

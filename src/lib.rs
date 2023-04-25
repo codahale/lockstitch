@@ -137,11 +137,11 @@ impl Protocol {
         // Encrypt the plaintext.
         output.encrypt(in_out);
 
-        // Calculate the tag.
-        let (tag, _) = output.finalize();
+        // Calculate the 256-bit tag.
+        let (_, l_tag) = output.finalize();
 
         // Update the state with the tag and the operation code.
-        self.process(&tag, Operation::Crypt);
+        self.process(&l_tag, Operation::Crypt);
     }
 
     /// Decrypt the given slice in place.
@@ -153,11 +153,11 @@ impl Protocol {
         // Decrypt the plaintext.
         output.decrypt(in_out);
 
-        // Calculate the tag.
-        let (tag, _) = output.finalize();
+        // Calculate the 256-bit tag.
+        let (_, l_tag) = output.finalize();
 
         // Update the state with the tag and the operation code.
-        self.process(&tag, Operation::Crypt);
+        self.process(&l_tag, Operation::Crypt);
     }
 
     /// Seals the given mutable slice in place.
@@ -174,14 +174,14 @@ impl Protocol {
         // Encrypt the plaintext.
         output.encrypt(in_out);
 
-        // Calculate the tag.
-        let (tag, _) = output.finalize();
+        // Calculate the short and long tags.
+        let (s_tag, l_tag) = output.finalize();
 
-        // Append the tag to the ciphertext.
-        tag_out.copy_from_slice(&tag);
+        // Append the short tag to the ciphertext.
+        tag_out.copy_from_slice(&s_tag);
 
-        // Update the state with the tag and the operation code.
-        self.process(&tag, Operation::AuthCrypt);
+        // Update the state with the long tag and the operation code.
+        self.process(&l_tag, Operation::AuthCrypt);
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -190,7 +190,7 @@ impl Protocol {
     #[must_use]
     pub fn open<'a>(&mut self, in_out: &'a mut [u8]) -> Option<&'a [u8]> {
         // Split the buffer into ciphertext and tag.
-        let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
+        let (in_out, s_tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Chain the protocol's key and generate an output key.
         let mut output = self.chain(Operation::AuthCrypt);
@@ -198,14 +198,14 @@ impl Protocol {
         // Decrypt the plaintext.
         output.decrypt(in_out);
 
-        // Calculate the counterfactual tag.
-        let (tag_p, _) = output.finalize();
+        // Calculate the counterfactual short and long tags.
+        let (s_tag_p, l_tag) = output.finalize();
 
-        // Update the state with the tag and the operation code.
-        self.process(&tag_p, Operation::AuthCrypt);
+        // Update the state with the long tag and the operation code.
+        self.process(&l_tag, Operation::AuthCrypt);
 
-        // Check the tag against the counterfactual tag.
-        if tag.ct_eq(&tag_p).into() {
+        // Check the tag against the counterfactual short tag.
+        if s_tag.ct_eq(&s_tag_p).into() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -347,10 +347,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(&mut sealed);
 
-        expect!["4fa414ef3eed2814ae6a95ee85033bf7b9db7bb7ab8f68a87fcb217f40154ecfd325"]
+        expect!["fe348bf822a903aff07749c0935c8bc6027a85aadf6007d88265e1316de07c317cb0"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["f6ea8081fc861175"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["d185b08c99d259a7"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

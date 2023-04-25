@@ -281,26 +281,14 @@ impl Aegis128L {
             self.update(t, t);
         }
 
-        // XOR all the state blocks into a single block and use it as the short tag.
+        // Generate both short and long tags, re-using values where possible.
         let mut short_tag = [0u8; AES_BLOCK_LEN];
-        store!(
-            &mut short_tag,
-            xor!(
-                xor!(self.blocks[0], self.blocks[1], self.blocks[2]),
-                xor!(self.blocks[3], self.blocks[4], self.blocks[5]),
-                self.blocks[6]
-            )
-        );
-
         let mut long_tag = [0u8; BLOCK_LEN];
-        store!(
-            &mut long_tag[..AES_BLOCK_LEN],
-            xor!(xor!(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3])
-        );
-        store!(
-            &mut long_tag[AES_BLOCK_LEN..],
-            xor!(xor!(self.blocks[4], self.blocks[5], self.blocks[6]), self.blocks[7])
-        );
+        let a = xor!(xor!(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3]);
+        let b = xor!(self.blocks[4], self.blocks[5], self.blocks[6]);
+        store!(&mut short_tag, xor!(a, b));
+        store!(&mut long_tag[..AES_BLOCK_LEN], a);
+        store!(&mut long_tag[AES_BLOCK_LEN..], xor!(b, self.blocks[7]));
 
         (short_tag, long_tag)
     }

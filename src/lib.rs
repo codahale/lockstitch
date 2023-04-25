@@ -138,7 +138,7 @@ impl Protocol {
         output.encrypt(in_out);
 
         // Calculate the tag.
-        let tag = output.finalize();
+        let (tag, _) = output.finalize();
 
         // Update the state with the tag and the operation code.
         self.process(&tag, Operation::Crypt);
@@ -154,7 +154,7 @@ impl Protocol {
         output.decrypt(in_out);
 
         // Calculate the tag.
-        let tag = output.finalize();
+        let (tag, _) = output.finalize();
 
         // Update the state with the tag and the operation code.
         self.process(&tag, Operation::Crypt);
@@ -175,7 +175,7 @@ impl Protocol {
         output.encrypt(in_out);
 
         // Calculate the tag.
-        let tag = output.finalize();
+        let (tag, _) = output.finalize();
 
         // Append the tag to the ciphertext.
         tag_out.copy_from_slice(&tag);
@@ -199,7 +199,7 @@ impl Protocol {
         output.decrypt(in_out);
 
         // Calculate the counterfactual tag.
-        let tag_p = output.finalize();
+        let (tag_p, _) = output.finalize();
 
         // Update the state with the tag and the operation code.
         self.process(&tag_p, Operation::AuthCrypt);

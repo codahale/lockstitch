@@ -369,7 +369,7 @@ mod tests {
         expect!["60716464686e74637460656162686e21"].assert_eq(&hex::encode(c_bytes));
     }
 
-    // from https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-01.html
+    // from https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-02.html
 
     #[test]
     fn aes_round_test_vector() {

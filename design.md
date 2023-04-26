@@ -147,13 +147,13 @@ operation is complete, however, the protocols' states will be different. If a us
 ### `Encrypt`/`Decrypt`
 
 `Encrypt` uses AEGIS-128L to encrypt a given plaintext with a key derived from the protocol's
-current state and updates the protocol's state with the final AEGIS-128L tag.
+current state and updates the protocol's state with the final 256-bit AEGIS-128L tag.
 
 ```text
 function Encrypt(state, plaintext):
   (state, output) ← Chain(state, 0x04)                // Ratchet the protocol state and key an output AEGIS-128L instance.
   ciphertext ← AEGIS_128L::Encrypt(output, plaintext) // Encrypt the plaintext with AEGIS-128L.
-  (s_tag, l_tag) ← AEGIS_128L::Tag(output)            // Calculate the short and long AEGIS-128L tags.
+  (s_tag, l_tag) ← AEGIS_128L::Finalize(output)       // Calculate the short and long AEGIS-128L tags.
   state ← Process(state, l_tag, 0x04)                 // Process the long tag as input.
   return (state, ciphertext)
 ```
@@ -164,7 +164,7 @@ function Encrypt(state, plaintext):
 function Decrypt(state, ciphertext):
   (state, output) ← Chain(state, 0x04)                // Ratchet the protocol state and key an output AEGIS-128L instance.
   plaintext ← AEGIS_128L::Decrypt(output, ciphertext) // Decrypt the plaintext with AEGIS-128L.
-  (s_tag, l_tag) ← AEGIS_128L::Tag(output)            // Calculate the short and long AEGIS-128L tags.
+  (s_tag, l_tag) ← AEGIS_128L::Finalize(output)       // Calculate the short and long AEGIS-128L tags.
   state ← Process(state, l_tag, 0x04)                 // Process the long tag as input.
   return (state, plaintext)
 ```
@@ -203,13 +203,16 @@ the ciphertext along with the tag:
 function Seal(state, plaintext):
   (state, output) ← Chain(state, 0x05)                // Ratchet the protocol state and key an output AEGIS-128L instance.
   ciphertext ← AEGIS_128L::Encrypt(output, plaintext) // Encrypt the plaintext with AEGIS-128L.
-  (s_tag, l_tag) ← AEGIS_128L::Tag(output)            // Calculate the short and long AEGIS-128L tags.
+  (s_tag, l_tag) ← AEGIS_128L::Finalize(output)       // Calculate the short and long AEGIS-128L tags.
   state ← Process(state, l_tag, 0x05)                 // Process the long tag as input.
   return (state, ciphertext, s_tag)                   // Return the ciphertext and the short tag.
 ```
 
-This is essentially the same thing as the `Encrypt` operation but includes the AEGIS-128L tag in the
-ciphertext.
+This is essentially the same thing as the `Encrypt` operation but includes the short AEGIS-128L tag
+in the ciphertext. Because the long tag is used to update the protocol's state (instead of just the
+short tag), an attacker in possession of the protocol's initial state but not the plaintext will be
+unable to compute the protocol's final state, as the long tag includes information which the short
+tag does not.
 
 The `Open` operation decrypts the ciphertext and compares the counterfactual tag against the tag
 included with the ciphertext:
@@ -218,7 +221,7 @@ included with the ciphertext:
 function Open(state, ciphertext, tag):
   (state, output) ← Chain(state, 0x05)                // Ratchet the protocol state and key an output AEGIS-128L instance.
   plaintext ← AEGIS_128L::Decrypt(output, ciphertext) // Decrypt the plaintext with AEGIS-128L.
-  (s_tag′, l_tag) ← AEGIS_128L::Tag(output)           // Calculate the counterfactual short and long AEGIS-128L tags.
+  (s_tag′, l_tag) ← AEGIS_128L::Finalize(output)      // Calculate the counterfactual short and long AEGIS-128L tags.
   state ← Process(state, l_tag, 0x05)                 // Process the long tag as input.
   if tag ≠ s_tag′:                                    // If the short tags are equal, the plaintext is authentic.
     return ⟂ 

@@ -44,7 +44,7 @@ function Chain(state, operation):
   K₀ǁK₁ ← SHA256::Finalize(state)               // Derive two keys from the current state.
   state ← SHA256::Init()                        // Reset the state.
   state ← Process(state, K₀, 0x07)              // Update the protocol with the first key and the Chain op code.
-  output ← AEGIS_128L::new(K₁, [operation; 16]) // Create an output AEGIS-128L instance with the second key.
+  output ← AEGIS_128L::New(K₁, [operation; 16]) // Create an output AEGIS-128L instance with the second key.
   return state, output
 ```
 

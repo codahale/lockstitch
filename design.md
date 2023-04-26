@@ -40,7 +40,7 @@ with a new SHA-256 instance and updated with the first key; an AEGIS-128L instan
 with the second key using the operation code as a nonce and used to generate any output:
 
 ```text
-function Chain(state):
+function Chain(state, operation):
   K₀ǁK₁ ← SHA256::Finalize(state)               // Derive two keys from the current state.
   state ← SHA256::Init()                        // Reset the state.
   state ← Process(state, K₀, 0x07)              // Update the protocol with the first key and the Chain op code.

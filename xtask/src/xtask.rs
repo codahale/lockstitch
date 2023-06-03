@@ -76,7 +76,7 @@ fn ci(sh: &Shell) -> Result<()> {
 
 fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
     let args = args.join(" ");
-    cmd!(sh, "cargo criterion {args}").env("RUSTFLAGS", "-C target-cpu=native").run()?;
+    cmd!(sh, "cargo bench {args}").env("RUSTFLAGS", "-C target-cpu=native").run()?;
 
     Ok(())
 }
@@ -90,8 +90,6 @@ fn cloud_create(sh: &Shell) -> Result<()> {
 fn cloud_setup(sh: &Shell) -> Result<()> {
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'sudo apt-get install build-essential git -y'").run()?;
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'source ~/.cargo/env && cargo install cargo-criterion'")
-        .run()?;
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'git clone https://github.com/codahale/lockstitch'").run()?;
 
     Ok(())
@@ -99,7 +97,7 @@ fn cloud_setup(sh: &Shell) -> Result<()> {
 
 fn cloud_bench(sh: &Shell, branch: &str, download: bool) -> Result<()> {
     cmd!(sh, "rm -rf ./target/criterion-remote").run()?;
-    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull && git checkout {branch} && rm -rf target/criterion && RUSTFLAGS='-C target-feature=+aes,+ssse3' cargo criterion");
+    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull && git checkout {branch} && rm -rf target/criterion && RUSTFLAGS='-C target-feature=+aes,+ssse3' cargo bench");
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command {cmd}")
         .run()?;
 

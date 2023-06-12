@@ -44,7 +44,8 @@ macro_rules! xor {
         unsafe { _mm_xor_si128($a, $b) }
     }};
     ($a:expr, $b:expr, $c:expr) => {{
-        unsafe { _mm_xor_si128($a, xor!($b, $c)) }
+        let b = xor!($b, $c);
+        unsafe { _mm_xor_si128($a, b) }
     }};
 }
 

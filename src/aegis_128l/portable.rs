@@ -16,6 +16,18 @@ macro_rules! load {
 
 pub(crate) use load;
 
+macro_rules! load_64x2 {
+    ($a:expr, $b:expr) => {{
+        let mut buf = [0u8; core::mem::size_of::<u64>() * 2];
+        let (a_block, b_block) = buf.split_at_mut(core::mem::size_of::<u64>());
+        a_block.copy_from_slice(&$a.to_le_bytes());
+        b_block.copy_from_slice(&$b.to_le_bytes());
+        load!(&buf)
+    }};
+}
+
+pub(crate) use load_64x2;
+
 macro_rules! store {
     ($bytes:expr, $block:expr) => {{
         $bytes.copy_from_slice(&$block);

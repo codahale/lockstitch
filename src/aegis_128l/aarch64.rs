@@ -18,6 +18,14 @@ macro_rules! load {
 
 pub(crate) use load;
 
+macro_rules! load_64x2 {
+    ($a:expr, $b:expr) => {{
+        unsafe { vreinterpretq_u8_u64(vsetq_lane_u64($b, vmovq_n_u64($a), 1)) }
+    }};
+}
+
+pub(crate) use load_64x2;
+
 macro_rules! store {
     ($bytes:expr, $block:expr) => {{
         unsafe { vst1q_u8($bytes.as_mut_ptr(), $block) };

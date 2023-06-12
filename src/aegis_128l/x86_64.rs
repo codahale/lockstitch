@@ -23,6 +23,14 @@ macro_rules! load {
 
 pub(crate) use load;
 
+macro_rules! load_64x2 {
+    ($a:expr, $b:expr) => {{
+        unsafe { _mm_set_epi64x($b.try_into().unwrap(), $a.try_into().unwrap()) }
+    }};
+}
+
+pub(crate) use load_64x2;
+
 macro_rules! store {
     ($bytes:expr, $block:expr) => {{
         unsafe { _mm_storeu_si128($bytes.as_mut_ptr() as *mut __m128i, $block) };

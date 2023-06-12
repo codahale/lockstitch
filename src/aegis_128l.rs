@@ -163,22 +163,22 @@ impl Aegis128L {
         }
 
         // Process the remainder of the ciphertext, if any.
-        let chunk = chunks.into_remainder();
-        if !chunk.is_empty() {
-            self.dec_partial(&mut xi, chunk);
-            chunk.copy_from_slice(&xi[..chunk.len()]);
+        let cn = chunks.into_remainder();
+        if !cn.is_empty() {
+            self.dec_partial(&mut xi, cn);
+            cn.copy_from_slice(&xi[..cn.len()]);
         }
 
         self.mc_len += in_out.len() as u64;
     }
 
     #[cfg(test)]
-    fn absorb(&mut self, xi: &[u8; BLOCK_LEN]) {
+    fn absorb(&mut self, ai: &[u8; BLOCK_LEN]) {
         // Split the input into two blocks.
-        let (xi0, xi1) = split!(xi);
+        let (ai0, xi1) = split!(ai);
 
         // Update the cipher state with the two blocks.
-        self.update(xi0, xi1);
+        self.update(ai0, xi1);
     }
 
     #[allow(unused_unsafe)]
@@ -236,30 +236,30 @@ impl Aegis128L {
     }
 
     #[allow(unused_unsafe)]
-    fn dec_partial(&mut self, xi: &mut [u8; BLOCK_LEN], ci: &[u8]) {
+    fn dec_partial(&mut self, xn: &mut [u8; BLOCK_LEN], cn: &[u8]) {
         // Pad the ciphertext with zeros to form two blocks.
-        let mut ci_padded = [0u8; BLOCK_LEN];
-        ci_padded[..ci.len()].copy_from_slice(ci);
+        let mut cn_padded = [0u8; BLOCK_LEN];
+        cn_padded[..cn.len()].copy_from_slice(cn);
 
         // Generate two blocks of keystream.
         let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
         let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
 
         // Load the padded ciphertext blocks.
-        let (ci0, ci1) = split!(ci_padded);
+        let (cn0, cn1) = split!(cn_padded);
 
         // XOR the ciphertext blocks with the keystream to produce padded plaintext blocks.
-        let xi0 = xor!(ci0, z0);
-        let xi1 = xor!(ci1, z1);
+        let xn0 = xor!(cn0, z0);
+        let xn1 = xor!(cn1, z1);
 
         // Store plaintext blocks in the output slice and zero out the padding.
-        merge!(xi, xi0, xi1);
-        xi[ci.len()..].fill(0);
+        merge!(xn, xn0, xn1);
+        xn[cn.len()..].fill(0);
 
         // Re-split the padding-less plaintext output, load it into blocks, and use it to update the
         // state.
-        let (xi0, xi1) = split!(xi);
-        self.update(xi0, xi1);
+        let (xn0, xn1) = split!(xn);
+        self.update(xn0, xn1);
     }
 
     #[allow(unused_unsafe)]

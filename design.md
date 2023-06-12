@@ -4,7 +4,7 @@ Lockstitch provides a single cryptographic service for all symmetric-key operati
 incremental, stateful building block for complex schemes, constructions, and protocols, all built on
 top of SHA-256 and [AEGIS-128L][], an authenticated cipher.
 
-[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-02.html
+[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-03.html
 
 ## Preliminaries
 
@@ -176,7 +176,8 @@ the same state after both encrypting and decrypting data.
 
 Second, despite not updating the protocol state with either the plaintext or ciphertext, the
 inclusion of the long tag ensures the protocol's state is dependent on both because AEGIS-128L is
-compactly committing.
+fully committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
+which produces the same authentication tag is negligible).
 
 Third, `Crypt` operations provide no authentication by themselves. An attacker can modify a
 ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
@@ -307,9 +308,9 @@ The final `Seal` operation closes over all inputs--key, nonce, associated data, 
 are also the values used to produce the ciphertext. Forging a tag here would imply that AEGIS-128L's
 MAC construction is not sUF-CMA secure.
 
-In addition, this construction is compactly committing: finding a ciphertext and tag pair which
-successfully decrypts under multiple keys would imply that AEGIS-128L is not key committing, and the
-final tag serves as a commitment for the ciphertext.
+In addition, this construction is fully committing: finding a ciphertext and tag pair which
+successfully decrypts under multiple keys would imply that AEGIS-128L is not fully committing, and
+the final tag serves as a commitment for the ciphertext.
 
 Decryption uses the `Open` operation to decrypt:
 

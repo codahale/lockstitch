@@ -264,11 +264,9 @@ impl Aegis128L {
 
     #[allow(unused_unsafe)]
     pub fn finalize(&mut self) -> ([u8; AES_BLOCK_LEN], [u8; BLOCK_LEN]) {
-        // Create a block from the associated data and message lengths, in bits.
-        let sizes = load_64x2!(self.ad_len * 8, self.mc_len * 8);
-
-        // XOR the size block with the 3rd state block and update the state with that value.
-        let t = xor!(sizes, self.blocks[2]);
+        // Create a block from the associated data and message lengths, in bits, XOR it with the 3rd
+        // state block and update the state with that value.
+        let t = xor!(load_64x2!(self.ad_len * 8, self.mc_len * 8), self.blocks[2]);
         for _ in 0..7 {
             self.update(t, t);
         }
@@ -279,8 +277,7 @@ impl Aegis128L {
         let a = xor!(xor!(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3]);
         let b = xor!(self.blocks[4], self.blocks[5], self.blocks[6]);
         store!(&mut short_tag, xor!(a, b));
-        store!(&mut long_tag[..AES_BLOCK_LEN], a);
-        store!(&mut long_tag[AES_BLOCK_LEN..], xor!(b, self.blocks[7]));
+        merge!(&mut long_tag, a, xor!(b, self.blocks[7]));
 
         (short_tag, long_tag)
     }

@@ -22,6 +22,7 @@ pub const BLOCK_LEN: usize = 32;
 /// The length of an AES block.
 pub const AES_BLOCK_LEN: usize = 16;
 
+/// Load two AES blocks from the given slice.
 macro_rules! load_2x {
     ($bytes:expr) => {{
         let (hi, lo) = $bytes.split_at(AES_BLOCK_LEN);
@@ -29,6 +30,7 @@ macro_rules! load_2x {
     }};
 }
 
+/// Store two AES blocks in the given slice.
 macro_rules! store_2x {
     ($bytes:expr, $hi:expr, $lo:expr) => {{
         let (hi, lo) = $bytes.split_at_mut(AES_BLOCK_LEN);

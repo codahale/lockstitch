@@ -41,6 +41,10 @@ enum CloudCommand {
         #[arg(long)]
         download: bool,
     },
+    Test {
+        #[arg(long, default_value = "main")]
+        branch: String,
+    },
     Ssh,
     Delete,
 }
@@ -58,6 +62,7 @@ fn main() -> Result<()> {
             CloudCommand::Create => cloud_create(&sh),
             CloudCommand::Setup => cloud_setup(&sh),
             CloudCommand::Bench { branch, download } => cloud_bench(&sh, &branch, download),
+            CloudCommand::Test { branch } => cloud_test(&sh, &branch),
             CloudCommand::Ssh => cloud_ssh(),
             CloudCommand::Delete => cloud_delete(&sh),
         },
@@ -91,6 +96,15 @@ fn cloud_setup(sh: &Shell) -> Result<()> {
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'sudo apt-get install build-essential git -y'").run()?;
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'git clone https://github.com/codahale/lockstitch'").run()?;
+
+    Ok(())
+}
+
+fn cloud_test(sh: &Shell, branch: &str) -> Result<()> {
+    cmd!(sh, "rm -rf ./target/criterion-remote").run()?;
+    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull && git checkout {branch} && rm -rf target/criterion && RUSTFLAGS='-C target-feature=+aes,+ssse3' cargo test");
+    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command {cmd}")
+        .run()?;
 
     Ok(())
 }

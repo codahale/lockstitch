@@ -101,8 +101,7 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 
 ## Cargo Features
 
-* `asm`: Enables hand-coded assembly for SHA-256 for `x86`, `x86_64`, and `aarch64`. Enabled by
-  default.
+* `asm`: Enables hand-coded assembly for SHA-256 for `x86` and `x86_64`.
 * `hedge`: Enables hedged random value generation with `rand_core`. Enabled by default.
 * `portable`: Uses the portable `aes` crate for AEGIS-128L at a steep performance penalty.
 * `std`: Enables features based on the Rust standard library. Enabled by default.

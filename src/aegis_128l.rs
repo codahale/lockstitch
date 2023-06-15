@@ -26,7 +26,7 @@ pub const AES_BLOCK_LEN: usize = 16;
 macro_rules! load_2x {
     ($bytes:expr) => {{
         let (hi, lo) = $bytes.split_at(AES_BLOCK_LEN);
-        (load!(hi), load!(lo))
+        (load(hi), load(lo))
     }};
 }
 
@@ -34,8 +34,8 @@ macro_rules! load_2x {
 macro_rules! store_2x {
     ($bytes:expr, $hi:expr, $lo:expr) => {{
         let (hi, lo) = $bytes.split_at_mut(AES_BLOCK_LEN);
-        store!(hi, $hi);
-        store!(lo, $lo);
+        store(hi, $hi);
+        store(lo, $lo);
     }};
 }
 
@@ -49,30 +49,30 @@ pub struct Aegis128L {
 impl Aegis128L {
     pub fn new(key: &[u8; AES_BLOCK_LEN], nonce: &[u8; AES_BLOCK_LEN]) -> Self {
         // Initialize constants.
-        let c0 = load!(&[
+        let c0 = load(&[
             0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15, 0x22, 0x37, 0x59, 0x90, 0xe9,
             0x79, 0x62,
         ]);
-        let c1 = load!(&[
+        let c1 = load(&[
             0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5,
             0x28, 0xdd,
         ]);
 
         // Initialize key and nonce blocks.
-        let key = load!(key);
-        let nonce = load!(nonce);
+        let key = load(key);
+        let nonce = load(nonce);
 
         // Initialize cipher state.
         let mut state = Aegis128L {
             blocks: [
-                xor!(key, nonce),
+                xor(key, nonce),
                 c1,
                 c0,
                 c1,
-                xor!(key, nonce),
-                xor!(key, c0),
-                xor!(key, c1),
-                xor!(key, c0),
+                xor(key, nonce),
+                xor(key, c0),
+                xor(key, c1),
+                xor(key, c0),
             ],
             ad_len: 0,
             mc_len: 0,
@@ -186,29 +186,29 @@ impl Aegis128L {
     #[allow(unused_unsafe)]
     fn enc_zeroes(&mut self, ci: &mut [u8; BLOCK_LEN]) {
         // Generate two blocks of keystream.
-        let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
-        let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
+        let z0 = xor3(self.blocks[6], self.blocks[1], and(self.blocks[2], self.blocks[3]));
+        let z1 = xor3(self.blocks[2], self.blocks[5], and(self.blocks[6], self.blocks[7]));
 
         // Store the keystream blocks in the output.
         store_2x!(ci, z0, z1);
 
         // Update the cipher state as if two all-zero blocks were encrypted.
-        let xi = zero!();
+        let xi = zero();
         self.update(xi, xi);
     }
 
     #[allow(unused_unsafe)]
     fn enc(&mut self, ci: &mut [u8; BLOCK_LEN], xi: &[u8; BLOCK_LEN]) {
         // Generate two blocks of keystream.
-        let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
-        let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
+        let z0 = xor3(self.blocks[6], self.blocks[1], and(self.blocks[2], self.blocks[3]));
+        let z1 = xor3(self.blocks[2], self.blocks[5], and(self.blocks[6], self.blocks[7]));
 
         // Load the plaintext blocks.
         let (xi0, xi1) = load_2x!(xi);
 
         // XOR the plaintext blocks with the keystream to produce ciphertext blocks.
-        let ci0 = xor!(xi0, z0);
-        let ci1 = xor!(xi1, z1);
+        let ci0 = xor(xi0, z0);
+        let ci1 = xor(xi1, z1);
 
         // Store ciphertext blocks in the output slice.
         store_2x!(ci, ci0, ci1);
@@ -220,15 +220,15 @@ impl Aegis128L {
     #[allow(unused_unsafe)]
     fn dec(&mut self, xi: &mut [u8; BLOCK_LEN], ci: &[u8; BLOCK_LEN]) {
         // Generate two blocks of keystream.
-        let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
-        let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
+        let z0 = xor3(self.blocks[6], self.blocks[1], and(self.blocks[2], self.blocks[3]));
+        let z1 = xor3(self.blocks[2], self.blocks[5], and(self.blocks[6], self.blocks[7]));
 
         // Load the ciphertext blocks.
         let (ci0, ci1) = load_2x!(ci);
 
         // XOR the ciphertext blocks with the keystream to produce plaintext blocks.
-        let xi0 = xor!(z0, ci0);
-        let xi1 = xor!(z1, ci1);
+        let xi0 = xor(z0, ci0);
+        let xi1 = xor(z1, ci1);
 
         // Store plaintext blocks in the output slice.
         store_2x!(xi, xi0, xi1);
@@ -244,15 +244,15 @@ impl Aegis128L {
         cn_padded[..cn.len()].copy_from_slice(cn);
 
         // Generate two blocks of keystream.
-        let z0 = xor!(self.blocks[6], self.blocks[1], and!(self.blocks[2], self.blocks[3]));
-        let z1 = xor!(self.blocks[2], self.blocks[5], and!(self.blocks[6], self.blocks[7]));
+        let z0 = xor3(self.blocks[6], self.blocks[1], and(self.blocks[2], self.blocks[3]));
+        let z1 = xor3(self.blocks[2], self.blocks[5], and(self.blocks[6], self.blocks[7]));
 
         // Load the padded ciphertext blocks.
         let (cn0, cn1) = load_2x!(cn_padded);
 
         // XOR the ciphertext blocks with the keystream to produce padded plaintext blocks.
-        let xn0 = xor!(cn0, z0);
-        let xn1 = xor!(cn1, z1);
+        let xn0 = xor(cn0, z0);
+        let xn1 = xor(cn1, z1);
 
         // Store plaintext blocks in the output slice and zero out the padding.
         store_2x!(xn, xn0, xn1);
@@ -268,7 +268,7 @@ impl Aegis128L {
     pub fn finalize(&mut self) -> ([u8; AES_BLOCK_LEN], [u8; BLOCK_LEN]) {
         // Create a block from the associated data and message lengths, in bits, XOR it with the 3rd
         // state block and update the state with that value.
-        let t = xor!(load_64x2!(self.ad_len * 8, self.mc_len * 8), self.blocks[2]);
+        let t = xor(load_64x2(self.ad_len * 8, self.mc_len * 8), self.blocks[2]);
         for _ in 0..7 {
             self.update(t, t);
         }
@@ -276,10 +276,10 @@ impl Aegis128L {
         // Generate both short and long tags, re-using values where possible.
         let mut short_tag = [0u8; AES_BLOCK_LEN];
         let mut long_tag = [0u8; BLOCK_LEN];
-        let a = xor!(xor!(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3]);
-        let b = xor!(self.blocks[4], self.blocks[5], self.blocks[6]);
-        store!(&mut short_tag, xor!(a, b));
-        store_2x!(&mut long_tag, a, xor!(b, self.blocks[7]));
+        let a = xor(xor3(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3]);
+        let b = xor3(self.blocks[4], self.blocks[5], self.blocks[6]);
+        store(&mut short_tag, xor(a, b));
+        store_2x!(&mut long_tag, a, xor(b, self.blocks[7]));
 
         (short_tag, long_tag)
     }
@@ -287,14 +287,14 @@ impl Aegis128L {
     #[allow(unused_unsafe)]
     fn update(&mut self, m0: AesBlock, m1: AesBlock) {
         self.blocks = [
-            xor!(enc!(self.blocks[7], self.blocks[0]), m0), // S0
-            enc!(self.blocks[0], self.blocks[1]),           // S1
-            enc!(self.blocks[1], self.blocks[2]),           // S2
-            enc!(self.blocks[2], self.blocks[3]),           // S3
-            xor!(enc!(self.blocks[3], self.blocks[4]), m1), // S4
-            enc!(self.blocks[4], self.blocks[5]),           // S5
-            enc!(self.blocks[5], self.blocks[6]),           // S6
-            enc!(self.blocks[6], self.blocks[7]),           // S7
+            xor(enc(self.blocks[7], self.blocks[0]), m0), // S0
+            enc(self.blocks[0], self.blocks[1]),          // S1
+            enc(self.blocks[1], self.blocks[2]),          // S2
+            enc(self.blocks[2], self.blocks[3]),          // S3
+            xor(enc(self.blocks[3], self.blocks[4]), m1), // S4
+            enc(self.blocks[4], self.blocks[5]),          // S5
+            enc(self.blocks[5], self.blocks[6]),          // S6
+            enc(self.blocks[6], self.blocks[7]),          // S7
         ];
     }
 }
@@ -324,37 +324,37 @@ mod tests {
 
     #[test]
     fn block_xor() {
-        let a = load!(b"ayellowsubmarine");
-        let b = load!(b"tuneintotheocho!");
-        let c = xor!(a, b);
+        let a = load(b"ayellowsubmarine");
+        let b = load(b"tuneintotheocho!");
+        let c = xor(a, b);
 
         let mut c_bytes = [0u8; 16];
-        store!(&mut c_bytes, c);
+        store(&mut c_bytes, c);
 
         expect!["150c0b090501031c010a080e11010144"].assert_eq(&hex::encode(c_bytes));
     }
 
     #[test]
     fn block_xor3() {
-        let a = load!(b"ayellowsubmarine");
-        let b = load!(b"tuneintotheocho!");
-        let c = load!(b"mambonumbereight");
-        let d = xor!(a, b, c);
+        let a = load(b"ayellowsubmarine");
+        let b = load(b"tuneintotheocho!");
+        let c = load(b"mambonumbereight");
+        let d = xor3(a, b, c);
 
         let mut d_bytes = [0u8; 16];
-        store!(&mut d_bytes, d);
+        store(&mut d_bytes, d);
 
         expect!["786d666b6a6f7671636f7a6b78666930"].assert_eq(&hex::encode(d_bytes));
     }
 
     #[test]
     fn block_and() {
-        let a = load!(b"ayellowsubmarine");
-        let b = load!(b"tuneintotheocho!");
-        let c = and!(a, b);
+        let a = load(b"ayellowsubmarine");
+        let b = load(b"tuneintotheocho!");
+        let c = and(a, b);
 
         let mut c_bytes = [0u8; 16];
-        store!(&mut c_bytes, c);
+        store(&mut c_bytes, c);
 
         expect!["60716464686e74637460656162686e21"].assert_eq(&hex::encode(c_bytes));
     }
@@ -363,11 +363,11 @@ mod tests {
 
     #[test]
     fn aes_round_test_vector() {
-        let a = load!(&hex!("000102030405060708090a0b0c0d0e0f"));
-        let b = load!(&hex!("101112131415161718191a1b1c1d1e1f"));
-        let out = enc!(a, b);
+        let a = load(&hex!("000102030405060708090a0b0c0d0e0f"));
+        let b = load(&hex!("101112131415161718191a1b1c1d1e1f"));
+        let out = enc(a, b);
         let mut c = [0u8; 16];
-        store!(&mut c, out);
+        store(&mut c, out);
 
         expect!["7a7b4e5638782546a8c0477a3b813f43"].assert_eq(&hex::encode(c));
     }
@@ -376,33 +376,33 @@ mod tests {
     fn update_test_vector() {
         let mut state = Aegis128L {
             blocks: [
-                load!(&hex!("9b7e60b24cc873ea894ecc07911049a3")),
-                load!(&hex!("330be08f35300faa2ebf9a7b0d274658")),
-                load!(&hex!("7bbd5bd2b049f7b9b515cf26fbe7756c")),
-                load!(&hex!("c35a00f55ea86c3886ec5e928f87db18")),
-                load!(&hex!("9ebccafce87cab446396c4334592c91f")),
-                load!(&hex!("58d83e31f256371e60fc6bb257114601")),
-                load!(&hex!("1639b56ea322c88568a176585bc915de")),
-                load!(&hex!("640818ffb57dc0fbc2e72ae93457e39a")),
+                load(&hex!("9b7e60b24cc873ea894ecc07911049a3")),
+                load(&hex!("330be08f35300faa2ebf9a7b0d274658")),
+                load(&hex!("7bbd5bd2b049f7b9b515cf26fbe7756c")),
+                load(&hex!("c35a00f55ea86c3886ec5e928f87db18")),
+                load(&hex!("9ebccafce87cab446396c4334592c91f")),
+                load(&hex!("58d83e31f256371e60fc6bb257114601")),
+                load(&hex!("1639b56ea322c88568a176585bc915de")),
+                load(&hex!("640818ffb57dc0fbc2e72ae93457e39a")),
             ],
             ad_len: 0,
             mc_len: 0,
         };
 
-        let d1 = load!(&hex!("033e6975b94816879e42917650955aa0"));
-        let d2 = load!(&hex!("033e6975b94816879e42917650955aa0"));
+        let d1 = load(&hex!("033e6975b94816879e42917650955aa0"));
+        let d2 = load(&hex!("033e6975b94816879e42917650955aa0"));
 
         state.update(d1, d2);
 
         let mut blocks = [[0u8; 16]; 8];
-        store!(&mut blocks[0], state.blocks[0]);
-        store!(&mut blocks[1], state.blocks[1]);
-        store!(&mut blocks[2], state.blocks[2]);
-        store!(&mut blocks[3], state.blocks[3]);
-        store!(&mut blocks[4], state.blocks[4]);
-        store!(&mut blocks[5], state.blocks[5]);
-        store!(&mut blocks[6], state.blocks[6]);
-        store!(&mut blocks[7], state.blocks[7]);
+        store(&mut blocks[0], state.blocks[0]);
+        store(&mut blocks[1], state.blocks[1]);
+        store(&mut blocks[2], state.blocks[2]);
+        store(&mut blocks[3], state.blocks[3]);
+        store(&mut blocks[4], state.blocks[4]);
+        store(&mut blocks[5], state.blocks[5]);
+        store(&mut blocks[6], state.blocks[6]);
+        store(&mut blocks[7], state.blocks[7]);
 
         expect!["596ab773e4433ca0127c73f60536769d"].assert_eq(&hex::encode(blocks[0]));
         expect!["790394041a3d26ab697bde865014652d"].assert_eq(&hex::encode(blocks[1]));

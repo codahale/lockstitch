@@ -40,7 +40,7 @@ pub fn xor(a: AesBlock, b: AesBlock) -> AesBlock {
 /// Bitwise XOR the given AES blocks.
 #[inline(always)]
 pub fn xor3(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
-    unsafe { _mm_xor_si128(a, xor(b, c)) }
+    unsafe { _mm_xor_si128(a, _mm_xor_si128(b, c)) }
 }
 
 /// Bitwise AND the given AES blocks.

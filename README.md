@@ -6,7 +6,7 @@ complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful obje
 Cyclist mode, Lockstitch uses the [AEGIS-128L][] authenticated cipher and SHA-256 to provide 100+
 Gb/sec performance on modern processors at a 128-bit security level.
 
-[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-02.html
+[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-03.html
 
 ## ⚠️ WARNING: You should not use this. ⚠️
 

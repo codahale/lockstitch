@@ -132,8 +132,14 @@ export RUSTFLAGS="-C target-feature=+aes,+ssse3"
 
 ### `aarch64`
 
-Rust's `aarch64` code generation includes the ARMv8-A cryptography instructions and NEON vector
-instructions. No special configuration is required to achieve full performance.
+On `aarch64-darwin-apple` (i.e. macOS), the ARMv8-A cryptography instructions and NEON vector
+instructions are enabled by default. On other targets (e.g. `aarch64-unknown-linux-gnu`), the `sha3`
+and `aes` target features should be enabled.
+
+### Other
+
+For other platforms, the `portable` crate feature provides a very slow but fully portable AES
+implementation.
 
 ## Additional Information
 

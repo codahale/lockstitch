@@ -166,7 +166,6 @@ impl Aegis128L {
         self.update(ai0, xi1);
     }
 
-    #[allow(unused_unsafe)]
     fn enc_zeroes(&mut self, ci: &mut [u8; BLOCK_LEN]) {
         // Generate two blocks of keystream.
         let z0 = xor3(self.blocks[6], self.blocks[1], and(self.blocks[2], self.blocks[3]));
@@ -180,7 +179,6 @@ impl Aegis128L {
         self.update(xi, xi);
     }
 
-    #[allow(unused_unsafe)]
     fn enc(&mut self, ci: &mut [u8; BLOCK_LEN], xi: &[u8; BLOCK_LEN]) {
         // Generate two blocks of keystream.
         let z0 = xor3(self.blocks[6], self.blocks[1], and(self.blocks[2], self.blocks[3]));
@@ -200,7 +198,6 @@ impl Aegis128L {
         self.update(xi0, xi1);
     }
 
-    #[allow(unused_unsafe)]
     fn dec(&mut self, xi: &mut [u8; BLOCK_LEN], ci: &[u8; BLOCK_LEN]) {
         // Generate two blocks of keystream.
         let z0 = xor3(self.blocks[6], self.blocks[1], and(self.blocks[2], self.blocks[3]));
@@ -220,7 +217,6 @@ impl Aegis128L {
         self.update(xi0, xi1);
     }
 
-    #[allow(unused_unsafe)]
     fn dec_partial(&mut self, xn: &mut [u8; BLOCK_LEN], cn: &[u8]) {
         // Pad the ciphertext with zeros to form two blocks.
         let mut cn_padded = [0u8; BLOCK_LEN];
@@ -247,7 +243,6 @@ impl Aegis128L {
         self.update(xn0, xn1);
     }
 
-    #[allow(unused_unsafe)]
     pub fn finalize(&mut self) -> ([u8; AES_BLOCK_LEN], [u8; BLOCK_LEN]) {
         // Create a block from the associated data and message lengths, in bits, XOR it with the 3rd
         // state block and update the state with that value.
@@ -267,7 +262,6 @@ impl Aegis128L {
         (short_tag, long_tag)
     }
 
-    #[allow(unused_unsafe)]
     fn update(&mut self, m0: AesBlock, m1: AesBlock) {
         self.blocks = [
             xor(enc(self.blocks[7], self.blocks[0]), m0), // S0

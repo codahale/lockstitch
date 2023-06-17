@@ -22,23 +22,6 @@ pub const BLOCK_LEN: usize = 32;
 /// The length of an AES block.
 pub const AES_BLOCK_LEN: usize = 16;
 
-/// Load two AES blocks from the given slice.
-macro_rules! load_2x {
-    ($bytes:expr) => {{
-        let (hi, lo) = $bytes.split_at(AES_BLOCK_LEN);
-        (load(hi), load(lo))
-    }};
-}
-
-/// Store two AES blocks in the given slice.
-macro_rules! store_2x {
-    ($bytes:expr, $hi:expr, $lo:expr) => {{
-        let (hi, lo) = $bytes.split_at_mut(AES_BLOCK_LEN);
-        store(hi, $hi);
-        store(lo, $lo);
-    }};
-}
-
 #[derive(Debug, Clone)]
 pub struct Aegis128L {
     blocks: [AesBlock; 8],
@@ -177,7 +160,7 @@ impl Aegis128L {
     #[cfg(test)]
     fn absorb(&mut self, ai: &[u8; BLOCK_LEN]) {
         // Load the input blocks.
-        let (ai0, xi1) = load_2x!(ai);
+        let (ai0, xi1) = load_2x(ai);
 
         // Update the cipher state with the two blocks.
         self.update(ai0, xi1);
@@ -190,7 +173,7 @@ impl Aegis128L {
         let z1 = xor3(self.blocks[2], self.blocks[5], and(self.blocks[6], self.blocks[7]));
 
         // Store the keystream blocks in the output.
-        store_2x!(ci, z0, z1);
+        store_2x(ci, z0, z1);
 
         // Update the cipher state as if two all-zero blocks were encrypted.
         let xi = zero();
@@ -204,14 +187,14 @@ impl Aegis128L {
         let z1 = xor3(self.blocks[2], self.blocks[5], and(self.blocks[6], self.blocks[7]));
 
         // Load the plaintext blocks.
-        let (xi0, xi1) = load_2x!(xi);
+        let (xi0, xi1) = load_2x(xi);
 
         // XOR the plaintext blocks with the keystream to produce ciphertext blocks.
         let ci0 = xor(xi0, z0);
         let ci1 = xor(xi1, z1);
 
         // Store ciphertext blocks in the output slice.
-        store_2x!(ci, ci0, ci1);
+        store_2x(ci, ci0, ci1);
 
         // Update the state with the plaintext blocks.
         self.update(xi0, xi1);
@@ -224,14 +207,14 @@ impl Aegis128L {
         let z1 = xor3(self.blocks[2], self.blocks[5], and(self.blocks[6], self.blocks[7]));
 
         // Load the ciphertext blocks.
-        let (ci0, ci1) = load_2x!(ci);
+        let (ci0, ci1) = load_2x(ci);
 
         // XOR the ciphertext blocks with the keystream to produce plaintext blocks.
         let xi0 = xor(z0, ci0);
         let xi1 = xor(z1, ci1);
 
         // Store plaintext blocks in the output slice.
-        store_2x!(xi, xi0, xi1);
+        store_2x(xi, xi0, xi1);
 
         // Update the state with the plaintext blocks.
         self.update(xi0, xi1);
@@ -248,19 +231,19 @@ impl Aegis128L {
         let z1 = xor3(self.blocks[2], self.blocks[5], and(self.blocks[6], self.blocks[7]));
 
         // Load the padded ciphertext blocks.
-        let (cn0, cn1) = load_2x!(cn_padded);
+        let (cn0, cn1) = load_2x(&cn_padded);
 
         // XOR the ciphertext blocks with the keystream to produce padded plaintext blocks.
         let xn0 = xor(cn0, z0);
         let xn1 = xor(cn1, z1);
 
         // Store plaintext blocks in the output slice and zero out the padding.
-        store_2x!(xn, xn0, xn1);
+        store_2x(xn, xn0, xn1);
         xn[cn.len()..].fill(0);
 
         // Re-split the padding-less plaintext output, load it into blocks, and use it to update the
         // state.
-        let (xn0, xn1) = load_2x!(xn);
+        let (xn0, xn1) = load_2x(xn);
         self.update(xn0, xn1);
     }
 
@@ -279,7 +262,7 @@ impl Aegis128L {
         let a = xor(xor3(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3]);
         let b = xor3(self.blocks[4], self.blocks[5], self.blocks[6]);
         store(&mut short_tag, xor(a, b));
-        store_2x!(&mut long_tag, a, xor(b, self.blocks[7]));
+        store_2x(&mut long_tag, a, xor(b, self.blocks[7]));
 
         (short_tag, long_tag)
     }
@@ -297,6 +280,21 @@ impl Aegis128L {
             enc(self.blocks[6], self.blocks[7]),          // S7
         ];
     }
+}
+
+/// Load two AES blocks from the given slice.
+#[inline(always)]
+fn load_2x(bytes: &[u8; 32]) -> (AesBlock, AesBlock) {
+    let (hi, lo) = bytes.split_at(AES_BLOCK_LEN);
+    (load(hi), load(lo))
+}
+
+/// Store two AES blocks in the given slice.
+#[inline(always)]
+fn store_2x(bytes: &mut [u8], hi: AesBlock, lo: AesBlock) {
+    let (b_hi, b_lo) = bytes.split_at_mut(AES_BLOCK_LEN);
+    store(b_hi, hi);
+    store(b_lo, lo);
 }
 
 #[cfg(all(test, feature = "std"))]

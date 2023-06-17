@@ -39,14 +39,13 @@ pub fn xor(a: AesBlock, b: AesBlock) -> AesBlock {
 pub fn xor3(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
     // TODO replace with veor3q_u8 intrinsic when that's stable
     #[target_feature(enable = "sha3")]
-    unsafe fn veor3q_u8(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
-        let mut ret: AesBlock;
+    unsafe fn veor3q_u8(mut a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
         asm!(
-            "EOR3 {:v}.16B, {:v}.16B, {:v}.16B, {:v}.16B",
-            out(vreg) ret, in(vreg) a, in(vreg) b, in(vreg) c,
+            "EOR3 {0:v}.16B, {0:v}.16B, {1:v}.16B, {2:v}.16B",
+            inlateout(vreg) a, in(vreg) b, in(vreg) c,
             options(pure, nomem, nostack, preserves_flags)
         );
-        ret
+        a
     }
     unsafe { veor3q_u8(a, b, c) }
 }
@@ -63,11 +62,10 @@ pub fn enc(state: AesBlock, round_key: AesBlock) -> AesBlock {
     // TODO replace with vaeseq_u8 and vaesmcq_u8 instrinsics when that's stable
     #[target_feature(enable = "aes")]
     unsafe fn vaeseq_u8_and_vaesmcq_u8(mut state: AesBlock) -> AesBlock {
-        let z = vmovq_n_u8(0);
         asm!(
             "AESE {0:v}.16B, {1:v}.16B",
             "AESMC {0:v}.16B, {0:v}.16B",
-            inout(vreg) state, in(vreg) z,
+            inlateout(vreg) state, in(vreg) 0,
             options(pure, nomem, nostack, preserves_flags)
         );
         state

@@ -19,7 +19,7 @@ sha2 = { version = "0.10.7", default-features = false }
 subtle = { version = "2.5.0", default-features = false }
 
 [features]
-default = ["hedge", "std"]
+default = ["asm", "hedge", "std"]
 asm = ["sha2/asm"]
 hedge = ["rand_core"]
 portable = ["aes"]

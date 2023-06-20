@@ -41,8 +41,8 @@ pub fn xor3(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
     #[target_feature(enable = "sha3")]
     unsafe fn veor3q_u8(mut a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
         asm!(
-            "EOR3 {0:v}.16B, {0:v}.16B, {1:v}.16B, {2:v}.16B",
-            inlateout(vreg) a, in(vreg) b, in(vreg) c,
+            "EOR3 {a:v}.16B, {a:v}.16B, {b:v}.16B, {c:v}.16B",
+            a = inlateout(vreg) a, b = in(vreg) b, c = in(vreg) c,
             options(pure, nomem, nostack, preserves_flags)
         );
         a
@@ -63,9 +63,9 @@ pub fn enc(state: AesBlock, round_key: AesBlock) -> AesBlock {
     #[target_feature(enable = "aes")]
     unsafe fn vaeseq_u8_and_vaesmcq_u8(mut state: AesBlock) -> AesBlock {
         asm!(
-            "AESE {0:v}.16B, {1:v}.16B",
-            "AESMC {0:v}.16B, {0:v}.16B",
-            inlateout(vreg) state, in(vreg) 0,
+            "AESE {state:v}.16B, {zero:v}.16B",
+            "AESMC {state:v}.16B, {state:v}.16B",
+            state = inlateout(vreg) state, zero = in(vreg) 0,
             options(pure, nomem, nostack, preserves_flags)
         );
         state

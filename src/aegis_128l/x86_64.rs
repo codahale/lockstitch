@@ -1,11 +1,11 @@
 #[cfg(target_arch = "x86")]
-pub use core::arch::x86::*;
+use core::arch::x86::{self as x86, *};
 
 #[cfg(target_arch = "x86_64")]
-pub use core::arch::x86_64::*;
+use core::arch::x86_64::{self as x86, *};
 
 /// An AES block.
-pub use self::__m128i as AesBlock;
+pub use x86::__m128i as AesBlock;
 
 /// Create an all-zero AES block.
 #[inline(always)]

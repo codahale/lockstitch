@@ -268,15 +268,30 @@ impl Protocol {
         // Finalize the current state and reset it to an uninitialized state.
         let hash = self.state.finalize_fixed_reset();
 
-        // Use the first 16 bytes as a chain key; use the second as an output key.
-        let (chain_key, output_key) = hash.split_at(16);
+        // Split the hash into a key and nonce and initialize an AEGIS-128L instance for PRF output.
+        let (prf_key, prf_nonce) = hash.split_at(16);
+        let mut prf = Aegis128L::new(
+            &prf_key.try_into().expect("should be 16 bytes"),
+            &prf_nonce.try_into().expect("should be 16 bytes"),
+        );
+
+        // Use the AEGIS-128L instance to generate a chain key and an output key and nonce.
+        let mut prf_out = [0u8; 64];
+        prf.prf(&mut prf_out);
+        let (chain_key, output_key) = prf_out.split_at_mut(32);
+        let (output_key, output_nonce) = output_key.split_at_mut(16);
 
         // Initialize the current state with the chain key.
         self.process(chain_key, Operation::Chain);
 
-        // Return a AEGIS-128L instance keyed with the output key and using the operation code as a
-        // nonce.
-        Aegis128L::new(&output_key.try_into().expect("invalid output key"), &[operation as u8; 16])
+        // Set the first byte of the output nonce to the operation code.
+        output_nonce[0] = operation as u8;
+
+        // Return a AEGIS-128L instance keyed with the output key and nonce.
+        Aegis128L::new(
+            &output_key.try_into().expect("should be 16 bytes"),
+            &output_nonce.try_into().expect("should be 16 bytes"),
+        )
     }
 
     // Process a single piece of input for an operation.
@@ -334,11 +349,11 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        expect!["1fc8624f782dd69f"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["3f6d24ea37711c9e"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        expect!["dc42f54a52dba16d523935c9aa2ece29cf6e"].assert_eq(&hex::encode(plaintext));
+        expect!["534f4064af0c07bf6bd8e93e8d39b38c3bc0"].assert_eq(&hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -347,10 +362,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(&mut sealed);
 
-        expect!["fe348bf822a903aff07749c0935c8bc6027a85aadf6007d88265e1316de07c317cb0"]
+        expect!["e7cc92b86d79f182b58b778492ad3169d090eddf089710e19b2edeea75da5e3d9628"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["d185b08c99d259a7"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["395ffb61c78bd8c0"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

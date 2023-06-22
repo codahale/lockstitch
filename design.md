@@ -35,16 +35,23 @@ This encoding ensures that operations of variable-length inputs are always unamb
 ### Generating Output
 
 To generate any output during an operation, the protocol first finalizes its current SHA-256 state
-into a 32-byte digest. That digest is split into two 16-byte keys. The protocol's state is replaced
-with a new SHA-256 instance and updated with the first key; an AEGIS-128L instance is initialized
-with the second key using the operation code as a nonce and used to generate any output:
+into a 32-byte digest. That digest is split into a key and nonce and used to initialize an
+AEGIS-128L instance. That AEGIS-128L instance is then used to generate 64 byte of PRF output. The
+first 32 bytes are used as a chain key to update the protocol state, the second 32 bytes are split
+into an output key and nonce. The first byte of the output nonce is set to the operation code.
+Finally, the output key and nonce are used to initialize an AEGIS-128L instance for output
+generation:
 
 ```text
 function Chain(state, operation):
-  K₀ǁK₁ ← SHA256::Finalize(state)               // Derive two keys from the current state.
-  state ← SHA256::Init()                        // Reset the state.
-  state ← Process(state, K₀, 0x07)              // Update the protocol with the first key and the Chain op code.
-  output ← AEGIS_128L::New(K₁, [operation; 16]) // Create an output AEGIS-128L instance with the second key.
+  K₀ǁN₀ ← SHA256::Finalize(state)  // Derive a key and nonce from the current state.
+  state ← SHA256::Init()           // Reset the state.
+  prf ← AEGIS_128L::New(K₀, N₀)    // Initialize an AEGIS-128L instance for PRF output.
+  K₁ ← AEGIS_128L::PRF(prf, 32)    // Generate a chain key.
+  state ← Process(state, K₁, 0x07) // Update the protocol with the chain key and the Chain op code.
+  K₂ǁN₂ ← AEGIS_128L::PRF(prf, 32) // Generate an output key and nonce.
+  N₂[0] ← operation                // Set the first byte of the output nonce to the op code.
+  output ← AEGIS_128L::New(K₂, N₂) // Create an output AEGIS-128L instance with the output key and nonce.
   return state, output
 ```
 
@@ -54,8 +61,8 @@ function Chain(state, operation):
 
 `Chain` uses an [HKDF][]-style _Extract-then-Expand_ key derivation function (KDF) with the
 protocol's prior inputs (i.e. the [encoded](#encoding-operations) operations) as the effective
-keying material, SHA-256 as both the strong computational extractor for the keying material and a
-fixed-length PRF.
+keying material, SHA-256 as the strong computational extractor for the keying material and
+AEGIS-128L as the expanding PRF.
 
 [HKDF]: https://www.rfc-editor.org/rfc/rfc5869.html
 

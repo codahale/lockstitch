@@ -375,12 +375,12 @@ mod tests {
         slices.mix(b"two");
 
         let mut streams = Protocol::new("com.example.streams");
-        streams.mix_stream(Cursor::new(b"one")).expect("cursor writes are infallible");
+        streams.mix_stream(Cursor::new(b"one")).expect("cursor writes should be infallible");
 
         let mut output = Vec::new();
         streams
             .copy_stream(Cursor::new(b"two"), &mut output)
-            .expect("cursor writes are infallible");
+            .expect("cursor writes should be infallible");
 
         assert_eq!(slices.derive_array::<16>(), streams.derive_array::<16>());
         assert_eq!(b"two".as_slice(), &output);

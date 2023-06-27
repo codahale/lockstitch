@@ -542,7 +542,7 @@ checksum = "36eb31c1778188ae1e64398743890d0877fef36d11521ac60406b42016e8c2cf"
 
 [[package]]
 name = "lockstitch"
-version = "0.11.3"
+version = "0.12.0"
 dependencies = [
  "aes",
  "criterion",

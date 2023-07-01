@@ -7,7 +7,6 @@
     unused_lifetimes,
     unused_qualifications,
     missing_debug_implementations,
-    clippy::as_conversions,
     clippy::cognitive_complexity,
     clippy::missing_const_for_fn,
     clippy::doc_markdown,
@@ -118,10 +117,7 @@ impl Protocol {
         output.prf(out);
 
         // Update the state with the output length and the operation code.
-        self.process(
-            &(u64::try_from(out.len()).expect("usize should be <= u64")).to_le_bytes(),
-            Operation::Derive,
-        );
+        self.process(&(out.len() as u64).to_le_bytes(), Operation::Derive);
     }
 
     /// Derive output from the protocol's current state and return it as an array.
@@ -289,7 +285,7 @@ impl Protocol {
         self.process(chain_key, Operation::Chain);
 
         // Set the first byte of the output nonce to the operation code.
-        output_nonce[0] = operation.into();
+        output_nonce[0] = operation as u8;
 
         // Return a AEGIS-128L instance keyed with the output key and nonce.
         Aegis128L::new(
@@ -305,7 +301,7 @@ impl Protocol {
         self.state.update(input);
 
         // End the operation with the operation code and input length.
-        self.end_op(operation, input.len().try_into().expect("usize should be <= u64"));
+        self.end_op(operation, input.len() as u64);
     }
 
     /// End an operation, including the number of bytes processed.
@@ -317,10 +313,10 @@ impl Protocol {
         // Encode the number of bytes processed using NIST SP-800-185's right_encode.
         buffer[..8].copy_from_slice(&n.to_be_bytes());
         let offset = buffer.iter().position(|i| *i != 0).unwrap_or(7);
-        buffer[8] = 8 - u8::try_from(offset).expect("offset should be in [0,8)");
+        buffer[8] = 8 - offset as u8;
 
         // Set the last byte to the operation code.
-        buffer[9] = operation.into();
+        buffer[9] = operation as u8;
 
         // Update the state with the length and operation code.
         self.state.update(&buffer[offset..]);
@@ -337,13 +333,6 @@ enum Operation {
     AuthCrypt = 0x05,
     Ratchet = 0x06,
     Chain = 0x07,
-}
-
-impl From<Operation> for u8 {
-    #[allow(clippy::as_conversions)]
-    fn from(value: Operation) -> Self {
-        value as u8
-    }
 }
 
 #[cfg(all(test, feature = "std"))]

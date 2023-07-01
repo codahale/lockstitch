@@ -88,7 +88,7 @@ impl Aegis128L {
             self.absorb(&xi);
         }
 
-        self.ad_len += u64::try_from(ad.len()).expect("usize should be <= u64");
+        self.ad_len += ad.len() as u64;
     }
 
     pub fn prf(&mut self, out: &mut [u8]) {
@@ -108,7 +108,7 @@ impl Aegis128L {
             chunk.copy_from_slice(&ci[..chunk.len()]);
         }
 
-        self.mc_len += u64::try_from(out.len()).expect("usize should be <= u64");
+        self.mc_len += out.len() as u64;
     }
 
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
@@ -132,7 +132,7 @@ impl Aegis128L {
             chunk.copy_from_slice(&ci[..chunk.len()]);
         }
 
-        self.mc_len += u64::try_from(in_out.len()).expect("usize should be <= u64");
+        self.mc_len += in_out.len() as u64;
     }
 
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
@@ -154,7 +154,7 @@ impl Aegis128L {
             cn.copy_from_slice(&xi[..cn.len()]);
         }
 
-        self.mc_len += u64::try_from(in_out.len()).expect("usize should be <= u64");
+        self.mc_len += in_out.len() as u64;
     }
 
     #[cfg(test)]

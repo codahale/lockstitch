@@ -14,9 +14,9 @@ include = ["src/**/*", "benches/**/*", "tests/**/*", "LICENSE", "README.md", "de
 
 [dependencies]
 aes = { version = "0.8.3", features = ["hazmat"], optional = true }
+cmov = "0.3.0"
 rand_core = { version = "0.6.4", default-features = false, optional = true }
 sha2 = { version = "0.10.7", default-features = false }
-subtle = { version = "2.5.0", default-features = false }
 
 [features]
 default = ["asm", "hedge", "std"]

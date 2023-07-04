@@ -19,11 +19,11 @@ use crate::aegis_128l::Aegis128L;
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
+use cmov::CmovEq;
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
 use sha2::digest::FixedOutputReset;
 use sha2::{Digest, Sha256};
-use subtle::ConstantTimeEq;
 
 #[doc = include_str!("../design.md")]
 pub mod design {}
@@ -205,7 +205,7 @@ impl Protocol {
         self.process(&l_tag, Operation::AuthCrypt);
 
         // Check the tag against the counterfactual short tag.
-        if s_tag.ct_eq(&s_tag_p).into() {
+        if ct_eq(s_tag, &s_tag_p) {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -335,6 +335,17 @@ enum Operation {
     AuthCrypt = 0x05,
     Ratchet = 0x06,
     Chain = 0x07,
+}
+
+/// A constant-time comparison using CMOV/CSEL instructions.
+#[inline(always)]
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    debug_assert_eq!(a.len(), b.len(), "both slices should be the same length");
+    let mut eq = 0xFF;
+    for (x, y) in a.iter().zip(b) {
+        x.cmovne(y, 0x00, &mut eq); // If x != y, set eq to 0x00.
+    }
+    eq == 0xFF // Finally, if eq is still 0xFF, the slices are equal.
 }
 
 #[cfg(all(test, feature = "std"))]

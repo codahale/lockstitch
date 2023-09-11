@@ -263,16 +263,22 @@ impl Aegis128L {
     }
 
     fn update(&mut self, m0: AesBlock, m1: AesBlock) {
-        self.blocks = [
-            enc(self.blocks[7], xor(self.blocks[0], m0)), // S'0 = AESRound(S7, S0 ^ M0)
-            enc(self.blocks[0], self.blocks[1]),          // S'1 = AESRound(S0, S1)
-            enc(self.blocks[1], self.blocks[2]),          // S'2 = AESRound(S1, S2)
-            enc(self.blocks[2], self.blocks[3]),          // S'3 = AESRound(S2, S3)
-            enc(self.blocks[3], xor(self.blocks[4], m1)), // S'4 = AESRound(S3, S4 ^ M1)
-            enc(self.blocks[4], self.blocks[5]),          // S'5 = AESRound(S4, S5)
-            enc(self.blocks[5], self.blocks[6]),          // S'6 = AESRound(S5, S6)
-            enc(self.blocks[6], self.blocks[7]),          // S'7 = AESRound(S6, S7)
-        ];
+        // Make a temporary copy of the last state block.
+        let block7 = self.blocks[7];
+
+        // Perform the AES rounds in place.
+        self.blocks[7] = enc(self.blocks[6], self.blocks[7]);
+        self.blocks[6] = enc(self.blocks[5], self.blocks[6]);
+        self.blocks[5] = enc(self.blocks[4], self.blocks[5]);
+        self.blocks[4] = enc(self.blocks[3], self.blocks[4]);
+        self.blocks[3] = enc(self.blocks[2], self.blocks[3]);
+        self.blocks[2] = enc(self.blocks[1], self.blocks[2]);
+        self.blocks[1] = enc(self.blocks[0], self.blocks[1]);
+        self.blocks[0] = enc(block7, self.blocks[0]);
+
+        // XOR blocks 0 and 4 with the two message blocks.
+        self.blocks[0] = xor(self.blocks[0], m0);
+        self.blocks[4] = xor(self.blocks[4], m1);
     }
 }
 

@@ -19,7 +19,7 @@ use crate::aegis_128l::Aegis128L;
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use cmov::CmovEq;
+use cmov::Cmov;
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
 use sha2::digest::FixedOutputReset;
@@ -341,11 +341,16 @@ enum Operation {
 #[inline]
 fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     debug_assert_eq!(a.len(), b.len(), "both slices should be the same length");
-    let mut eq = 0xFF;
-    for (x, y) in a.iter().zip(b) {
-        x.cmovne(y, 0x00, &mut eq); // If x != y, set eq to 0x00.
-    }
-    eq == 0xFF // Finally, if eq is still 0xFF, the slices are equal.
+
+    // XOR the slices together and accumulate any non-zero bits via OR.
+    let eq = a.iter().zip(b.iter()).fold(0, |eq, (x, y)| eq | (x ^ y));
+
+    // Use CMOV/CSEL to set a result flag without branching. This acts as an optimization barrier to
+    // prevent sufficiently smart compilers from realizing this function is just memcmp with extra
+    // steps and adding a timing vulnerability for us.
+    let mut res = 0xFFu8;
+    res.cmovz(&0x00, eq);
+    res == 0
 }
 
 #[cfg(all(test, feature = "std"))]

@@ -46,7 +46,7 @@ pub struct Protocol {
 
 impl Protocol {
     /// Create a new protocol with the given domain.
-    #[inline(always)]
+    #[inline]
     pub fn new(domain: &'static str) -> Protocol {
         // Create a protocol with a fresh SHA-256 instance.
         let mut protocol = Protocol { state: Sha256::new() };
@@ -58,7 +58,7 @@ impl Protocol {
     }
 
     /// Mixes the given slice into the protocol state.
-    #[inline(always)]
+    #[inline]
     pub fn mix(&mut self, data: &[u8]) {
         // Update the state with the data and operation code.
         self.process(data, Operation::Mix);
@@ -108,7 +108,7 @@ impl Protocol {
     }
 
     /// Derive output from the protocol's current state and fill the given slice with it.
-    #[inline(always)]
+    #[inline]
     pub fn derive(&mut self, out: &mut [u8]) {
         // Chain the protocol's key and generate an output key.
         let mut output = self.chain(Operation::Derive);
@@ -121,7 +121,7 @@ impl Protocol {
     }
 
     /// Derive output from the protocol's current state and return it as an array.
-    #[inline(always)]
+    #[inline]
     pub fn derive_array<const N: usize>(&mut self) -> [u8; N] {
         let mut out = [0u8; N];
         self.derive(&mut out);
@@ -129,7 +129,7 @@ impl Protocol {
     }
 
     /// Encrypt the given slice in place.
-    #[inline(always)]
+    #[inline]
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
         // Chain the protocol's key and generate an output key.
         let mut output = self.chain(Operation::Crypt);
@@ -145,7 +145,7 @@ impl Protocol {
     }
 
     /// Decrypt the given slice in place.
-    #[inline(always)]
+    #[inline]
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
         // Chain the protocol's key and generate an output key.
         let mut output = self.chain(Operation::Crypt);
@@ -163,7 +163,7 @@ impl Protocol {
     /// Seals the given mutable slice in place.
     ///
     /// The last `TAG_LEN` bytes of the slice will be overwritten with the authentication tag.
-    #[inline(always)]
+    #[inline]
     pub fn seal(&mut self, in_out: &mut [u8]) {
         // Split the buffer into plaintext and tag.
         let (in_out, tag_out) = in_out.split_at_mut(in_out.len() - TAG_LEN);
@@ -186,7 +186,7 @@ impl Protocol {
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
     /// was authenticated. The last `TAG_LEN` bytes of the slice will be unmodified.
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub fn open<'a>(&mut self, in_out: &'a mut [u8]) -> Option<&'a [u8]> {
         // Split the buffer into ciphertext and tag.
@@ -262,7 +262,7 @@ impl Protocol {
 
     /// Replace the protocol's state with derived output and return an operation-specific AEGIS-128L
     /// instance.
-    #[inline(always)]
+    #[inline]
     #[must_use]
     fn chain(&mut self, operation: Operation) -> Aegis128L {
         // Finalize the current state and reset it to an uninitialized state.
@@ -295,7 +295,7 @@ impl Protocol {
     }
 
     // Process a single piece of input for an operation.
-    #[inline(always)]
+    #[inline]
     fn process(&mut self, input: &[u8], operation: Operation) {
         // Update the state with the input.
         self.state.update(input);
@@ -305,7 +305,7 @@ impl Protocol {
     }
 
     /// End an operation, including the number of bytes processed.
-    #[inline(always)]
+    #[inline]
     fn end_op(&mut self, operation: Operation, n: u64) {
         // Allocate a buffer for output.
         let mut buffer = [0u8; 10];
@@ -338,7 +338,7 @@ enum Operation {
 }
 
 /// A constant-time comparison using CMOV/CSEL instructions.
-#[inline(always)]
+#[inline]
 fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     debug_assert_eq!(a.len(), b.len(), "both slices should be the same length");
     let mut eq = 0xFF;

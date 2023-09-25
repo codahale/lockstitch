@@ -283,14 +283,14 @@ impl Aegis128L {
 }
 
 /// Load two AES blocks from the given slice.
-#[inline(always)]
+#[inline]
 fn load_2x(bytes: &[u8; BLOCK_LEN]) -> (AesBlock, AesBlock) {
     let (hi, lo) = bytes.split_at(AES_BLOCK_LEN);
     (load(hi), load(lo))
 }
 
 /// Store two AES blocks in the given slice.
-#[inline(always)]
+#[inline]
 fn store_2x(bytes: &mut [u8; BLOCK_LEN], hi: AesBlock, lo: AesBlock) {
     let (b_hi, b_lo) = bytes.split_at_mut(AES_BLOCK_LEN);
     store(b_hi, hi);

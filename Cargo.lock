@@ -530,7 +530,7 @@ checksum = "57bcfdad1b858c2db7c38303a6d2ad4dfaf5eb53dfeb0910128b2c26d6158503"
 
 [[package]]
 name = "lockstitch"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "aes",
  "cmov",

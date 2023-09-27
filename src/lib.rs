@@ -19,7 +19,7 @@ use crate::aegis_128l::Aegis128L;
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use cmov::Cmov;
+use cmov::CmovEq;
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
 use sha2::digest::FixedOutputReset;
@@ -205,7 +205,7 @@ impl Protocol {
         self.process(&l_tag, Operation::AuthCrypt);
 
         // Check the tag against the counterfactual short tag.
-        if ct_eq(s_tag, &s_tag_p) {
+        if ct_eq(s_tag, &s_tag_p) == 1 {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -337,20 +337,16 @@ enum Operation {
     Chain = 0x07,
 }
 
-/// A constant-time comparison using CMOV/CSEL instructions.
-#[inline]
-fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+/// A constant-time comparison using CMOV/CSEL instructions. Returns `1` if the two slices are
+/// equal, `0` otherwise.
+#[inline(never)] // don't inline to avoid getting optimized into vartime
+fn ct_eq(a: &[u8], b: &[u8]) -> u8 {
     debug_assert_eq!(a.len(), b.len(), "both slices should be the same length");
-
-    // XOR the slices together and accumulate any non-zero bits via OR.
-    let eq = a.iter().zip(b.iter()).fold(0, |eq, (x, y)| eq | (x ^ y));
-
-    // Use CMOV/CSEL to set a result flag without branching. This acts as an optimization barrier to
-    // prevent sufficiently smart compilers from realizing this function is just memcmp with extra
-    // steps and adding a timing vulnerability for us.
-    let mut res = 0xFFu8;
-    res.cmovz(&0x00, eq);
-    res == 0
+    let mut res = 1;
+    for (x, y) in a.iter().zip(b.iter()) {
+        x.cmovne(y, 0, &mut res);
+    }
+    res
 }
 
 #[cfg(all(test, feature = "std"))]

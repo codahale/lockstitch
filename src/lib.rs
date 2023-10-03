@@ -204,8 +204,10 @@ impl Protocol {
         // Update the state with the long tag and the operation code.
         self.process(&l_tag, Operation::AuthCrypt);
 
-        // Check the tag against the counterfactual short tag.
-        if ct_eq(s_tag, s_tag_p) == 1 {
+        // Check the tag against the counterfactual short tag in constant time.
+        let mut eq = 0u8;
+        s_tag.cmoveq(&s_tag_p, 1, &mut eq);
+        if eq == 1 {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -335,23 +337,6 @@ enum Operation {
     AuthCrypt = 0x05,
     Ratchet = 0x06,
     Chain = 0x07,
-}
-
-/// A constant-time comparison of two `u8` slices using conditional move instructions. Returns `1`
-/// iff the two slices are equal, `0` otherwise.
-#[inline(never)] // don't inline to avoid getting optimized into vartime
-pub fn ct_eq(a: impl AsRef<[u8]>, b: impl AsRef<[u8]>) -> u8 {
-    // Compare slice lengths in variable time, since there's no other way to do that.
-    if a.as_ref().len() != b.as_ref().len() {
-        return 0;
-    }
-
-    // Iterate through the value pairs, checking for inequality.
-    let mut res = 1;
-    for (x, y) in a.as_ref().iter().zip(b.as_ref().iter()) {
-        x.cmovne(y, 0, &mut res);
-    }
-    res
 }
 
 #[cfg(all(test, feature = "std"))]

@@ -183,8 +183,10 @@ the same state after both encrypting and decrypting data.
 
 Second, despite not updating the protocol state with either the plaintext or ciphertext, the
 inclusion of the long tag ensures the protocol's state is dependent on both because AEGIS-128L is
-fully committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
-which produces the same authentication tag is negligible).
+key committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
+which produces the same authentication tag is negligible). (AEGIS-128L is not fully committing, as
+[collisions can be found if authenticated data is
+attacker-controlled](https://eprint.iacr.org/2023/1495.pdf)).
 
 Third, `Crypt` operations provide no authentication by themselves. An attacker can modify a
 ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
@@ -316,8 +318,8 @@ are also the values used to produce the ciphertext. Forging a tag here would imp
 MAC construction is not sUF-CMA secure.
 
 In addition, this construction is fully committing: finding a ciphertext and tag pair which
-successfully decrypts under multiple keys would imply that AEGIS-128L is not fully committing, and
-the final tag serves as a commitment for the ciphertext.
+successfully decrypts under multiple keys would imply that AEGIS-128L is not key committing, and the
+final tag serves as a commitment for the ciphertext.
 
 Decryption uses the `Open` operation to decrypt:
 

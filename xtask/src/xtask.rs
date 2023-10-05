@@ -37,9 +37,6 @@ enum CloudCommand {
     Bench {
         #[arg(long, default_value = "main")]
         branch: String,
-
-        #[arg(long)]
-        download: bool,
     },
     Test {
         #[arg(long, default_value = "main")]
@@ -61,7 +58,7 @@ fn main() -> Result<()> {
         Command::Cloud { cmd } => match cmd {
             CloudCommand::Create => cloud_create(&sh),
             CloudCommand::Setup => cloud_setup(&sh),
-            CloudCommand::Bench { branch, download } => cloud_bench(&sh, &branch, download),
+            CloudCommand::Bench { branch } => cloud_bench(&sh, &branch),
             CloudCommand::Test { branch } => cloud_test(&sh, &branch),
             CloudCommand::Ssh => cloud_ssh(),
             CloudCommand::Delete => cloud_delete(&sh),
@@ -81,7 +78,12 @@ fn ci(sh: &Shell) -> Result<()> {
 
 fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
     let args = args.join(" ");
-    cmd!(sh, "cargo bench {args}").env("RUSTFLAGS", "-C target-cpu=native").run()?;
+    cmd!(sh, "cargo bench {args}")
+        .env("RUSTFLAGS", "-C target-cpu=native")
+        .env("DIVAN_BYTES_FORMAT", "binary")
+        .env("DIVAN_TIMER", "tsc")
+        .env("DIVAN_MIN_TIME", "1")
+        .run()?;
 
     Ok(())
 }
@@ -102,22 +104,18 @@ fn cloud_setup(sh: &Shell) -> Result<()> {
 
 fn cloud_test(sh: &Shell, branch: &str) -> Result<()> {
     cmd!(sh, "rm -rf ./target/criterion-remote").run()?;
-    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull && git checkout {branch} && rm -rf target/criterion && RUSTFLAGS='-C target-feature=+aes,+ssse3' cargo test");
+    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull --ff-only && git checkout {branch} && RUSTFLAGS='-C target-feature=+aes,+ssse3' cargo test");
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command {cmd}")
         .run()?;
 
     Ok(())
 }
 
-fn cloud_bench(sh: &Shell, branch: &str, download: bool) -> Result<()> {
+fn cloud_bench(sh: &Shell, branch: &str) -> Result<()> {
     cmd!(sh, "rm -rf ./target/criterion-remote").run()?;
-    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull && git checkout {branch} && rm -rf target/criterion && RUSTFLAGS='-C target-feature=+aes,+ssse3' cargo bench");
+    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull --ff-only && git checkout {branch} && RUSTFLAGS='-C target-feature=+aes,+ssse3' DIVAN_BYTES_FORMAT=binary DIVAN_TIMER=tsc DIVAN_MIN_TIME=1 cargo bench");
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command {cmd}")
         .run()?;
-
-    if download {
-        cmd!(sh, " gcloud compute scp --zone=us-central1-a --recurse lockstitch-benchmark:~/lockstitch/target/criterion ./target/criterion-remote").run()?;
-    }
 
     Ok(())
 }

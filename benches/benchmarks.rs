@@ -26,6 +26,7 @@ fn prf<const LEN: usize>(bencher: divan::Bencher) {
             let mut protocol = Protocol::new("prf");
             protocol.mix(&key);
             protocol.derive(&mut block);
+            block
         },
     );
 }
@@ -40,6 +41,7 @@ fn stream<const LEN: usize>(bencher: divan::Bencher) {
             protocol.mix(&key);
             protocol.mix(&nonce);
             protocol.encrypt(&mut block);
+            block
         },
     );
 }
@@ -56,6 +58,7 @@ fn aead<const LEN: usize>(bencher: divan::Bencher) {
             protocol.mix(&nonce);
             protocol.mix(&ad);
             protocol.seal(&mut block);
+            block
         },
     );
 }

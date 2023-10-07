@@ -123,8 +123,8 @@ eliminates the possibility of collisions; no additional padding or encoding is r
 
 Multiple `Mix` operations in a row are equivalent to a single [encoded](#encoding-operations) block
 of input to SHA-256.  Unlike other operations (which all produce output and therefore replace the
-state with derived output), `Mix` does not replace the hasher, allowing sequential `Mix` operations
-to be batched, leveraging the full throughput potential of SHA-256.
+state with derived output), `Mix` does not replace the protocol state, allowing sequential `Mix`
+operations to be batched and leverage the full throughput potential of SHA-256.
 
 **N.B.**: Processing more than 2^64 bytes without generating output will result in undefined
 behavior.
@@ -184,9 +184,11 @@ the same state after both encrypting and decrypting data.
 Second, despite not updating the protocol state with either the plaintext or ciphertext, the
 inclusion of the long tag ensures the protocol's state is dependent on both because AEGIS-128L is
 key committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
-which produces the same authentication tag is negligible). (AEGIS-128L is not fully committing, as
-[collisions can be found if authenticated data is
-attacker-controlled](https://eprint.iacr.org/2023/1495.pdf)).
+which produces the same authentication tag is negligible).
+
+**N.B.:** AEGIS-128L by itself is not fully committing, as [tag collisions can be found if
+authenticated data is attacker-controlled](https://eprint.iacr.org/2023/1495.pdf). Lockstitch does
+not pass authenticated data to AEGIS-128L, however, mooting this type of attack.
 
 Third, `Crypt` operations provide no authentication by themselves. An attacker can modify a
 ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,

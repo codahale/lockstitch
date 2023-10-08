@@ -25,9 +25,11 @@ use rand_core::{CryptoRng, RngCore};
 use sha2::digest::FixedOutputReset;
 use sha2::{Digest, Sha256};
 
+#[cfg(feature = "docs")]
 #[doc = include_str!("../design.md")]
 pub mod design {}
 
+#[cfg(feature = "docs")]
 #[doc = include_str!("../perf.md")]
 pub mod perf {}
 

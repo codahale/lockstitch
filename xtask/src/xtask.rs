@@ -111,7 +111,7 @@ fn cloud_test(sh: &Shell, branch: &str) -> Result<()> {
 }
 
 fn cloud_bench(sh: &Shell, branch: &str) -> Result<()> {
-    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull --ff-only && git checkout {branch} && RUSTFLAGS='-C target-feature=+aes,+ssse3' DIVAN_BYTES_FORMAT=binary DIVAN_TIMER=tsc DIVAN_MIN_TIME=1 cargo bench");
+    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull --ff-only && git checkout {branch} && cargo xtask bench");
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command {cmd}")
         .run()?;
 

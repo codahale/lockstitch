@@ -99,6 +99,7 @@ impl Protocol {
                     writer.write_all(block)?;
                     n += u64::try_from(x).expect("usize should be <= u64");
                 }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(e),
             }
         }

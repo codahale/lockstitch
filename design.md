@@ -34,7 +34,7 @@ This encoding ensures that operations of variable-length inputs are always unamb
 
 To generate any output during an operation, the protocol first finalizes its current SHA-256 state
 into a 32-byte digest. That digest is split into a key and nonce and used to initialize an
-AES-128-CTR instance. That AES-128-CTR instance is then used to generate 64 byte of PRF output. The
+AES-128-CTR instance. That AES-128-CTR instance is then used to generate 64 bytes of PRF output. The
 first 32 bytes are used as a chain key to update the protocol state, the second 32 bytes are split
 into an output key and nonce. The first byte of the output nonce is set to the operation code.
 Finally, the output key and nonce are used to initialize an AES-128-CTR instance for output
@@ -53,7 +53,8 @@ function Chain(state, operation):
   return state, output
 ```
 
-**N.B.**: Each operation is limited to 2^61 bytes of output.
+**N.B.**: Lockstitch uses AES-128-CTR with a 128-bit big endian counter, which makes it compatible
+with OpenSSL's `EVP_aes_128_ctr` configuration. Each operation is limited to 2^61 bytes of output.
 
 #### KDF Security
 

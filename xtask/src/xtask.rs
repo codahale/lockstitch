@@ -79,7 +79,6 @@ fn ci(sh: &Shell) -> Result<()> {
 fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
     let args = args.join(" ");
     cmd!(sh, "cargo bench {args}")
-        .env("RUSTFLAGS", "--cfg aes_armv8")
         .env("DIVAN_BYTES_FORMAT", "binary")
         .env("DIVAN_TIMER", "tsc")
         .env("DIVAN_MIN_TIME", "1")

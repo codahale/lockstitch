@@ -141,11 +141,11 @@ impl Protocol {
         // Chain the protocol's key and generate an output key and nonce.
         let mut ctr = self.chain(Operation::Crypt);
 
+        // Hash the plaintext.
+        self.state.update(&in_out);
+
         // Encrypt the plaintext.
         ctr.apply_keystream(in_out);
-
-        // Hash the ciphertext.
-        self.state.update(&in_out);
 
         // Update the state with the ciphertext and the operation code.
         self.process(&(in_out.len().to_le_bytes()), Operation::Crypt);
@@ -157,11 +157,11 @@ impl Protocol {
         // Chain the protocol's key and generate an output key and nonce.
         let mut ctr = self.chain(Operation::Crypt);
 
-        // Hash the ciphertext.
-        self.state.update(&in_out);
-
         // Decrypt the ciphertext.
         ctr.apply_keystream(in_out);
+
+        // Hash the plaintext.
+        self.state.update(&in_out);
 
         // Update the state with the ciphertext and the operation code.
         self.process(&(in_out.len().to_le_bytes()), Operation::Crypt);
@@ -367,10 +367,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(&mut sealed);
 
-        expect!["00d6be82b649b75a53fbadc51b8e6e20de9c997937a726fb4300b640dc407d23d55d"]
+        expect!["3379fa81ca464cbbd5949adcc87efe9e5884c7513d5e0d918c898cfd1f9295d9a05d"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["8d68e30bc94cc882"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["12da9ef7dcde2ece"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

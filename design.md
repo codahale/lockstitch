@@ -151,7 +151,7 @@ operation is complete, however, the protocols' states will be different. If a us
 
 ### `Encrypt`/`Decrypt`
 
-`Encrypt` uses AES-128_CTR to encrypt a given plaintext with a key derived from the protocol's
+`Encrypt` uses AES-128-CTR to encrypt a given plaintext with a key derived from the protocol's
 current state and updates the protocol's state with the ciphertext.
 
 ```text

@@ -79,7 +79,7 @@ fn ci(sh: &Shell) -> Result<()> {
 fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
     let args = args.join(" ");
     cmd!(sh, "cargo bench {args}")
-        .env("RUSTFLAGS", "-C target-cpu=native")
+        .env("RUSTFLAGS", "--cfg aes_armv8")
         .env("DIVAN_BYTES_FORMAT", "binary")
         .env("DIVAN_TIMER", "tsc")
         .env("DIVAN_MIN_TIME", "1")
@@ -95,7 +95,7 @@ fn cloud_create(sh: &Shell) -> Result<()> {
 }
 
 fn cloud_setup(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'sudo apt-get install build-essential git -y'").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'sudo apt-get install build-essential git pkg-config libssl-dev -y'").run()?;
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command 'git clone https://github.com/codahale/lockstitch'").run()?;
 
@@ -103,7 +103,7 @@ fn cloud_setup(sh: &Shell) -> Result<()> {
 }
 
 fn cloud_test(sh: &Shell, branch: &str) -> Result<()> {
-    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull --ff-only && git checkout {branch} && RUSTFLAGS='-C target-feature=+aes,+ssse3' cargo test");
+    let cmd = format!("source ~/.cargo/env && cd lockstitch && git fetch && git reset --hard origin/{branch} && cargo test");
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command {cmd}")
         .run()?;
 
@@ -111,7 +111,7 @@ fn cloud_test(sh: &Shell, branch: &str) -> Result<()> {
 }
 
 fn cloud_bench(sh: &Shell, branch: &str) -> Result<()> {
-    let cmd = format!("source ~/.cargo/env && cd lockstitch && git pull --ff-only && git checkout {branch} && RUSTFLAGS='-C target-feature=+aes,+ssse3' DIVAN_BYTES_FORMAT=binary DIVAN_TIMER=tsc DIVAN_MIN_TIME=1 cargo bench");
+    let cmd = format!("source ~/.cargo/env && cd lockstitch && git fetch && git reset --hard origin/{branch} && cargo xtask bench");
     cmd!(sh, "gcloud compute ssh lockstitch-benchmark --zone=us-central1-a --command {cmd}")
         .run()?;
 

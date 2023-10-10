@@ -3,10 +3,8 @@
 Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption) in
 complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, and Xoodyak's
-Cyclist mode, Lockstitch uses the [AEGIS-128L][] authenticated cipher and SHA-256 to provide 100+
-Gb/sec performance on modern processors at a 128-bit security level.
-
-[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-04.html
+Cyclist mode, Lockstitch uses AES-128-CTR and SHA-256 to provide ~1 GiB/sec performance on modern
+processors at a 128-bit security level.
 
 ## ⚠️ WARNING: You should not use this. ⚠️
 
@@ -19,12 +17,11 @@ In addition, there is absolutely no guarantee of backwards compatibility.
 
 ## Design
 
-A Lockstitch protocol is a stateful object which has five different operations:
+A Lockstitch protocol is a stateful object which has four different operations:
 
 * `Mix`: Mixes a piece of data into the protocol's state, making all future outputs dependent on it.
 * `Derive`: Outputs bytes of pseudo-random data dependent on the protocol's prior state.
 * `Encrypt`/`Decrypt`: Encrypts and decrypts data using the protocol's state as the key.
-* `Seal`/`Open`: Similar to `Encrypt`/`Decrypt` but uses a MAC to ensure authenticity.
 * `Ratchet`: Irreversibly modifies the protocol's state, preventing rollback.
 
 Using these operations, one can construct a wide variety of symmetric-key constructions.
@@ -102,45 +99,22 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 ## Cargo Features
 
 * `asm`: Enables hand-coded assembly for SHA-256 for `x86` and `x86_64` and a vectorized
-  implementation for `aarch64`. Enabled by default.
+implementation for `aarch64`. Enabled by default.
+* `docs`: Enables the docs-only `perf` and `design` modules.
 * `hedge`: Enables hedged random value generation with `rand_core`. Enabled by default.
-* `portable`: Uses the portable `aes` crate for AEGIS-128L at a steep performance penalty.
 * `std`: Enables features based on the Rust standard library. Enabled by default.
 
 ## Performance
 
-Lockstitch's SHA-256 and AEGIS-128L implementations benefit significantly from the use of specific
-CPU instructions.
-
 ### `x86`/`x86_64`
 
-On `x86`/`x86_64` CPUs, Lockstitch achieves its best performance with the `aes` and `ssse3` target
-features enabled.
-
-To compile a binary with support for these features, create a `.cargo/config.toml` file with the
-following:
-
-```toml
-[build]
-rustflags = ["-C", "target-feature=+aes,+ssse3"]
-```
-
-Or use the following `RUSTFLAGS` environment variable:
-
-```sh
-export RUSTFLAGS="-C target-feature=+aes,+ssse3"
-```
+Both the `aes` and `sha2` crates auto-detect CPU support at runtime and will use the most optimized
+backend.
 
 ### `aarch64`
 
-On `aarch64-darwin-apple` (i.e. macOS), the ARMv8-A cryptography instructions and NEON vector
-instructions are enabled by default. On other targets (e.g. `aarch64-unknown-linux-gnu`), the `sha3`
-and `aes` target features should be enabled.
-
-### Other
-
-For other platforms, the `portable` crate feature provides a very slow but fully portable AES
-implementation.
+In order to enable CPU support for AES and SHA2, enable the `asm` crate feature and include
+`--cfg aes_armv8` in the `RUSTFLAGS` of your application.
 
 ## Additional Information
 
@@ -149,8 +123,6 @@ For more information on performance, see [`perf.md`](perf.md).
 
 ## License
 
-Copyright © 2023 Coda Hale, Frank Denis
+Copyright © 2023 Coda Hale
 
-AEGIS-128L implementation adapted from [rust-aegis](https://github.com/jedisct1/rust-aegis/).
-
-Distributed under the MIT License.
+Distributed under the Apache License 2.0 or MIT License.

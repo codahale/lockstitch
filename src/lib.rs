@@ -261,10 +261,8 @@ impl Protocol {
         // Split the hash into a key and nonce and initialize an AES-128-CTR instance for PRF
         // output.
         let (prf_key, prf_nonce) = hash.split_at(16);
-        let mut prf = Aes128Ctr::new(
-            &<[u8; 16]>::try_from(prf_key).expect("should be 16 bytes").into(),
-            &<[u8; 16]>::try_from(prf_nonce).expect("should be 16 bytes").into(),
-        );
+        let mut prf =
+            Aes128Ctr::new_from_slices(prf_key, prf_nonce).expect("should be valid key and nonce");
 
         // Generate 64 bytes of PRF output.
         let mut prf_out = [0u8; 64];
@@ -282,10 +280,7 @@ impl Protocol {
         self.process(chain_key, Operation::Chain);
 
         // Initialize an AES-128-CTR instance for output.
-        Aes128Ctr::new(
-            &<[u8; 16]>::try_from(output_key).expect("should be 16 bytes").into(),
-            &<[u8; 16]>::try_from(output_nonce).expect("should be 16 bytes").into(),
-        )
+        Aes128Ctr::new_from_slices(output_key, output_nonce).expect("should be valid key and nonce")
     }
 
     // Process a single piece of input for an operation.

@@ -213,7 +213,7 @@ impl Protocol {
     /// Modifies the protocol's state irreversibly, preventing rollback.
     pub fn ratchet(&mut self) {
         // Chain the protocol's key, ignoring the PRF output.
-        self.chain(Operation::Ratchet);
+        let _ = self.chain(Operation::Ratchet);
 
         // Update the state with the operation code and zero length.
         self.end_op(Operation::Ratchet, 0);
@@ -254,6 +254,7 @@ impl Protocol {
 
     /// Replace the protocol's state with derived output and initialize the cipher context.
     #[inline]
+    #[must_use]
     fn chain(&mut self, operation: Operation) -> Aes128Ctr {
         // Finalize the current state and reset it to an uninitialized state.
         let hash = self.state.finalize_fixed_reset();

@@ -1,3 +1,5 @@
+use std::io::{self, Read};
+
 use divan::counter::BytesCount;
 use lockstitch::{Protocol, TAG_LEN};
 
@@ -16,6 +18,20 @@ fn hash<const LEN: usize>(bencher: divan::Bencher) {
         protocol.derive(&mut digest);
         digest
     });
+}
+
+#[divan::bench(consts = LENS)]
+fn hash_reader<const LEN: usize>(bencher: divan::Bencher) {
+    bencher
+        .with_inputs(|| io::repeat(0).take(LEN as u64))
+        .counter(BytesCount::new(LEN))
+        .bench_values(|input| {
+            let mut digest = [0u8; 32];
+            let mut protocol = Protocol::new("hash");
+            protocol.mix_reader(input).expect("should mix reader");
+            protocol.derive(&mut digest);
+            digest
+        });
 }
 
 #[divan::bench(consts = LENS)]

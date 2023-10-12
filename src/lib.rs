@@ -75,8 +75,8 @@ impl Protocol {
     ///
     /// Returns any errors returned by the reader or writer.
     #[cfg(feature = "std")]
-    pub fn mix_stream(&mut self, reader: impl Read) -> io::Result<u64> {
-        self.copy_stream(reader, io::sink())
+    pub fn mix_reader(&mut self, reader: impl Read) -> io::Result<u64> {
+        self.mix_and_copy_reader(reader, io::sink())
     }
 
     /// Mixes the contents of the reader into the protocol state while copying them to the writer.
@@ -85,12 +85,12 @@ impl Protocol {
     ///
     /// Returns any errors returned by the reader or writer.
     #[cfg(feature = "std")]
-    pub fn copy_stream(
+    pub fn mix_and_copy_reader(
         &mut self,
         mut reader: impl Read,
         mut writer: impl Write,
     ) -> io::Result<u64> {
-        let mut buf = [0u8; 64 * 1024];
+        let mut buf = [0u8; 8 * 1024];
         let mut n = 0;
 
         loop {
@@ -370,17 +370,17 @@ mod tests {
     }
 
     #[test]
-    fn streams() {
+    fn readers() {
         let mut slices = Protocol::new("com.example.streams");
         slices.mix(b"one");
         slices.mix(b"two");
 
         let mut streams = Protocol::new("com.example.streams");
-        streams.mix_stream(Cursor::new(b"one")).expect("cursor writes should be infallible");
+        streams.mix_reader(Cursor::new(b"one")).expect("cursor writes should be infallible");
 
         let mut output = Vec::new();
         streams
-            .copy_stream(Cursor::new(b"two"), &mut output)
+            .mix_and_copy_reader(Cursor::new(b"two"), &mut output)
             .expect("cursor writes should be infallible");
 
         assert_eq!(slices.derive_array::<16>(), streams.derive_array::<16>());

@@ -21,14 +21,16 @@ fn hash<const LEN: usize>(bencher: divan::Bencher) {
 }
 
 #[divan::bench(consts = LENS)]
-fn hash_reader<const LEN: usize>(bencher: divan::Bencher) {
+fn hash_writer<const LEN: usize>(bencher: divan::Bencher) {
     bencher
         .with_inputs(|| io::repeat(0).take(LEN as u64))
         .counter(BytesCount::new(LEN))
-        .bench_values(|input| {
+        .bench_values(|mut input| {
             let mut digest = [0u8; 32];
-            let mut protocol = Protocol::new("hash");
-            protocol.mix_reader(input).expect("should mix reader");
+            let protocol = Protocol::new("hash");
+            let mut writer = protocol.mix_writer(io::sink());
+            io::copy(&mut input, &mut writer).expect("mix writes should be infallible");
+            let (mut protocol, _) = writer.into_inner();
             protocol.derive(&mut digest);
             digest
         });

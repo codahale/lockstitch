@@ -16,7 +16,7 @@
 
 use core::fmt::Debug;
 #[cfg(feature = "std")]
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 
 use cmov::CmovEq;
 #[cfg(feature = "hedge")]
@@ -69,48 +69,12 @@ impl Protocol {
         self.process(data, Operation::Mix);
     }
 
-    /// Mixes the contents of the reader into the protocol state.
-    ///
-    /// # Errors
-    ///
-    /// Returns any errors returned by the reader or writer.
+    /// Moves the protocol into a `Write` implementation, mixing all written data in a single
+    /// operation and passing all writes to `inner`. Use [`MixWriter::into_inner`] to finish the
+    /// operation and recover the protocol and `inner`.
     #[cfg(feature = "std")]
-    pub fn mix_reader(&mut self, reader: impl Read) -> io::Result<u64> {
-        self.mix_and_copy_reader(reader, io::sink())
-    }
-
-    /// Mixes the contents of the reader into the protocol state while copying them to the writer.
-    ///
-    /// # Errors
-    ///
-    /// Returns any errors returned by the reader or writer.
-    #[cfg(feature = "std")]
-    pub fn mix_and_copy_reader(
-        &mut self,
-        mut reader: impl Read,
-        mut writer: impl Write,
-    ) -> io::Result<u64> {
-        let mut buf = [0u8; 8 * 1024];
-        let mut n = 0;
-
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => break, // EOF
-                Ok(x) => {
-                    let block = &buf[..x];
-                    self.state.update(block);
-                    writer.write_all(block)?;
-                    n += u64::try_from(x).expect("usize should be <= u64");
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) => return Err(e),
-            }
-        }
-
-        // Update the state with the operation code and byte count.
-        self.end_op(Operation::Mix, n);
-
-        Ok(n)
+    pub const fn mix_writer<W: Write>(self, inner: W) -> MixWriter<W> {
+        MixWriter { state: self.state, inner, total: 0 }
     }
 
     /// Derive output from the protocol's current state and fill the given slice with it.
@@ -336,6 +300,42 @@ enum Operation {
     Chain = 0x06,
 }
 
+/// A [`Write`] implementation which combines all written data into a single `Mix` operation and
+/// passes all writes to an inner writer.
+#[cfg(feature = "std")]
+#[derive(Debug)]
+pub struct MixWriter<W> {
+    state: Sha256,
+    inner: W,
+    total: u64,
+}
+
+#[cfg(feature = "std")]
+impl<W: Write> MixWriter<W> {
+    /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
+    #[inline]
+    pub fn into_inner(self) -> (Protocol, W) {
+        let mut protocol = Protocol { state: self.state };
+        protocol.end_op(Operation::Mix, self.total);
+        (protocol, self.inner)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<W: Write> Write for MixWriter<W> {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.total += u64::try_from(buf.len()).expect("usize should be <= u64");
+        self.state.update(buf);
+        self.inner.write(buf)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use std::io::Cursor;
@@ -375,16 +375,20 @@ mod tests {
         slices.mix(b"one");
         slices.mix(b"two");
 
-        let mut streams = Protocol::new("com.example.streams");
-        streams.mix_reader(Cursor::new(b"one")).expect("cursor writes should be infallible");
+        let streams = Protocol::new("com.example.streams");
+        let mut streams_write = streams.mix_writer(io::sink());
+        io::copy(&mut Cursor::new(b"one"), &mut streams_write)
+            .expect("cursor reads and sink writes should be infallible");
+        let (streams, _) = streams_write.into_inner();
 
         let mut output = Vec::new();
-        streams
-            .mix_and_copy_reader(Cursor::new(b"two"), &mut output)
-            .expect("cursor writes should be infallible");
+        let mut streams_write = streams.mix_writer(&mut output);
+        io::copy(&mut Cursor::new(b"two"), &mut streams_write)
+            .expect("cursor reads and sink writes should be infallible");
+        let (mut streams, output) = streams_write.into_inner();
 
         assert_eq!(slices.derive_array::<16>(), streams.derive_array::<16>());
-        assert_eq!(b"two".as_slice(), &output);
+        assert_eq!(b"two".as_slice(), output);
     }
 
     #[test]

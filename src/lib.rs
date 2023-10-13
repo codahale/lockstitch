@@ -69,7 +69,7 @@ impl Protocol {
         self.process(data, Operation::Mix);
     }
 
-    /// Moves the protocol into a `Write` implementation, mixing all written data in a single
+    /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
     /// operation and passing all writes to `inner`. Use [`MixWriter::into_inner`] to finish the
     /// operation and recover the protocol and `inner`.
     #[cfg(feature = "std")]
@@ -91,7 +91,7 @@ impl Protocol {
         self.process(&(out.len() as u64).to_le_bytes(), Operation::Derive);
     }
 
-    /// Derive output from the protocol's current state and return it as an array.
+    /// Derive output from the protocol's current state and return it as an `N`-byte array.
     #[inline]
     pub fn derive_array<const N: usize>(&mut self) -> [u8; N] {
         let mut out = [0u8; N];
@@ -133,7 +133,7 @@ impl Protocol {
 
     /// Seals the given mutable slice in place.
     ///
-    /// The last `TAG_LEN` bytes of the slice will be overwritten with the authentication tag.
+    /// The last [`TAG_LEN`] bytes of the slice will be overwritten with the authentication tag.
     #[inline]
     pub fn seal(&mut self, in_out: &mut [u8]) {
         // Split the buffer into plaintext and tag.
@@ -147,7 +147,7 @@ impl Protocol {
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
-    /// was authenticated. The last `TAG_LEN` bytes of the slice will be unmodified.
+    /// was authenticated. The last [`TAG_LEN`] bytes of the slice will be unmodified.
     #[inline]
     #[must_use]
     pub fn open<'a>(&mut self, in_out: &'a mut [u8]) -> Option<&'a [u8]> {

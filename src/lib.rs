@@ -280,12 +280,10 @@ impl Protocol {
 }
 
 /// Compare two slices for equality in constant time.
+#[inline]
 pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
-    // TODO replace with slice cmovne when cmov >0.3.0 drops
     let mut res = 1;
-    for (x, y) in a.iter().zip(b.iter()) {
-        x.cmovne(y, 0, &mut res);
-    }
+    a.cmovne(b, 0, &mut res);
     res != 0
 }
 

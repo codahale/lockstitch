@@ -295,7 +295,7 @@ context-committing.
 
 ## Complex Protocols
 
-Given an elliptic curve group like Ristretto255, Lockstitch can be used to build complex protocols
+Given an elliptic curve group like NIST P-256, Lockstitch can be used to build complex protocols
 which integrate public- and symmetric-key operations.
 
 ### Hybrid Public-Key Encryption
@@ -306,7 +306,7 @@ scheme:
 
 ```text
 function HPKE_Encrypt(receiver.pub, plaintext):
-  ephemeral ← Ristretto255::KeyGen()                     // Generate an ephemeral key pair.
+  ephemeral ← P256::KeyGen()                             // Generate an ephemeral key pair.
   state ← Initialize("com.example.hpke")                 // Initialize a protocol with a domain string.
   state ← Mix(state, receiver.pub)                       // Mix the receiver's public key into the protocol.
   state ← Mix(state, ephemeral.pub)                      // Mix the ephemeral public key into the protocol.
@@ -353,15 +353,15 @@ function Sign(signer, message):
   state ← Initialize("com.example.eddsa")              // Initialize a protocol with a domain string.
   state ← Mix(state, signer.pub)                       // Mix the signer's public key into the protocol.
   state ← Mix(state, message)                          // Mix the message into the protocol.
-  (k, I) ← Ristretto255::KeyGen()                      // Generate a commitment scalar and point.
+  (k, I) ← P256::KeyGen()                              // Generate a commitment scalar and point.
   state ← Mix(state, I)                                // Mix the commitment point into the protocol.
-  (state, r) ← Ristretto255::Scalar(Derive(state, 64)) // Derive a challenge scalar.
+  (state, r) ← P256::Scalar(Derive(state, 32))         // Derive a challenge scalar.
   s ← signer.priv * r + k                              // Calculate the proof scalar.
   return (I, s)                                        // Return the commitment point and proof scalar.
 ```
 
 The resulting signature is strongly bound to both the message and the signer's public key, making it
-sUF-CMA secure. If a non-prime order group like Edwards25519 is used instead of Ristretto255, the
+sUF-CMA secure. If a non-prime order group like Edwards25519 is used instead of NIST P-256, the
 verification function must account for co-factors to be strongly unforgeable.
 
 ```text
@@ -370,7 +370,7 @@ function Verify(signer.pub, message, I, s):
   state ← Mix(state, signer.pub)                        // Mix the signer's public key into the protocol.
   state ← Mix(state, message)                           // Mix the message into the protocol.
   state ← Mix(state, I)                                 // Mix the commitment point into the protocol.
-  (state, r′) ← Ristretto255::Scalar(Derive(state, 64)) // Derive a counterfactual challenge scalar.
+  (state, r′) ← P256::Scalar(Derive(state, 32))         // Derive a counterfactual challenge scalar.
   I′ ← [s]G - [r′]signer.pub                            // Calculate the counterfactual commitment point.
   return I = I′                                         // The signature is valid if both points are equal.
 ```
@@ -388,16 +388,16 @@ confidentiality and strong authentication in the public key setting:
 
 ```text
 function Signcrypt(sender, receiver.pub, plaintext):
-  ephemeral ← Ristretto255::KeyGen()
+  ephemeral ← P256::KeyGen()
   state ← Initialize("com.example.signcrypt")            // Initialize a protocol with a domain string.
   state ← Mix(state, receiver.pub)                       // Mix the receiver's public key into the protocol.
   state ← Mix(state, sender.pub)                         // Mix the sender's public key into the protocol.
   state ← Mix(state, ephemeral.pub)                      // Mix the ephemeral public key into the protocol.
   state ← Mix(state, ECDH(receiver.pub, ephemeral.priv)) // Mix the ECDH shared secret into the protocol.
   (state, ciphertext) ← Encrypt(state, plaintext)        // Encrypt the plaintext.
-  (k, I) ← Ristretto255::KeyGen()                        // Generate a commitment scalar and point.
+  (k, I) ← P256::KeyGen()                                // Generate a commitment scalar and point.
   state ← Mix(state, I)                                  // Mix the commitment point into the protocol.
-  (state, r) ← Ristretto255::Scalar(Derive(state, 64))   // Derive a challenge scalar.
+  (state, r) ← P256::Scalar(Derive(state, 32))           // Derive a challenge scalar.
   s ← signer.priv * r + k                                // Calculate the proof scalar.
   return (ephemeral.pub, ciphertext, I, s)               // Return the ephemeral public key, ciphertext, and signature.
 ```
@@ -411,7 +411,7 @@ function Unsigncrypt(receiver, sender.pub, ephemeral.pub, I, s):
   state ← Mix(state, ECDH(ephemeral.pub, receiver.priv)) // Mix the ECDH shared secret into the protocol.
   (state, plaintext) ← Decrypt(state, ciphertext)        // Decrypt the ciphertext.
   state ← Mix(state, I)                                  // Mix the commitment point into the protocol.
-  (state, r′) ← Ristretto255::Scalar(Derive(state, 64))  // Derive a counterfactual challenge scalar.
+  (state, r′) ← P256::Scalar(Derive(state, 32))          // Derive a counterfactual challenge scalar.
   I′ ← [s]G - [r′]signer.pub                             // Calculate the counterfactual commitment point.
   if I = I′:
     return plaintext                                     // If both points are equal, return the plaintext.
@@ -470,12 +470,12 @@ function HedgedSign(signer, message):
   with clone ← Clone(state) do                         // Clone the protocol's state.
     clone ← Mix(clone, signer.priv)                    // Mix the signer's private key into the clone.
     clone ← Mix(clone, Rand(64))                       // Mix 64 random bytes into the clone.
-    k ← Ristretto255::Scalar(Derive(clone, 64))        // Derive a commitment scalar from the clone.
+    k ← P256::Scalar(Derive(clone, 32))                // Derive a commitment scalar from the clone.
     I ← [k]G                                           // Calculate the commitment point.
     yield (k, I)                                       // Return the ephemeral key pair to the signing scope.
   end                                                  // Discard the cloned state.
   state ← Mix(state, I)                                // Mix the commitment point into the protocol.
-  (state, r) ← Ristretto255::Scalar(Derive(state, 64)) // Derive a challenge scalar.
+  (state, r) ← P256::Scalar(Derive(state, 32))         // Derive a challenge scalar.
   s ← signer.priv * r + k                              // Calculate the proof scalar.
   return (I, s)                                        // Return the commitment point and proof scalar.
 ```

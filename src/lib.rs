@@ -102,33 +102,27 @@ impl Protocol {
     /// Encrypt the given slice in place.
     #[inline]
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
-        // Chain the protocol's key and generate an output key and nonce.
+        // Chain the protocol's state and initialize an AES-128-CTR output stream.
         let mut ctr = self.chain(Operation::Crypt);
 
-        // Hash the plaintext.
-        self.state.update(&in_out);
+        // Update the state with the plaintext and the operation code.
+        self.process(in_out, Operation::Crypt);
 
         // Encrypt the plaintext.
         ctr.apply_keystream(in_out);
-
-        // Update the state with the ciphertext and the operation code.
-        self.process(&(in_out.len().to_le_bytes()), Operation::Crypt);
     }
 
     /// Decrypt the given slice in place.
     #[inline]
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
-        // Chain the protocol's key and generate an output key and nonce.
+        // Chain the protocol's state and initialize an AES-128-CTR output stream.
         let mut ctr = self.chain(Operation::Crypt);
 
         // Decrypt the ciphertext.
         ctr.apply_keystream(in_out);
 
-        // Hash the plaintext.
-        self.state.update(&in_out);
-
-        // Update the state with the ciphertext and the operation code.
-        self.process(&(in_out.len().to_le_bytes()), Operation::Crypt);
+        // Update the state with the plaintext and the operation code.
+        self.process(in_out, Operation::Crypt);
     }
 
     /// Seals the given mutable slice in place.
@@ -226,26 +220,25 @@ impl Protocol {
         // Split the hash into a key and nonce and initialize an AES-128-CTR instance for PRF
         // output.
         let (prf_key, prf_nonce) = hash.split_at(16);
-        let mut prf =
-            Aes128Ctr::new_from_slices(prf_key, prf_nonce).expect("should be valid key and nonce");
+        let mut prf = Aes128Ctr::new_from_slices(prf_key, prf_nonce)
+            .expect("should be valid AES-128-CTR key and nonce");
 
         // Generate 64 bytes of PRF output.
         let mut prf_out = [0u8; 64];
         prf.apply_keystream(&mut prf_out);
 
         // Split the PRF output into a 32-byte chain key, a 16-byte output key, and a 16-byte output
-        // nonce.
+        // nonce, setting the first bytes of the output nonce to the operation code.
         let (chain_key, output_key) = prf_out.split_at_mut(32);
         let (output_key, output_nonce) = output_key.split_at_mut(16);
-
-        // Set the first byte of the output nonce to the operation code.
         output_nonce[0] = operation as u8;
 
         // Initialize the current state with the chain key.
         self.process(chain_key, Operation::Chain);
 
         // Initialize an AES-128-CTR instance for output.
-        Aes128Ctr::new_from_slices(output_key, output_nonce).expect("should be valid key and nonce")
+        Aes128Ctr::new_from_slices(output_key, output_nonce)
+            .expect("should be valid AES-128-CTR key and nonce")
     }
 
     // Process a single piece of input for an operation.
@@ -361,10 +354,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(&mut sealed);
 
-        expect!["3379fa81ca464cbbd5949adcc87efe9e5884c7513d5e0d918c898cfd1f9295d9a05d"]
+        expect!["5b6a8cd81d3ae50f0fd1414b1172f6aa7d82bff2e329160cf177cc7aade5cc90c28d"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["12da9ef7dcde2ece"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["88df408b38e02a51"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

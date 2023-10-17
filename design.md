@@ -341,11 +341,11 @@ is more like a checksum than a MAC, preventing modifications only by adversaries
 recipient's public key.
 
 Using a static ECDH shared secret (i.e. `ECDH(receiver.pub, sender.priv)`) would add implicit
-authentication but would require a nonce to be IND-CCA secure. The resulting scheme would be
-outsider secure in the public key setting (i.e. an adversary in possession of everyone's public keys
-would be unable to forge or decrypt ciphertexts) but not insider secure (i.e. an adversary in
-possession of the receiver's private key could forge ciphertexts from arbitrary senders, a.k.a. key
-compromise impersonation).
+authentication but would require a nonce or an ephemeral key to be IND-CCA secure. The resulting
+scheme would be outsider secure in the public key setting (i.e. an adversary in possession of
+everyone's public keys would be unable to forge or decrypt ciphertexts) but not insider secure (i.e.
+an adversary in possession of the receiver's private key could forge ciphertexts from arbitrary
+senders, a.k.a. key compromise impersonation).
 
 ### Digital Signatures
 

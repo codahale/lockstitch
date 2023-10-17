@@ -291,7 +291,10 @@ function Open(key, nonce, ad, ciphertext, tag):
 
 Unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces of
 associated data. Also unlike many standard AEADs (e.g. AES-GCM and ChaCha20Poly1305), it is fully
-context-committing.
+context-committing: the tag is a strong cryptographic commitment to all the inputs provided SHA2 is
+collision resistent. Similar to the [CTX construction](https://par.nsf.gov/servlets/purl/10391723),
+which replaces the tag of an existing AEAD with `H(K, N, A, T)`, this effectively uses
+`H(K, N, A, P)` as the tag.
 
 ## Complex Protocols
 

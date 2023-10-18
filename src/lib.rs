@@ -15,13 +15,10 @@
 )]
 
 use core::fmt::Debug;
-#[cfg(feature = "std")]
-use std::io::{self, Write};
 
-use aegis_128l::Aegis128L;
+use crate::aegis_128l::Aegis128L;
+
 use cmov::CmovEq;
-#[cfg(feature = "hedge")]
-use rand_core::{CryptoRng, RngCore};
 use sha2::digest::{Digest, FixedOutputReset};
 use sha2::Sha256;
 
@@ -71,7 +68,7 @@ impl Protocol {
     /// operation and passing all writes to `inner`. Use [`MixWriter::into_inner`] to finish the
     /// operation and recover the protocol and `inner`.
     #[cfg(feature = "std")]
-    pub const fn mix_writer<W: Write>(self, inner: W) -> MixWriter<W> {
+    pub const fn mix_writer<W: std::io::Write>(self, inner: W) -> MixWriter<W> {
         MixWriter { state: self.state, inner, total: 0 }
     }
 
@@ -180,7 +177,7 @@ impl Protocol {
     #[must_use]
     pub fn hedge<R>(
         &self,
-        mut rng: impl RngCore + CryptoRng,
+        mut rng: impl rand_core::RngCore + rand_core::CryptoRng,
         secrets: &[impl AsRef<[u8]>],
         f: impl Fn(&mut Self) -> Option<R>,
     ) -> R {
@@ -303,7 +300,7 @@ pub struct MixWriter<W> {
 }
 
 #[cfg(feature = "std")]
-impl<W: Write> MixWriter<W> {
+impl<W: std::io::Write> MixWriter<W> {
     /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
     #[inline]
     pub fn into_inner(self) -> (Protocol, W) {
@@ -314,23 +311,23 @@ impl<W: Write> MixWriter<W> {
 }
 
 #[cfg(feature = "std")]
-impl<W: Write> Write for MixWriter<W> {
+impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     #[inline]
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.total += u64::try_from(buf.len()).expect("usize should be <= u64");
         self.state.update(buf);
         self.inner.write(buf)
     }
 
     #[inline]
-    fn flush(&mut self) -> io::Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
         self.inner.flush()
     }
 }
 
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use std::io::Cursor;
+    use std::io::{self, Cursor};
 
     use expect_test::expect;
 

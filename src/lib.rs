@@ -32,8 +32,6 @@ pub mod design {}
 #[doc = include_str!("../perf.md")]
 pub mod perf {}
 
-mod integration_tests;
-
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
 

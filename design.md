@@ -277,12 +277,17 @@ function Seal(key, nonce, ad, plaintext):
 ```
 
 The introduction of a nonce makes the scheme probabilistic (which is required for IND-CCA security).
-The final `Derive` operation closes over all inputs--key, nonce, associated data, and
-plaintext--which are also the values used to produce the ciphertext. Forging a tag here would imply
-either that AEGIS-128L's tags are not UF-CMA secure authenticators or that SHA-256 is not
-collision-resistant. In addition, this construction is fully committing to all inputs: finding a
+
+Unlike many standard AEADs (e.g. AES-GCM and ChaCha20Poly1305), it is fully context-committing: the
+tag is a strong cryptographic commitment to all the inputs. Similar to the
+[CTX construction](https://par.nsf.gov/servlets/purl/10391723), which replaces the tag of an
+existing AEAD with `H(K, N, A, T)`, the final `Derive` operation closes over all inputs--key, nonce,
+associated data, and plaintext--which are also the values used to produce the ciphertext. Finding a
 pair of `(key, nonce, ad, plaintext)` tuples which produce the same tag would similarly imply a lack
 of UF-CMA security for AEGIS-128L or collision resistance for SHA-256.
+
+Also unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces
+of associated data without risk of ambiguous inputs.
 
 Opening a sealed ciphertext uses the `Decrypt` operation to decrypt and `Derive` to re-calculate the
 tag:
@@ -300,13 +305,6 @@ function Open(key, nonce, ad, ciphertext, tag):
   else:
     return ⊥                                        // Otherwise, return an error.
 ```
-
-Unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces of
-associated data. Also unlike many standard AEADs (e.g. AES-GCM and ChaCha20Poly1305), it is fully
-context-committing: the tag is a strong cryptographic commitment to all the inputs provided SHA2 is
-collision resistent. Similar to the [CTX construction](https://par.nsf.gov/servlets/purl/10391723),
-which replaces the tag of an existing AEAD with `H(K, N, A, T)`, this effectively uses
-`H(K, N, A, P)` as the tag.
 
 ## Complex Protocols
 

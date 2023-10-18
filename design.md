@@ -160,7 +160,7 @@ function Encrypt(state, plaintext):
   (state, output) ← Chain(state, 0x04)                // Ratchet the protocol state and key an output AEGIS-128L instance.
   ciphertext ← AEGIS_128L::Encrypt(output, plaintext) // Encrypt the plaintext with AEGIS-128L.
   tag ← AEGIS_128L::Finalize(output)                  // Calculate the long AEGIS-128L tag.
-  state ← Process(state, l_tag, 0x04)                 // Process the long AEGIS-128L tag as input.
+  state ← Process(state, tag, 0x04)                   // Process the long AEGIS-128L tag as input.
   return (state, ciphertext)
 ```
 

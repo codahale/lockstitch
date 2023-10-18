@@ -254,8 +254,8 @@ impl Aegis128L {
         // Generate a long tag.
         let mut tag = [0u8; BLOCK_LEN];
         let a = xor(xor3(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3]);
-        let b = xor3(self.blocks[4], self.blocks[5], self.blocks[6]);
-        store_2x(&mut tag, a, xor(b, self.blocks[7]));
+        let b = xor(xor3(self.blocks[4], self.blocks[5], self.blocks[6]), self.blocks[7]);
+        store_2x(&mut tag, a, b);
         tag
     }
 

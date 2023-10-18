@@ -22,6 +22,7 @@ pub const BLOCK_LEN: usize = 32;
 /// The length of an AES block.
 pub const AES_BLOCK_LEN: usize = 16;
 
+/// An AEGIS-128L instance.
 #[derive(Debug, Clone)]
 pub struct Aegis128L {
     blocks: [AesBlock; 8],
@@ -30,6 +31,7 @@ pub struct Aegis128L {
 }
 
 impl Aegis128L {
+    /// Create a new AEGIS-128L instance with the given key and nonce.
     pub fn new(key: &[u8; AES_BLOCK_LEN], nonce: &[u8; AES_BLOCK_LEN]) -> Self {
         // Initialize constants.
         let c0 = load(&[
@@ -69,6 +71,7 @@ impl Aegis128L {
         state
     }
 
+    /// Process the given authenticated data.
     #[cfg(test)]
     pub fn ad(&mut self, ad: &[u8]) {
         let mut xi = [0u8; BLOCK_LEN];
@@ -91,6 +94,8 @@ impl Aegis128L {
         self.ad_len += ad.len() as u64;
     }
 
+    /// Fill the given slice with keystream output. Equivalent to encrypting a message of equal
+    /// length consisting of all zeroes.
     pub fn prf(&mut self, out: &mut [u8]) {
         let mut ci = [0u8; BLOCK_LEN];
 
@@ -111,6 +116,7 @@ impl Aegis128L {
         self.mc_len += out.len() as u64;
     }
 
+    /// Encrypt the given slice in place.
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
         let mut xi = [0u8; BLOCK_LEN];
         let mut ci = [0u8; BLOCK_LEN];
@@ -135,6 +141,7 @@ impl Aegis128L {
         self.mc_len += in_out.len() as u64;
     }
 
+    /// Decrypt the given slice in place.
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
         let mut ci = [0u8; BLOCK_LEN];
         let mut xi = [0u8; BLOCK_LEN];
@@ -155,6 +162,23 @@ impl Aegis128L {
         }
 
         self.mc_len += in_out.len() as u64;
+    }
+
+    /// Finalize the cipher state into a 256-bit authentication tag.
+    pub fn finalize(&mut self) -> [u8; BLOCK_LEN] {
+        // Create a block from the associated data and message lengths, in bits, XOR it with the 3rd
+        // state block and update the state with that value.
+        let t = xor(load_64x2(self.ad_len * 8, self.mc_len * 8), self.blocks[2]);
+        for _ in 0..7 {
+            self.update(t, t);
+        }
+
+        // Generate a long tag.
+        let mut tag = [0u8; BLOCK_LEN];
+        let a = xor(xor3(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3]);
+        let b = xor(xor3(self.blocks[4], self.blocks[5], self.blocks[6]), self.blocks[7]);
+        store_2x(&mut tag, a, b);
+        tag
     }
 
     #[cfg(test)]
@@ -241,22 +265,6 @@ impl Aegis128L {
         // state.
         let (xn0, xn1) = load_2x(xn);
         self.update(xn0, xn1);
-    }
-
-    pub fn finalize(&mut self) -> [u8; BLOCK_LEN] {
-        // Create a block from the associated data and message lengths, in bits, XOR it with the 3rd
-        // state block and update the state with that value.
-        let t = xor(load_64x2(self.ad_len * 8, self.mc_len * 8), self.blocks[2]);
-        for _ in 0..7 {
-            self.update(t, t);
-        }
-
-        // Generate a long tag.
-        let mut tag = [0u8; BLOCK_LEN];
-        let a = xor(xor3(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3]);
-        let b = xor(xor3(self.blocks[4], self.blocks[5], self.blocks[6]), self.blocks[7]);
-        store_2x(&mut tag, a, b);
-        tag
     }
 
     fn update(&mut self, m0: AesBlock, m1: AesBlock) {

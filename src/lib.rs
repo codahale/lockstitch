@@ -242,7 +242,7 @@ impl Protocol {
         )
     }
 
-    // Process a single piece of input for an operation.
+    /// Process a single piece of input for an operation.
     #[inline]
     fn process(&mut self, input: &[u8], operation: Operation) {
         // Update the state with the input.

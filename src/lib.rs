@@ -18,9 +18,14 @@ use core::fmt::Debug;
 #[cfg(feature = "std")]
 use std::io::{self, Write};
 
+use aegis_128l::Aegis128L;
 use cmov::CmovEq;
 #[cfg(feature = "hedge")]
 use rand_core::{CryptoRng, RngCore};
+use sha2::digest::{Digest, FixedOutputReset};
+use sha2::Sha256;
+
+mod aegis_128l;
 
 #[cfg(feature = "docs")]
 #[doc = include_str!("../design.md")]
@@ -30,14 +35,7 @@ pub mod design {}
 #[doc = include_str!("../perf.md")]
 pub mod perf {}
 
-use aes::cipher::{KeyIvInit, StreamCipher};
-use sha2::digest::{Digest, FixedOutputReset};
-use sha2::Sha256;
-
 mod integration_tests;
-
-/// AES-128-CTR using a 128-bit Big Endian counter.
-type Aes128Ctr = ctr::Ctr128BE<aes::Aes128>;
 
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
@@ -80,12 +78,11 @@ impl Protocol {
     /// Derive output from the protocol's current state and fill the given slice with it.
     #[inline]
     pub fn derive(&mut self, out: &mut [u8]) {
-        // Chain the protocol's key and generate an output key and nonce.
-        let mut ctr = self.chain(Operation::Derive);
+        // Chain the protocol's state and key an AEGIS-128L instance for output.
+        let mut aegis = self.chain(Operation::Derive);
 
         // Fill the buffer with PRF output.
-        out.fill(0);
-        ctr.apply_keystream(out);
+        aegis.prf(out);
 
         // Update the state with the output length and the operation code.
         self.process(&(out.len() as u64).to_le_bytes(), Operation::Derive);
@@ -102,27 +99,27 @@ impl Protocol {
     /// Encrypt the given slice in place.
     #[inline]
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
-        // Chain the protocol's state and initialize an AES-128-CTR output stream.
-        let mut ctr = self.chain(Operation::Crypt);
-
-        // Update the state with the plaintext and the operation code.
-        self.process(in_out, Operation::Crypt);
+        // Chain the protocol's state and key an AEGIS-128L instance for output.
+        let mut aegis = self.chain(Operation::Crypt);
 
         // Encrypt the plaintext.
-        ctr.apply_keystream(in_out);
+        aegis.encrypt(in_out);
+
+        // Update the state with the long tag and the operation code.
+        self.process(&aegis.finalize(), Operation::Crypt);
     }
 
     /// Decrypt the given slice in place.
     #[inline]
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
-        // Chain the protocol's state and initialize an AES-128-CTR output stream.
-        let mut ctr = self.chain(Operation::Crypt);
+        // Chain the protocol's state and key an AEGIS-128L instance for output.
+        let mut aegis = self.chain(Operation::Crypt);
 
         // Decrypt the ciphertext.
-        ctr.apply_keystream(in_out);
+        aegis.decrypt(in_out);
 
-        // Update the state with the plaintext and the operation code.
-        self.process(in_out, Operation::Crypt);
+        // Update the state with the long tag and the operation code.
+        self.process(&aegis.finalize(), Operation::Crypt);
     }
 
     /// Seals the given mutable slice in place.
@@ -210,22 +207,24 @@ impl Protocol {
         unreachable!("unable to hedge a valid value in 10,000 tries");
     }
 
-    /// Replace the protocol's state with derived output and initialize the cipher context.
+    /// Replace the protocol's state with derived output and return an AEGIS-128L instance for
+    /// output.
     #[inline]
     #[must_use]
-    fn chain(&mut self, operation: Operation) -> Aes128Ctr {
+    fn chain(&mut self, operation: Operation) -> Aegis128L {
         // Finalize the current state and reset it to an uninitialized state.
         let hash = self.state.finalize_fixed_reset();
 
-        // Split the hash into a key and nonce and initialize an AES-128-CTR instance for PRF
-        // output.
+        // Split the hash into a key and nonce and initialize an AEGIS-128L instance for PRF output.
         let (prf_key, prf_nonce) = hash.split_at(16);
-        let mut prf = Aes128Ctr::new_from_slices(prf_key, prf_nonce)
-            .expect("should be valid AES-128-CTR key and nonce");
+        let mut prf = Aegis128L::new(
+            &prf_key.try_into().expect("should be valid AEGIS-128L key"),
+            &prf_nonce.try_into().expect("should be valid AEGIS-128L nonce"),
+        );
 
         // Generate 64 bytes of PRF output.
         let mut prf_out = [0u8; 64];
-        prf.apply_keystream(&mut prf_out);
+        prf.prf(&mut prf_out);
 
         // Split the PRF output into a 32-byte chain key, a 16-byte output key, and a 16-byte output
         // nonce, setting the first bytes of the output nonce to the operation code.
@@ -236,9 +235,11 @@ impl Protocol {
         // Initialize the current state with the chain key.
         self.process(chain_key, Operation::Chain);
 
-        // Initialize an AES-128-CTR instance for output.
-        Aes128Ctr::new_from_slices(output_key, output_nonce)
-            .expect("should be valid AES-128-CTR key and nonce")
+        // Initialize an AEGIS-128L instance for output.
+        Aegis128L::new(
+            &output_key.try_into().expect("should be valid AEGIS-128L key"),
+            &output_nonce.try_into().expect("should be valid AEGIS-128L nonce"),
+        )
     }
 
     // Process a single piece of input for an operation.
@@ -341,11 +342,11 @@ mod tests {
         protocol.mix(b"one");
         protocol.mix(b"two");
 
-        expect!["bf104433d3418198"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["3f6d24ea37711c9e"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(&mut plaintext);
-        expect!["7befee7f98fd117bf14ddcf1297e42a38afc"].assert_eq(&hex::encode(plaintext));
+        expect!["368ee0e2c781264276958471a2bbf634269b"].assert_eq(&hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -354,10 +355,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(&mut sealed);
 
-        expect!["5b6a8cd81d3ae50f0fd1414b1172f6aa7d82bff2e329160cf177cc7aade5cc90c28d"]
+        expect!["c042e1f16a2ed317ad6590cbc6500247d9007d8446ea1f6cd7682c845714474f1b23"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["88df408b38e02a51"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
+        expect!["2e9d721872356471"].assert_eq(&hex::encode(protocol.derive_array::<8>()));
     }
 
     #[test]

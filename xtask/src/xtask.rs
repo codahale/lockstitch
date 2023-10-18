@@ -77,8 +77,15 @@ fn ci(sh: &Shell) -> Result<()> {
 }
 
 fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
+    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+    const RUSTFLAGS: &str = "-C target-feature=+aes,+ssse3";
+
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+    const RUSTFLAGS: &str = "";
+
     let args = args.join(" ");
     cmd!(sh, "cargo bench {args}")
+        .env("RUSTFLAGS", RUSTFLAGS)
         .env("DIVAN_BYTES_FORMAT", "binary")
         .env("DIVAN_TIMER", "tsc")
         .env("DIVAN_MIN_TIME", "1")

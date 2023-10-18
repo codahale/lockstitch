@@ -2,7 +2,9 @@
 
 Lockstitch provides a single cryptographic service for all symmetric-key operations and an
 incremental, stateful building block for complex schemes, constructions, and protocols, all built on
-top of SHA-256 and AES-128-CTR.
+top of SHA-256 and [AEGIS-128L][], an authenticated cipher.
+
+[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-05.html
 
 ## Preliminaries
 
@@ -34,34 +36,33 @@ This encoding ensures that operations of variable-length inputs are always unamb
 
 To generate any output during an operation, the protocol first finalizes its current SHA-256 state
 into a 32-byte digest. That digest is split into a key and nonce and used to initialize an
-AES-128-CTR instance. That AES-128-CTR instance is then used to generate 64 bytes of PRF output. The
+AEGIS-128L instance. That AEGIS-128L instance is then used to generate 64 byte of PRF output. The
 first 32 bytes are used as a chain key to update the protocol state, the second 32 bytes are split
 into an output key and nonce. The first byte of the output nonce is set to the operation code.
-Finally, the output key and nonce are used to initialize an AES-128-CTR instance for output
+Finally, the output key and nonce are used to initialize an AEGIS-128L instance for output
 generation:
 
 ```text
 function Chain(state, operation):
-  K₀ǁN₀ ← SHA256::Finalize(state)   // Derive a key and nonce from the current state.
-  state ← SHA256::Init()            // Reset the state.
-  prf ← AES_128_CTR::New(K₀, N₀)    // Initialize an AES-128-CTR instance for PRF output.
-  K₁ ← AES_128_CTR::PRF(prf, 32)    // Generate a chain key.
-  state ← Process(state, K₁, 0x07)  // Update the protocol with the chain key and the Chain op code.
-  K₂ǁN₂ ← AES_128_CTR::PRF(prf, 32) // Generate an output key and nonce.
-  N₂[0] ← operation                 // Set the first byte of the output nonce to the op code.
-  output ← AES_128_CTR::New(K₂, N₂) // Create an output AES-128-CTR instance with the output key and nonce.
+  K₀ǁN₀ ← SHA256::Finalize(state)  // Derive a key and nonce from the current state.
+  state ← SHA256::Init()           // Reset the state.
+  prf ← AEGIS_128L::New(K₀, N₀)    // Initialize an AEGIS-128L instance for PRF output.
+  K₁ ← AEGIS_128L::PRF(prf, 32)    // Generate a chain key.
+  state ← Process(state, K₁, 0x07) // Update the protocol with the chain key and the Chain op code.
+  K₂ǁN₂ ← AEGIS_128L::PRF(prf, 32) // Generate an output key and nonce.
+  N₂[0] ← operation                // Set the first byte of the output nonce to the op code.
+  output ← AEGIS_128L::New(K₂, N₂) // Create an output AEGIS-128L instance with the output key and nonce.
   return state, output
 ```
 
-**N.B.**: Lockstitch uses AES-128-CTR with a 128-bit big endian counter, which makes it compatible
-with OpenSSL's `EVP_aes_128_ctr` configuration. Each operation is limited to 2^61 bytes of output.
+**N.B.**: Each operation is limited to 2^61 bytes of output.
 
 #### KDF Security
 
 `Chain` uses an [HKDF][]-style _Extract-then-Expand_ key derivation function (KDF) with the
 protocol's prior inputs (i.e. the [encoded](#encoding-operations) operations) as the effective
 keying material, SHA-256 as the strong computational extractor for the keying material and
-AES-128-CTR as the expanding PRF.
+AEGIS-128L as the expanding PRF.
 
 [HKDF]: https://www.rfc-editor.org/rfc/rfc5869.html
 
@@ -133,14 +134,14 @@ behavior.
 
 ```text
 function Derive(state, n):
-  (state, output) ← Chain(state, 0x03)   // Ratchet the protocol state and key an output AES-128-CTR instance.
-  prf ← AES_128_CTR::PRF(output, n)      // Generate n bytes of AES-128-CTR PRF output.
+  (state, output) ← Chain(state, 0x03)   // Ratchet the protocol state and key an output AEGIS-128L instance.
+  prf ← AEGIS_128L::PRF(output, n)       // Generate n bytes of AEGIS-128L PRF output.
   state ← Process(state, LE64(n), 0x03)  // Processes the output length with the Derive op code.
   return (state, prf) 
 ```
 
 A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
-protocol's state prior to the operation provided SHA-256 is collision-resistant and AES-128-CTR is
+protocol's state prior to the operation provided SHA-256 is collision-resistant and AEGIS-128L is
 PRF secure. The protocol's state after the operation is dependent on both the fact that the
 operation was a `Derive` operation as well as the number of bytes produced.
 
@@ -151,14 +152,15 @@ operation is complete, however, the protocols' states will be different. If a us
 
 ### `Encrypt`/`Decrypt`
 
-`Encrypt` uses AES-128-CTR to encrypt a given plaintext with a key derived from the protocol's
-current state and updates the protocol's state with the ciphertext.
+`Encrypt` uses AEGIS-128L to encrypt a given plaintext with a key derived from the protocol's
+current state and updates the protocol's state with the final 256-bit AEGIS-128L tag.
 
 ```text
 function Encrypt(state, plaintext):
-  (state, output) ← Chain(state, 0x04)                 // Ratchet the protocol state and key an output AES-128-CTR instance.
-  state ← Process(state, plaintext, 0x04)              // Process the ciphertext as input.
-  ciphertext ← AES_128_CTR::Encrypt(output, plaintext) // Encrypt the plaintext with AES-128-CTR.
+  (state, output) ← Chain(state, 0x04)                // Ratchet the protocol state and key an output AEGIS-128L instance.
+  ciphertext ← AEGIS_128L::Encrypt(output, plaintext) // Encrypt the plaintext with AEGIS-128L.
+  tag ← AEGIS_128L::Finalize(output)                  // Calculate the long AEGIS-128L tag.
+  state ← Process(state, l_tag, 0x04)                 // Process the long AEGIS-128L tag as input.
   return (state, ciphertext)
 ```
 
@@ -166,18 +168,28 @@ function Encrypt(state, plaintext):
 
 ```text
 function Decrypt(state, ciphertext):
-  (state, output) ← Chain(state, 0x04)                 // Ratchet the protocol state and key an output AES-128-CTR instance.
-  plaintext ← AES_128_CTR::Decrypt(output, ciphertext) // Decrypt the plaintext with AES-128-CTR.
-  state ← Process(state, plaintext, 0x04)              // Process the ciphertext as input.
+  (state, output) ← Chain(state, 0x04)                // Ratchet the protocol state and key an output AEGIS-128L instance.
+  plaintext ← AEGIS_128L::Decrypt(output, ciphertext) // Decrypt the plaintext with AEGIS-128L.
+  tag ← AEGIS_128L::Finalize(output)                  // Calculate the long AEGIS-128L tag.
+  state ← Process(state, l_tag, 0x04)                 // Process the long AEGIS-128L tag as input.
   return (state, plaintext)
 ```
 
-Two points bear mentioning about `Encrypt` and `Decrypt`.
+Three points bear mentioning about `Encrypt` and `Decrypt`.
 
 First, both `Encrypt` and `Decrypt` use the same `Crypt` operation code to ensure protocols have
 the same state after both encrypting and decrypting data.
 
-Second, `Crypt` operations provide no authentication by themselves. An attacker can modify a
+Second, despite not updating the protocol state with either the plaintext or ciphertext, the
+inclusion of the long tag ensures the protocol's state is dependent on both because AEGIS-128L is
+key committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
+which produces the same authentication tag is negligible).
+
+**N.B.:** AEGIS-128L by itself is not fully committing, as [tag collisions can be found if
+authenticated data is attacker-controlled](https://eprint.iacr.org/2023/1495.pdf). Lockstitch does
+not pass authenticated data to AEGIS-128L, however, mooting this type of attack.
+
+Third, `Crypt` operations provide no authentication by themselves. An attacker can modify a
 ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
 they are EAV secure (i.e. a passive adversary will not be able to read plaintext without knowing the
 protocol's prior state) but not IND-CPA secure (i.e. an active adversary with an encryption oracle
@@ -267,13 +279,13 @@ function Seal(key, nonce, ad, plaintext):
 The introduction of a nonce makes the scheme probabilistic (which is required for IND-CCA security).
 The final `Derive` operation closes over all inputs--key, nonce, associated data, and
 plaintext--which are also the values used to produce the ciphertext. Forging a tag here would imply
-that AES-128-CTR's MAC construction is not sUF-CMA secure.
+either that AEGIS-128L's tags are not UF-CMA secure authenticators or that SHA-256 is not
+collision-resistant. In addition, this construction is fully committing to all inputs: finding a
+pair of `(key, nonce, ad, plaintext)` tuples which produce the same tag would similarly imply a lack
+of UF-CMA security for AEGIS-128L or collision resistance for SHA-256.
 
-In addition, this construction is fully committing: finding a ciphertext and tag pair which
-successfully decrypts under multiple keys would imply that AES-128-CTR is not key committing, and
-the final tag serves as a commitment for the ciphertext.
-
-Decryption uses the `Decrypt` operation to decrypt:
+Opening a sealed ciphertext uses the `Decrypt` operation to decrypt and `Derive` to re-calculate the
+tag:
 
 ```text
 function Open(key, nonce, ad, ciphertext, tag):

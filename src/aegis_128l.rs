@@ -72,7 +72,7 @@ impl Aegis128L {
     }
 
     /// Process the given authenticated data.
-    #[cfg(test)]
+    #[cfg(all(test, feature = "std"))]
     pub fn ad(&mut self, ad: &[u8]) {
         // Process whole blocks of associated data.
         let mut chunks = ad.chunks_exact(BLOCK_LEN);
@@ -166,7 +166,7 @@ impl Aegis128L {
         tag
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "std"))]
     fn absorb(&mut self, ai: &[u8]) {
         // Load the input blocks.
         let (ai0, xi1) = load_2x(ai);

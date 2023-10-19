@@ -7,6 +7,26 @@ on:
   pull_request:
 
 jobs:
+  # Builds for no_std platforms
+  no_std:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+        target:
+          - thumbv7em-none-eabi
+          - wasm32-unknown-unknown
+    steps:
+      - uses: actions/checkout@v4
+      - uses: RustCrypto/actions/cargo-cache@master
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          targets: ${{ matrix.target }}
+      - uses: RustCrypto/actions/cargo-hack-install@master
+      - run: cargo hack build --target ${{ matrix.target }} --each-feature --exclude-features default,std,hedge,asm
+
   test:
     runs-on: ubuntu-latest
     strategy:

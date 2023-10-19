@@ -59,16 +59,5 @@ pub fn and(a: AesBlock, b: AesBlock) -> AesBlock {
 /// Perform one AES round on the given state using the given round key.
 #[inline]
 pub fn enc(state: AesBlock, round_key: AesBlock) -> AesBlock {
-    // TODO replace with vaeseq_u8 and vaesmcq_u8 instrinsics when that's stable
-    #[target_feature(enable = "aes")]
-    unsafe fn vaeseq_u8_and_vaesmcq_u8(mut state: AesBlock) -> AesBlock {
-        asm!(
-            "AESE {state:v}.16B, {zero:v}.16B",
-            "AESMC {state:v}.16B, {state:v}.16B",
-            state = inlateout(vreg) state, zero = in(vreg) 0,
-            options(pure, nomem, nostack, preserves_flags)
-        );
-        state
-    }
-    unsafe { veorq_u8(vaeseq_u8_and_vaesmcq_u8(state), round_key) }
+    unsafe { veorq_u8(vaesmcq_u8(vaeseq_u8(state, zero())), round_key) }
 }

@@ -379,6 +379,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "hedge")]
     fn hedging() {
         let mut hedger = Protocol::new("com.example.hedge");
         hedger.mix(b"one");

@@ -1,8 +1,8 @@
-pub use core::arch::aarch64::*;
-pub use core::arch::asm;
+use core::arch::aarch64::{self, *};
+use core::arch::asm;
 
 /// An AES block.
-pub use self::uint8x16_t as AesBlock;
+pub use aarch64::uint8x16_t as AesBlock;
 
 /// Create an all-zero AES block.
 #[inline]

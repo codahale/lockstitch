@@ -29,9 +29,7 @@ struct Transcript {
 }
 
 fn apply_transcript(t: &Transcript) -> Vec<Output> {
-    // Leak the domain so we can pretend we've statically allocated it in this test.
-    let domain: &'static str = Box::leak(Box::new(t.domain.clone()).into_boxed_str());
-    let mut protocol = Protocol::new(domain);
+    let mut protocol = Protocol::new(&t.domain);
     t.inputs
         .iter()
         .cloned()
@@ -72,9 +70,7 @@ fn apply_transcript(t: &Transcript) -> Vec<Output> {
 }
 
 fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
-    // Leak the domain so we can pretend we've statically allocated it in this test.
-    let domain: &'static str = Box::leak(Box::new(t.domain.clone()).into_boxed_str());
-    let mut protocol = Protocol::new(domain);
+    let mut protocol = Protocol::new(&t.domain);
     let mut derived = Vec::new();
     let inputs = t
         .inputs

@@ -45,7 +45,7 @@ pub struct Protocol {
 impl Protocol {
     /// Create a new protocol with the given domain.
     #[inline]
-    pub fn new(domain: &'static str) -> Protocol {
+    pub fn new(domain: &str) -> Protocol {
         // Create a protocol with a fresh SHA-256 instance.
         let mut protocol = Protocol { state: Sha256::new() };
 

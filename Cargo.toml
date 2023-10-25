@@ -27,7 +27,7 @@ portable = ["aes"]
 std = []
 
 [workspace]
-members = ["xtask"]
+members = ["fuzz", "xtask"]
 
 [dev-dependencies]
 divan = "0.1.0"

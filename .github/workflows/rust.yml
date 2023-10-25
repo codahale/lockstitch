@@ -59,7 +59,12 @@ jobs:
           - aarch64-unknown-linux-gnu
         features:
           - default
+        flags:
+          - "-C target-feature=+aes,+sha3"
+          - "-C target-feature=-aes,-sha3"
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "${{matrix.flags}}"
     steps:
       - uses: actions/checkout@v4
       - uses: RustCrypto/actions/cargo-cache@master

@@ -30,7 +30,7 @@ std = []
 members = ["fuzz", "xtask"]
 
 [dev-dependencies]
-divan = "0.1.0"
+divan = "0.1.1"
 expect-test = "1.4.1"
 hex = "0.4.3"
 hex-literal = "0.4.1"

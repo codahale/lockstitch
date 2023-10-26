@@ -9,8 +9,12 @@ libfuzzer-sys = "0.4.7"
 lockstitch = { path = ".." }
 
 [[bin]]
-name = "aead"
-path = "fuzz_targets/aead.rs"
+name = "aead_dec"
+path = "fuzz_targets/aead_dec.rs"
+
+[[bin]]
+name = "aead_enc"
+path = "fuzz_targets/aead_enc.rs"
 
 [[bin]]
 name = "hash"

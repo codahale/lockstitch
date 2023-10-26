@@ -18,7 +18,7 @@ enum Command {
 
     // Run benchmarks.
     Bench {
-        /// Additional arguments for criterion.
+        /// Additional arguments.
         #[clap(action(ArgAction::Append), allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -83,8 +83,7 @@ fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
     #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
     const RUSTFLAGS: &str = "";
 
-    let args = args.join(" ");
-    cmd!(sh, "cargo bench {args}")
+    cmd!(sh, "cargo bench {args...}")
         .env("RUSTFLAGS", RUSTFLAGS)
         .env("DIVAN_BYTES_FORMAT", "binary")
         .env("DIVAN_TIMER", "tsc")

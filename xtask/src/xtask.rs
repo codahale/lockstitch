@@ -28,6 +28,13 @@ enum Command {
         #[clap(subcommand)]
         cmd: CloudCommand,
     },
+
+    // Run libFuzzer.
+    Fuzz {
+        /// Additional arguments.
+        #[clap(action(ArgAction::Append), allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -63,6 +70,7 @@ fn main() -> Result<()> {
             CloudCommand::Ssh => cloud_ssh(),
             CloudCommand::Delete => cloud_delete(&sh),
         },
+        Command::Fuzz { args } => fuzz(&sh, args),
     }
 }
 
@@ -89,6 +97,12 @@ fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
         .env("DIVAN_TIMER", "tsc")
         .env("DIVAN_MIN_TIME", "1")
         .run()?;
+
+    Ok(())
+}
+
+fn fuzz(sh: &Shell, args: Vec<String>) -> Result<()> {
+    cmd!(sh, "cargo +nightly fuzz {args...}").run()?;
 
     Ok(())
 }

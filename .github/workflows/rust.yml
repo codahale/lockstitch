@@ -104,7 +104,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
       - uses: RustCrypto/actions/cross-install@master
-      - run: cross test --no-default-features --features=std
+      - run: cross test --target ${{ matrix.target }} --no-default-features --features=std
         shell: bash
-      - run: cross test --all-features
+      - run: cross test --target ${{ matrix.target }} --all-features
         shell: bash

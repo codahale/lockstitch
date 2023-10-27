@@ -108,3 +108,18 @@ jobs:
         shell: bash
       - run: cross test --target ${{ matrix.target }} --all-features
         shell: bash
+
+  # build fuzz targets
+  fuzz-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: RustCrypto/actions/cargo-cache@master
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+      - run: cargo +stable install cargo-fuzz --locked
+      - run: cargo +nightly fuzz build

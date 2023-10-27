@@ -76,7 +76,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
-      - uses: RustCrypto/actions/cargo-hack-install@master
+      - uses: taiki-e/install-action@cargo-hack
       - run: ${{ matrix.deps }}
       - run: cargo hack test --feature-powerset
  

@@ -76,9 +76,9 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
-      - uses: taiki-e/install-action@cargo-hack
       - run: ${{ matrix.deps }}
-      - run: cargo hack test --feature-powerset
+      - run: cargo test --no-default-features --features=std
+      - run: cargo test --all-features
  
   # aarch64 tests
   aarch64:
@@ -104,8 +104,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
       - uses: RustCrypto/actions/cross-install@master
-      - run: cross test
-          --target ${{ matrix.target }}
-          --no-default-features
-          --features ${{ matrix.features }}
+      - run: cross test --no-default-features --features=std
+        shell: bash
+      - run: cross test --all-features
         shell: bash

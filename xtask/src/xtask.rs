@@ -92,7 +92,7 @@ fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
     #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
     const RUSTFLAGS: &str = "";
 
-    cmd!(sh, "cargo bench {args...}")
+    cmd!(sh, "cargo bench -p benchmarks {args...}")
         .env("RUSTFLAGS", RUSTFLAGS)
         .env("DIVAN_BYTES_FORMAT", "binary")
         .env("DIVAN_TIMER", "tsc")

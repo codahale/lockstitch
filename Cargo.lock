@@ -74,6 +74,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
+name = "benchmarks"
+version = "0.0.0"
+dependencies = [
+ "divan",
+ "lockstitch",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -400,7 +408,6 @@ version = "0.16.2"
 dependencies = [
  "aes",
  "cmov",
- "divan",
  "expect-test",
  "hex",
  "hex-literal",
@@ -782,7 +789,7 @@ checksum = "7e2c411759b501fb9501aac2b1b2d287a6e93e5bdcf13c25306b23e1b716dd0e"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",

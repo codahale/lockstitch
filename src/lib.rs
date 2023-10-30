@@ -104,6 +104,17 @@ impl Protocol {
         self.process(&aegis.finalize(), Operation::Crypt);
     }
 
+    /// Moves the protocol into a [`Write`] implementation, processing all written data in a single
+    /// `Encrypt` operation and writing all encrypted data to `inner`. Use
+    /// [`CryptWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
+    #[cfg(feature = "std")]
+    pub fn encrypt_writer<W: std::io::Write>(mut self, inner: W) -> CryptWriter<W, true> {
+        // Chain the protocol's state and key an AEGIS-128L instance for output.
+        let aegis = self.chain(Operation::Crypt);
+
+        CryptWriter { protocol: self, aegis, inner, buf: Vec::new() }
+    }
+
     /// Decrypt the given slice in place.
     #[inline]
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
@@ -115,6 +126,17 @@ impl Protocol {
 
         // Update the state with the long tag and the operation code.
         self.process(&aegis.finalize(), Operation::Crypt);
+    }
+
+    /// Moves the protocol into a [`Write`] implementation, processing all written data in a single
+    /// `Decrypt` operation and writing all encrypted data to `inner`. Use
+    /// [`CryptWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
+    #[cfg(feature = "std")]
+    pub fn decrypt_writer<W: std::io::Write>(mut self, inner: W) -> CryptWriter<W, false> {
+        // Chain the protocol's state and key an AEGIS-128L instance for output.
+        let aegis = self.chain(Operation::Crypt);
+
+        CryptWriter { protocol: self, aegis, inner, buf: Vec::new() }
     }
 
     /// Seals the given mutable slice in place.
@@ -323,6 +345,63 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     }
 }
 
+/// A [`Write`] implementation which combines all written data into a single `Encrypt` or `Decrypt`
+/// operation and passes all writes (with the data encrypted or decrypted) to an inner writer.
+#[cfg(feature = "std")]
+#[derive(Debug)]
+pub struct CryptWriter<W, const ENCRYPT: bool> {
+    protocol: Protocol,
+    aegis: Aegis128L,
+    inner: W,
+    buf: Vec<u8>,
+}
+
+#[cfg(feature = "std")]
+impl<W: std::io::Write, const ENCRYPT: bool> CryptWriter<W, ENCRYPT> {
+    /// Finishes the `Encrypt` or `Decrypt` operation, flushes all data, and returns the inner
+    /// [`Protocol`] and writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns any error from [`flush`].
+    #[inline]
+    pub fn into_inner(mut self) -> std::io::Result<(Protocol, W)> {
+        if ENCRYPT {
+            self.aegis.encrypt(&mut self.buf);
+        } else {
+            self.aegis.decrypt(&mut self.buf);
+        }
+        self.inner.write_all(&self.buf)?;
+        self.protocol.process(&self.aegis.finalize(), Operation::Crypt);
+        Ok((self.protocol, self.inner))
+    }
+}
+
+#[cfg(feature = "std")]
+impl<W: std::io::Write, const ENCRYPT: bool> std::io::Write for CryptWriter<W, ENCRYPT> {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.buf.extend_from_slice(buf);
+        let n = self.buf.len() % aegis_128l::BLOCK_LEN;
+        if n > 0 {
+            let remainder = self.buf.split_off(n);
+            if ENCRYPT {
+                self.aegis.encrypt(&mut self.buf);
+            } else {
+                self.aegis.decrypt(&mut self.buf);
+            }
+            self.inner.write_all(&self.buf)?;
+            self.buf = remainder;
+        }
+        Ok(buf.len())
+    }
+
+    #[inline]
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use std::io::{self, Cursor};
@@ -357,25 +436,54 @@ mod tests {
     }
 
     #[test]
-    fn readers() {
-        let mut slices = Protocol::new("com.example.streams");
+    fn mix_writers() {
+        let mut slices = Protocol::new("com.example.mix-writers");
         slices.mix(b"one");
         slices.mix(b"two");
 
-        let streams = Protocol::new("com.example.streams");
-        let mut streams_write = streams.mix_writer(io::sink());
-        io::copy(&mut Cursor::new(b"one"), &mut streams_write)
+        let writers = Protocol::new("com.example.mix-writers");
+        let mut w = writers.mix_writer(io::sink());
+        io::copy(&mut Cursor::new(b"one"), &mut w)
             .expect("cursor reads and sink writes should be infallible");
-        let (streams, _) = streams_write.into_inner();
+        let (writers, _) = w.into_inner();
 
         let mut output = Vec::new();
-        let mut streams_write = streams.mix_writer(&mut output);
-        io::copy(&mut Cursor::new(b"two"), &mut streams_write)
+        let mut w = writers.mix_writer(&mut output);
+        io::copy(&mut Cursor::new(b"two"), &mut w)
             .expect("cursor reads and sink writes should be infallible");
-        let (mut streams, output) = streams_write.into_inner();
+        let (mut writers, output) = w.into_inner();
 
-        assert_eq!(slices.derive_array::<16>(), streams.derive_array::<16>());
+        assert_eq!(slices.derive_array::<16>(), writers.derive_array::<16>());
         assert_eq!(b"two".as_slice(), output);
+    }
+
+    #[test]
+    fn crypt_writers() {
+        let mut slices = Protocol::new("com.example.crypt-writers");
+        let mut ciphertext = "this is an example".bytes().collect::<Vec<u8>>();
+        slices.encrypt(&mut ciphertext);
+
+        let writers = Protocol::new("com.example.crypt-writers");
+        let mut ciphertext_p = Vec::new();
+        let mut w = writers.encrypt_writer(&mut ciphertext_p);
+        io::copy(&mut Cursor::new(b"this is an example"), &mut w)
+            .expect("cursor reads and vec writes should be infallible");
+        let (mut writers, _) = w.into_inner().expect("vec writes should be infallible");
+
+        assert_eq!(ciphertext, ciphertext_p);
+        assert_eq!(slices.derive_array::<16>(), writers.derive_array::<16>());
+
+        let mut plaintext = ciphertext.clone();
+        slices.decrypt(&mut plaintext);
+
+        let mut plaintext_p = Vec::new();
+        let mut w = writers.decrypt_writer(&mut plaintext_p);
+        io::copy(&mut Cursor::new(ciphertext_p), &mut w)
+            .expect("cursor reads and vec writes should be infallible");
+        let (mut writers, _) = w.into_inner().expect("vec writes should be infallible");
+
+        assert_eq!(plaintext, plaintext_p);
+        assert_eq!(slices.derive_array::<16>(), writers.derive_array::<16>());
     }
 
     #[test]

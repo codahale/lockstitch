@@ -112,7 +112,7 @@ impl Protocol {
         // Chain the protocol's state and key an AEGIS-128L instance for output.
         let aegis = self.chain(Operation::Crypt);
 
-        CryptWriter { protocol: self, aegis, inner, buf: Vec::new(), total: 0 }
+        CryptWriter { protocol: self, aegis, inner, buf: Vec::new() }
     }
 
     /// Decrypt the given slice in place.
@@ -136,7 +136,7 @@ impl Protocol {
         // Chain the protocol's state and key an AEGIS-128L instance for output.
         let aegis = self.chain(Operation::Crypt);
 
-        CryptWriter { protocol: self, aegis, inner, buf: Vec::new(), total: 0 }
+        CryptWriter { protocol: self, aegis, inner, buf: Vec::new() }
     }
 
     /// Seals the given mutable slice in place.
@@ -354,7 +354,6 @@ pub struct CryptWriter<W, const ENCRYPT: bool> {
     aegis: Aegis128L,
     inner: W,
     buf: Vec<u8>,
-    total: u64,
 }
 
 #[cfg(feature = "std")]
@@ -367,14 +366,12 @@ impl<W: std::io::Write, const ENCRYPT: bool> CryptWriter<W, ENCRYPT> {
     /// Returns any error from [`flush`].
     #[inline]
     pub fn into_inner(mut self) -> std::io::Result<(Protocol, W)> {
-        if !self.buf.is_empty() || self.total == 0 {
-            if ENCRYPT {
-                self.aegis.encrypt(&mut self.buf);
-            } else {
-                self.aegis.decrypt(&mut self.buf);
-            }
-            self.inner.write_all(&self.buf)?;
+        if ENCRYPT {
+            self.aegis.encrypt(&mut self.buf);
+        } else {
+            self.aegis.decrypt(&mut self.buf);
         }
+        self.inner.write_all(&self.buf)?;
         self.protocol.process(&self.aegis.finalize(), Operation::Crypt);
         Ok((self.protocol, self.inner))
     }
@@ -385,7 +382,7 @@ impl<W: std::io::Write, const ENCRYPT: bool> std::io::Write for CryptWriter<W, E
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.buf.extend_from_slice(buf);
-        let n = self.buf.len() - (self.buf.len() % aegis_128l::BLOCK_LEN);
+        let n = self.buf.len() % aegis_128l::BLOCK_LEN;
         if n > 0 {
             let remainder = self.buf.split_off(n);
             if ENCRYPT {
@@ -395,7 +392,6 @@ impl<W: std::io::Write, const ENCRYPT: bool> std::io::Write for CryptWriter<W, E
             }
             self.inner.write_all(&self.buf)?;
             self.buf = remainder;
-            self.total += u64::try_from(n).expect("usize should be <= u64");
         }
         Ok(buf.len())
     }

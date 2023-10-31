@@ -20,7 +20,7 @@ mod x86_64;
 pub const BLOCK_LEN: usize = 32;
 
 /// The length of an AES block.
-pub const AES_BLOCK_LEN: usize = 16;
+const AES_BLOCK_LEN: usize = 16;
 
 /// An AEGIS-128L instance.
 #[derive(Debug, Clone)]

@@ -3,6 +3,16 @@
 version = 3
 
 [[package]]
+name = "aegis"
+version = "0.4.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4b1b7dc75fb93f21b66a0d071e3f990dd1504df679b94c1f5e2417b57efaf45"
+dependencies = [
+ "cc",
+ "softaes",
+]
+
+[[package]]
 name = "aes"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -388,6 +398,7 @@ checksum = "da2479e8c062e40bf0066ffa0bc823de0a9368974af99c9f6df941d2c231e03f"
 name = "lockstitch"
 version = "0.16.2"
 dependencies = [
+ "aegis",
  "aes",
  "cmov",
  "expect-test",
@@ -570,6 +581,12 @@ checksum = "f27ba7066011e3fb30d808b51affff34f0a66d3a03a58edd787c6e420e40e44e"
 dependencies = [
  "cc",
 ]
+
+[[package]]
+name = "softaes"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff744c5d37b8ff11721ef14e92d1ec8743b5419d81513b3df22346cbee3d9d3e"
 
 [[package]]
 name = "strsim"

@@ -565,14 +565,28 @@ mod tests {
             k: [u8; 16],
             n: [u8; 16],
             ad in vec(any::<u8>(), 0..200),
-            msg in vec(any::<u8>(), 0..200)) {
-
+            msg in vec(any::<u8>(), 0..200),
+        ) {
             let mut ct = msg.clone();
             let tag_e = encrypt(&k, &n, &mut ct, &ad);
             let tag_d = decrypt(&k, &n, &mut ct, &ad);
 
             prop_assert_eq!(msg, ct, "invalid plaintext");
             prop_assert_eq!(tag_e, tag_d, "invalid tag");
+        }
+
+        #[test]
+        fn interop(
+            k: [u8; 16],
+            n: [u8; 16],
+            ad in vec(any::<u8>(), 0..200),
+            msg in vec(any::<u8>(), 0..200),
+        ) {
+            let mut ct = msg.clone();
+            let tag = encrypt(&k, &n, &mut ct, &ad);
+
+            let aegis = aegis::aegis128l::Aegis128L::<32>::new(&k, &n);
+            prop_assert_eq!(Ok(msg), aegis.decrypt(&ct, &tag, &ad), "should decrypt successfully");
         }
     }
 }

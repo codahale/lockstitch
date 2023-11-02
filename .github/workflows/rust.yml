@@ -124,3 +124,14 @@ jobs:
         with:
           crate: cargo-fuzz
       - run: cargo fuzz build
+
+  # quickly run benchmarks
+  benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: RustCrypto/actions/cargo-cache@master
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - run: cargo bench -p benchmarks

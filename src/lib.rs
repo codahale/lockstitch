@@ -23,6 +23,7 @@ use sha2::digest::{Digest, FixedOutputReset};
 use sha2::Sha256;
 
 mod aegis_128l;
+mod intrinsics;
 
 #[cfg(feature = "docs")]
 #[doc = include_str!("../design.md")]

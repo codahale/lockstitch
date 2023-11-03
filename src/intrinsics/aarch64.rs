@@ -1,4 +1,5 @@
 use core::arch::aarch64::{self, *};
+#[cfg(target_feature = "sha3")]
 use core::arch::asm;
 
 /// An AES block.

@@ -22,7 +22,7 @@ pub fn load(bytes: &[u8]) -> AesBlock {
 /// Load an AES block from the two given u64 values as big-endian integers.
 #[inline]
 pub fn load_64x2(a: u64, b: u64) -> AesBlock {
-    unsafe { _mm_set_epi64x(b.try_into().unwrap(), a.try_into().unwrap()) }
+    unsafe { _mm_set_epi64x(b as i64, a as i64) }
 }
 
 /// Store an AES block in the given slice.

@@ -80,7 +80,7 @@ jobs:
           targets: ${{ matrix.target }}
       - run: ${{ matrix.deps }}
       - run: cargo test --no-default-features --features=std
-      - run: cargo test --all-features
+      - run: cargo test
  
   # aarch64 tests
   aarch64:
@@ -108,7 +108,7 @@ jobs:
       - uses: RustCrypto/actions/cross-install@master
       - run: cross test --target ${{ matrix.target }} --no-default-features --features=std
         shell: bash
-      - run: cross test --target ${{ matrix.target }} --all-features
+      - run: cross test --target ${{ matrix.target }}
         shell: bash
 
   # build fuzz targets

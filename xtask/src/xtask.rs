@@ -85,13 +85,13 @@ fn ci(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+const RUSTFLAGS: &str = "-C target-feature=+aes,+ssse3";
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+const RUSTFLAGS: &str = "";
+
 fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
-    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-    const RUSTFLAGS: &str = "-C target-feature=+aes,+ssse3";
-
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
-    const RUSTFLAGS: &str = "";
-
     cmd!(sh, "cargo bench -p benchmarks {args...}")
         .env("RUSTFLAGS", RUSTFLAGS)
         .env("DIVAN_BYTES_FORMAT", "binary")
@@ -103,7 +103,7 @@ fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
 }
 
 fn fuzz(sh: &Shell, args: Vec<String>) -> Result<()> {
-    cmd!(sh, "cargo +nightly fuzz {args...}").run()?;
+    cmd!(sh, "cargo +nightly fuzz {args...}").env("RUSTFLAGS", RUSTFLAGS).run()?;
 
     Ok(())
 }

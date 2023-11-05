@@ -11,3 +11,6 @@ lockstitch = { path = ".." }
 [[bench]]
 name = "benchmarks"
 harness = false
+
+[package.metadata.release]
+release = false

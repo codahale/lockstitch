@@ -14,3 +14,4 @@ harness = false
 
 [package.metadata.release]
 release = false
+consolidate-commits = false

@@ -4,9 +4,9 @@ version = 3
 
 [[package]]
 name = "aegis"
-version = "0.4.9"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4b1b7dc75fb93f21b66a0d071e3f990dd1504df679b94c1f5e2417b57efaf45"
+checksum = "305080716a198f6a57096263ac2df9f681f9487728819a83e0137b18050fc8ad"
 dependencies = [
  "cc",
  "softaes",

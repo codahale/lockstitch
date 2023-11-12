@@ -58,6 +58,51 @@ fn ae_dec(domain: &str, k: &[u8], n: &[u8], d: &[u8], c: &[u8]) -> Option<Vec<u8
     aead.open(&mut p).map(|p| p.to_vec())
 }
 
+fn dae_enc(domain: &str, k: &[u8], d: &[u8], p: &[u8]) -> Vec<u8> {
+    let mut out = vec![0u8; p.len() + TAG_LEN];
+    let (iv, ciphertext) = out.split_at_mut(TAG_LEN);
+    ciphertext.copy_from_slice(p);
+
+    // Mix in the key and associated data.
+    let mut dae = Protocol::new(domain);
+    dae.mix(k);
+    dae.mix(d);
+
+    // Use a cloned protocol to mix the plaintext and derive a synthetic IV.
+    let mut siv = dae.clone();
+    siv.mix(p);
+    siv.derive(iv);
+
+    // Mix the IV and encrypt the ciphertext.
+    dae.mix(iv);
+    dae.encrypt(ciphertext);
+
+    out
+}
+
+fn dae_dec(domain: &str, k: &[u8], d: &[u8], c: &[u8]) -> Option<Vec<u8>> {
+    let (iv, ciphertext) = c.split_at(TAG_LEN);
+    let mut plaintext = ciphertext.to_vec();
+
+    // Mix in the key and associated data.
+    let mut dae = Protocol::new(domain);
+    dae.mix(k);
+    dae.mix(d);
+
+    // Clone the protocol with just the key and associated data mixed in.
+    let mut siv = dae.clone();
+
+    // Mix the IV and decrypt the ciphertext.
+    dae.mix(iv);
+    dae.decrypt(&mut plaintext);
+
+    // Re-derive the synthetic IV given the unauthenticated plaintext.
+    siv.mix(&plaintext);
+    let iv_p = siv.derive_array::<TAG_LEN>();
+
+    lockstitch::ct_eq(iv, &iv_p).then_some(plaintext)
+}
+
 fn tuple_hash(domain: &str, data: &[Vec<u8>]) -> [u8; 32] {
     let mut tuple_hash = Protocol::new(domain);
     for d in data {
@@ -130,6 +175,32 @@ proptest! {
         c in vec(any::<u8>(), TAG_LEN..200),
     ) {
         let p = ae_dec(&d, &k, &n, &ad, &c);
+
+        prop_assert_eq!(p, None, "decrypted bad ciphertext");
+    }
+
+    #[test]
+    fn dae(
+        d1: String, k1 in vec(any::<u8>(), 1..200), ad1 in vec(any::<u8>(), 0..200),
+        d2: String, k2 in vec(any::<u8>(), 1..200), ad2 in vec(any::<u8>(), 0..200),
+        m in vec(any::<u8>(), 1..200),
+    ) {
+        prop_assume!(!(d1 == d2 && k1 == k2 && ad1 == ad2), "inputs must be different");
+
+        let c = dae_enc(&d1, &k1, &ad1, &m);
+        let p = dae_dec(&d2, &k2, &ad2, &c);
+
+        prop_assert_eq!(p, None, "different inputs produced the same outputs");
+    }
+
+    #[test]
+    fn dae_mutability(
+        d: String,
+        k in vec(any::<u8>(), 1..200),
+        ad in vec(any::<u8>(), 0..200),
+        c in vec(any::<u8>(), TAG_LEN..200),
+    ) {
+        let p = dae_dec(&d, &k, &ad, &c);
 
         prop_assert_eq!(p, None, "decrypted bad ciphertext");
     }

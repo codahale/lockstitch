@@ -251,18 +251,14 @@ impl Protocol {
     /// End an operation, including the number of bytes processed.
     #[inline]
     fn end_op(&mut self, operation: Operation, n: u64) {
-        // Allocate a buffer for output.
-        let mut buffer = [0u8; 10];
-        let (re_x, re_n) = buffer.split_at_mut(8);
-        let (re_n, op) = re_n.split_at_mut(1);
-
         // Encode the number of bytes processed using NIST SP-800-185's right_encode.
-        re_x.copy_from_slice(&n.to_be_bytes());
-        let offset = re_x.iter().position(|i| *i != 0).unwrap_or(7);
-        re_n[0] = 8 - offset as u8;
+        let mut buffer = [0u8; 10];
+        buffer[..8].copy_from_slice(&n.to_be_bytes());
+        let offset = buffer[..8].iter().position(|i| *i != 0).unwrap_or(7);
+        buffer[8] = 8 - offset as u8;
 
         // Set the last byte to the operation code.
-        op[0] = operation as u8;
+        buffer[9] = operation as u8;
 
         // Update the state with the length and operation code.
         self.state.update(&buffer[offset..]);

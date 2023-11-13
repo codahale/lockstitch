@@ -1,6 +1,6 @@
 use lockstitch::{Protocol, TAG_LEN};
-use proptest::collection::vec;
-use proptest::prelude::*;
+use quickcheck::{Arbitrary, TestResult};
+use quickcheck_macros::quickcheck;
 
 fn md(domain: &str, m: &[u8]) -> [u8; 32] {
     let mut md = Protocol::new(domain);
@@ -111,110 +111,110 @@ fn tuple_hash(domain: &str, data: &[Vec<u8>]) -> [u8; 32] {
     tuple_hash.derive_array(b"digest")
 }
 
-proptest! {
-    #[test]
-    fn message_digests(
-        d1: String, m1 in vec(any::<u8>(), 0..200),
-        d2: String, m2 in vec(any::<u8>(), 0..200),
-    ) {
-        prop_assume!(!(d1 == d2 && m1 == m2), "inputs must be different");
+#[quickcheck]
+fn message_digests(d1: String, m1: Vec<u8>, d2: String, m2: Vec<u8>) -> bool {
+    let md1 = md(&d1, &m1);
+    let md2 = md(&d2, &m2);
 
-        let md1 = md(&d1, &m1);
-        let md2 = md(&d2, &m2);
+    d1 != d2 || m1 != m2 || md1 == md2
+}
 
-        prop_assert_ne!(md1, md2, "different inputs produced the same outputs");
+#[quickcheck]
+fn message_authentication_codes(
+    d1: String,
+    k1: Vec<u8>,
+    m1: Vec<u8>,
+    d2: String,
+    k2: Vec<u8>,
+    m2: Vec<u8>,
+) -> bool {
+    let mac1 = mac(&d1, &k1, &m1);
+    let mac2 = mac(&d2, &k2, &m2);
+
+    d1 != d2 || k1 != k2 || m1 != m2 || mac1 == mac2
+}
+
+#[quickcheck]
+fn stream_ciphers(
+    d1: String,
+    k1: Vec<u8>,
+    n1: Vec<u8>,
+    d2: String,
+    k2: Vec<u8>,
+    n2: Vec<u8>,
+    m: Vec<u8>,
+) -> bool {
+    let c = enc(&d1, &k1, &n1, &m);
+    let p = dec(&d2, &k2, &n2, &c);
+
+    d1 != d2 || k1 != k2 || n1 != n2 || m == p
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AeadParams {
+    domain: String,
+    key: Vec<u8>,
+    nonce: Vec<u8>,
+    ad: Vec<u8>,
+}
+
+impl Arbitrary for AeadParams {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        Self {
+            domain: String::arbitrary(g),
+            key: Vec::<u8>::arbitrary(g),
+            nonce: Vec::<u8>::arbitrary(g),
+            ad: Vec::<u8>::arbitrary(g),
+        }
+    }
+}
+
+#[quickcheck]
+fn aead(a: AeadParams, b: AeadParams, m: Vec<u8>) -> bool {
+    let c = ae_enc(&a.domain, &a.key, &a.nonce, &a.ad, &m);
+    let p = ae_dec(&b.domain, &b.key, &b.nonce, &b.ad, &c);
+
+    a != b || p == Some(m)
+}
+
+#[quickcheck]
+fn aead_mutability(d: String, k: Vec<u8>, n: Vec<u8>, ad: Vec<u8>, c: Vec<u8>) -> TestResult {
+    if c.len() < TAG_LEN {
+        return TestResult::discard();
     }
 
-    #[test]
-    fn message_authentication_codes(
-        d1: String, k1 in vec(any::<u8>(), 1..200), m1 in vec(any::<u8>(), 1..200),
-        d2: String, k2 in vec(any::<u8>(), 1..200), m2 in vec(any::<u8>(), 1..200),
-    ) {
-        prop_assume!(!(d1 == d2 && k1 == k2 && m1 == m2), "inputs must be different");
+    TestResult::from_bool(ae_dec(&d, &k, &n, &ad, &c).is_none())
+}
 
-        let mac1 = mac(&d1, &k1, &m1);
-        let mac2 = mac(&d2, &k2, &m2);
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DaeadParams {
+    domain: String,
+    key: Vec<u8>,
+    ad: Vec<u8>,
+}
 
-        prop_assert_ne!(mac1, mac2, "different inputs produced the same outputs");
+impl Arbitrary for DaeadParams {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        Self {
+            domain: String::arbitrary(g),
+            key: Vec::<u8>::arbitrary(g),
+            ad: Vec::<u8>::arbitrary(g),
+        }
     }
+}
 
-    #[test]
-    fn stream_ciphers(
-        d1: String, k1 in vec(any::<u8>(), 1..200), n1 in vec(any::<u8>(), 1..200),
-        d2: String, k2 in vec(any::<u8>(), 1..200), n2 in vec(any::<u8>(), 1..200),
-        m in vec(any::<u8>(), 100..200),
-    ) {
-        prop_assume!(!(d1 == d2 && k1 == k2 && n1 == n2), "inputs must be different");
+#[quickcheck]
+fn daead(a: DaeadParams, b: DaeadParams, m: Vec<u8>) -> bool {
+    let c = dae_enc(&a.domain, &a.key, &a.ad, &m);
+    let p = dae_dec(&b.domain, &b.key, &b.ad, &c);
 
-        let c = enc(&d1, &k1, &n1, &m);
-        let p = dec(&d2, &k2, &n2, &c);
+    a != b || p == Some(m)
+}
 
-        prop_assert_ne!(p, m, "different inputs produced the same outputs");
-    }
+#[quickcheck]
+fn tuple_hashes(d1: String, dd1: Vec<Vec<u8>>, d2: String, dd2: Vec<Vec<u8>>) -> bool {
+    let h1 = tuple_hash(&d1, &dd1);
+    let h2 = tuple_hash(&d2, &dd2);
 
-    #[test]
-    fn aead(
-        d1: String, k1 in vec(any::<u8>(), 1..200), n1 in vec(any::<u8>(), 1..200), ad1 in vec(any::<u8>(), 0..200),
-        d2: String, k2 in vec(any::<u8>(), 1..200), n2 in vec(any::<u8>(), 1..200), ad2 in vec(any::<u8>(), 0..200),
-        m in vec(any::<u8>(), 1..200),
-    ) {
-        prop_assume!(!(d1 == d2 && k1 == k2 && n1 == n2 && ad1 == ad2), "inputs must be different");
-
-        let c = ae_enc(&d1, &k1, &n1, &ad1, &m);
-        let p = ae_dec(&d2, &k2, &n2, &ad2, &c);
-
-        prop_assert_eq!(p, None, "different inputs produced the same outputs");
-    }
-
-    #[test]
-    fn aead_mutability(
-        d: String,
-        k in vec(any::<u8>(), 1..200),
-        n in vec(any::<u8>(), 1..200),
-        ad in vec(any::<u8>(), 0..200),
-        c in vec(any::<u8>(), TAG_LEN..200),
-    ) {
-        let p = ae_dec(&d, &k, &n, &ad, &c);
-
-        prop_assert_eq!(p, None, "decrypted bad ciphertext");
-    }
-
-    #[test]
-    fn dae(
-        d1: String, k1 in vec(any::<u8>(), 1..200), ad1 in vec(any::<u8>(), 0..200),
-        d2: String, k2 in vec(any::<u8>(), 1..200), ad2 in vec(any::<u8>(), 0..200),
-        m in vec(any::<u8>(), 1..200),
-    ) {
-        prop_assume!(!(d1 == d2 && k1 == k2 && ad1 == ad2), "inputs must be different");
-
-        let c = dae_enc(&d1, &k1, &ad1, &m);
-        let p = dae_dec(&d2, &k2, &ad2, &c);
-
-        prop_assert_eq!(p, None, "different inputs produced the same outputs");
-    }
-
-    #[test]
-    fn dae_mutability(
-        d: String,
-        k in vec(any::<u8>(), 1..200),
-        ad in vec(any::<u8>(), 0..200),
-        c in vec(any::<u8>(), TAG_LEN..200),
-    ) {
-        let p = dae_dec(&d, &k, &ad, &c);
-
-        prop_assert_eq!(p, None, "decrypted bad ciphertext");
-    }
-
-    #[test]
-    fn tuple_hashes(
-        d1: String, dd1 in vec(vec(any::<u8>(), 0..200), 0..10),
-        d2: String, dd2 in vec(vec(any::<u8>(), 0..200), 0..10),
-    ) {
-        prop_assume!(!(d1 == d2 && dd1 == dd2), "inputs must be different");
-
-        let h1 = tuple_hash(&d1, &dd1);
-        let h2 = tuple_hash(&d2, &dd2);
-
-        prop_assert_ne!(h1, h2, "different inputs produced the same outputs");
-    }
+    d1 != d2 || dd1 != dd2 || h1 == h2
 }

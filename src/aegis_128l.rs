@@ -276,8 +276,8 @@ mod tests {
 
     use expect_test::expect;
     use hex_literal::hex;
-    use proptest::collection::vec;
-    use proptest::prelude::*;
+    use quickcheck::Arbitrary;
+    use quickcheck_macros::quickcheck;
 
     fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 32] {
         let mut state = Aegis128L::new(key, nonce);
@@ -543,34 +543,47 @@ mod tests {
         );
     }
 
-    proptest! {
-        #[test]
-        fn round_trip(
-            k: [u8; 16],
-            n: [u8; 16],
-            ad in vec(any::<u8>(), 0..200),
-            msg in vec(any::<u8>(), 0..200),
-        ) {
-            let mut ct = msg.clone();
-            let tag_e = encrypt(&k, &n, &mut ct, &ad);
-            let tag_d = decrypt(&k, &n, &mut ct, &ad);
+    #[derive(Debug, Clone)]
+    struct KeyOrNonce([u8; 16]);
 
-            prop_assert_eq!(msg, ct, "invalid plaintext");
-            prop_assert_eq!(tag_e, tag_d, "invalid tag");
+    impl Arbitrary for KeyOrNonce {
+        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+            Self([
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+                u8::arbitrary(g),
+            ])
         }
+    }
 
-        #[test]
-        fn interop(
-            k: [u8; 16],
-            n: [u8; 16],
-            ad in vec(any::<u8>(), 0..200),
-            msg in vec(any::<u8>(), 0..200),
-        ) {
-            let mut ct = msg.clone();
-            let tag = encrypt(&k, &n, &mut ct, &ad);
+    #[quickcheck]
+    fn round_trip(k: KeyOrNonce, n: KeyOrNonce, ad: Vec<u8>, msg: Vec<u8>) -> bool {
+        let mut ct = msg.clone();
+        let tag_e = encrypt(&k.0, &n.0, &mut ct, &ad);
+        let tag_d = decrypt(&k.0, &n.0, &mut ct, &ad);
 
-            let aegis = aegis::aegis128l::Aegis128L::<32>::new(&k, &n);
-            prop_assert_eq!(Ok(msg), aegis.decrypt(&ct, &tag, &ad), "should decrypt successfully");
-        }
+        msg == ct && tag_e == tag_d
+    }
+
+    #[quickcheck]
+    fn interop(k: KeyOrNonce, n: KeyOrNonce, ad: Vec<u8>, msg: Vec<u8>) -> bool {
+        let mut ct = msg.clone();
+        let tag = encrypt(&k.0, &n.0, &mut ct, &ad);
+
+        let aegis = aegis::aegis128l::Aegis128L::<32>::new(&k.0, &n.0);
+        aegis.decrypt(&ct, &tag, &ad) == Ok(msg)
     }
 }

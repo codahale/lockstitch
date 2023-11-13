@@ -1,6 +1,8 @@
+use std::num::NonZeroUsize;
+
 use lockstitch::{Protocol, TAG_LEN};
-use proptest::collection::vec;
-use proptest::prelude::*;
+use quickcheck::Arbitrary;
+use quickcheck_macros::quickcheck;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Input {
@@ -11,6 +13,23 @@ enum Input {
     Seal(Vec<u8>, Vec<u8>),
     Open(Vec<u8>, Vec<u8>),
     Ratchet,
+}
+
+impl Arbitrary for Input {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        match g.choose(&[0, 1, 2, 3, 4, 5]).expect("should choose a variant") {
+            0 => Input::Mix(Vec::<u8>::arbitrary(g), Vec::<u8>::arbitrary(g)),
+            1 => {
+                Input::Derive(Vec::<u8>::arbitrary(g), NonZeroUsize::arbitrary(g).get() % (1 << 12))
+            }
+            2 => Input::Encrypt(Vec::<u8>::arbitrary(g), Vec::<u8>::arbitrary(g)),
+            3 => Input::Decrypt(Vec::<u8>::arbitrary(g), Vec::<u8>::arbitrary(g)),
+            4 => Input::Seal(Vec::<u8>::arbitrary(g), Vec::<u8>::arbitrary(g)),
+            5 => Input::Ratchet,
+            // No way to produce valid inputs for Open operations.
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -26,6 +45,17 @@ enum Output {
 struct Transcript {
     domain: String,
     inputs: Vec<Input>,
+}
+
+impl Arbitrary for Transcript {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        let mut inputs = Vec::<Input>::arbitrary(g);
+
+        // All transcripts must end with a Derive operation to capture the final protocol state.
+        inputs.push(Input::Derive(b"final".to_vec(), 16));
+
+        Self { domain: String::arbitrary(g), inputs }
+    }
 }
 
 fn apply_transcript(t: &Transcript) -> Vec<Output> {
@@ -117,93 +147,30 @@ fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
     (Transcript { domain: t.domain.clone(), inputs }, derived)
 }
 
-fn label() -> impl Strategy<Value = Vec<u8>> {
-    vec(any::<u8>(), 0..200)
+/// Multiple applications of the same inputs must always produce the same outputs.
+#[quickcheck]
+fn determinism(t: Transcript) -> bool {
+    let a = apply_transcript(&t);
+    let b = apply_transcript(&t);
+
+    a == b
 }
 
-fn data() -> impl Strategy<Value = Vec<u8>> {
-    vec(any::<u8>(), 0..200)
+/// Two different transcripts must produce different outputs.
+#[quickcheck]
+fn divergence(t0: Transcript, t1: Transcript) -> bool {
+    let a = apply_transcript(&t0);
+    let b = apply_transcript(&t1);
+
+    t0 == t1 || a != b
 }
 
-fn input() -> impl Strategy<Value = Input> {
-    prop_oneof![
-        Just(Input::Ratchet),
-        (label(), (1usize..256)).prop_map(|(l, n)| Input::Derive(l, n)),
-        (label(), data()).prop_map(|(l, d)| Input::Mix(l, d)),
-        (label(), data()).prop_map(|(l, d)| Input::Encrypt(l, d)),
-        (label(), data()).prop_map(|(l, d)| Input::Decrypt(l, d)),
-        (label(), data()).prop_map(|(l, d)| Input::Seal(l, d)),
-        (label(), vec(any::<u8>(), TAG_LEN..200)).prop_map(|(l, d)| Input::Open(l, d))
-    ]
-}
+/// For any transcript, invertible operations (e.g. encrypt/decrypt, seal/open) must produce
+/// matching outputs to inputs.
+#[quickcheck]
+fn invertible(t: Transcript) -> bool {
+    let (t_inv, a_d) = invert_transcript(&t);
+    let (t_p, b_d) = invert_transcript(&t_inv);
 
-fn invertible_input() -> impl Strategy<Value = Input> {
-    prop_oneof![
-        Just(Input::Ratchet),
-        (label(), (1usize..256)).prop_map(|(l, n)| Input::Derive(l, n)),
-        (label(), data()).prop_map(|(l, d)| Input::Mix(l, d)),
-        (label(), data()).prop_map(|(l, d)| Input::Encrypt(l, d)),
-        (label(), data()).prop_map(|(l, d)| Input::Decrypt(l, d)),
-        (label(), data()).prop_map(|(l, d)| Input::Seal(l, d)),
-        // we can't generate inputs for Open that are valid
-    ]
-}
-
-prop_compose! {
-    /// A transcript of 0..62 arbitrary operations terminated with a `Derive` operation to capture
-    /// the duplex's final state.
-    fn transcript()(
-        domain: String,
-        mut inputs in vec(input(), 0..62),
-    ) -> Transcript{
-        inputs.push(Input::Derive(b"final".to_vec(), 16));
-        Transcript{domain, inputs}
-    }
-}
-
-prop_compose! {
-    /// A transcript of 0..62 invertible operations terminated with a `Derive` operation to capture
-    /// the duplex's final state.
-    fn invertible_transcript()(
-        domain: String,
-        mut inputs in vec(invertible_input(), 0..62),
-    ) -> Transcript{
-        inputs.push(Input::Derive(b"final".to_vec(), 16));
-        Transcript{domain, inputs}
-    }
-}
-
-proptest! {
-    #![proptest_config(ProptestConfig::with_source_file("transcripts"))]
-
-    /// Multiple applications of the same inputs must always produce the same outputs.
-    #[test]
-    fn determinism(t in transcript()) {
-        let a = apply_transcript(&t);
-        let b = apply_transcript(&t);
-
-        prop_assert_eq!(a, b, "two runs of the same transcript produced different outputs");
-    }
-
-    /// Two different transcripts must produce different outputs.
-    #[test]
-    fn divergence(t0 in transcript(), t1 in transcript()) {
-        prop_assume!(t0 != t1, "transcripts must be different");
-
-        let a = apply_transcript(&t0);
-        let b = apply_transcript(&t1);
-
-        prop_assert_ne!(a, b, "different transcripts produced equal outputs");
-    }
-
-    /// For any transcript, invertible operations (e.g. encrypt/decrypt, seal/open) must produce
-    /// matching outputs to inputs.
-    #[test]
-    fn invertible(t in invertible_transcript()) {
-        let (t_inv, a_d) = invert_transcript(&t);
-        let (t_p, b_d) = invert_transcript(&t_inv);
-
-        prop_assert_eq!(t, t_p, "unable to invert a transcript");
-        prop_assert_eq!(a_d, b_d, "divergent derived outputs");
-    }
+    t == t_p && a_d == b_d
 }

@@ -112,7 +112,7 @@ fn tuple_hash(domain: &str, data: &[Vec<u8>]) -> [u8; 32] {
 }
 
 #[quickcheck]
-fn message_digests(d1: String, m1: Vec<u8>, d2: String, m2: Vec<u8>) -> bool {
+fn qc_message_digests(d1: String, m1: Vec<u8>, d2: String, m2: Vec<u8>) -> bool {
     let md1 = md(&d1, &m1);
     let md2 = md(&d2, &m2);
 
@@ -120,7 +120,7 @@ fn message_digests(d1: String, m1: Vec<u8>, d2: String, m2: Vec<u8>) -> bool {
 }
 
 #[quickcheck]
-fn message_authentication_codes(
+fn qc_message_authentication_codes(
     d1: String,
     k1: Vec<u8>,
     m1: Vec<u8>,
@@ -135,7 +135,7 @@ fn message_authentication_codes(
 }
 
 #[quickcheck]
-fn stream_ciphers(
+fn qc_stream_ciphers(
     d1: String,
     k1: Vec<u8>,
     n1: Vec<u8>,
@@ -170,7 +170,7 @@ impl Arbitrary for AeadParams {
 }
 
 #[quickcheck]
-fn aead(a: AeadParams, b: AeadParams, m: Vec<u8>) -> bool {
+fn qc_aead(a: AeadParams, b: AeadParams, m: Vec<u8>) -> bool {
     let c = ae_enc(&a.domain, &a.key, &a.nonce, &a.ad, &m);
     let p = ae_dec(&b.domain, &b.key, &b.nonce, &b.ad, &c);
 
@@ -178,7 +178,7 @@ fn aead(a: AeadParams, b: AeadParams, m: Vec<u8>) -> bool {
 }
 
 #[quickcheck]
-fn aead_mutability(d: String, k: Vec<u8>, n: Vec<u8>, ad: Vec<u8>, c: Vec<u8>) -> TestResult {
+fn qc_aead_mutability(d: String, k: Vec<u8>, n: Vec<u8>, ad: Vec<u8>, c: Vec<u8>) -> TestResult {
     if c.len() < TAG_LEN {
         return TestResult::discard();
     }
@@ -204,7 +204,7 @@ impl Arbitrary for DaeadParams {
 }
 
 #[quickcheck]
-fn daead(a: DaeadParams, b: DaeadParams, m: Vec<u8>) -> bool {
+fn qc_daead(a: DaeadParams, b: DaeadParams, m: Vec<u8>) -> bool {
     let c = dae_enc(&a.domain, &a.key, &a.ad, &m);
     let p = dae_dec(&b.domain, &b.key, &b.ad, &c);
 
@@ -212,7 +212,7 @@ fn daead(a: DaeadParams, b: DaeadParams, m: Vec<u8>) -> bool {
 }
 
 #[quickcheck]
-fn tuple_hashes(d1: String, dd1: Vec<Vec<u8>>, d2: String, dd2: Vec<Vec<u8>>) -> bool {
+fn qc_tuple_hashes(d1: String, dd1: Vec<Vec<u8>>, d2: String, dd2: Vec<Vec<u8>>) -> bool {
     let h1 = tuple_hash(&d1, &dd1);
     let h2 = tuple_hash(&d2, &dd2);
 

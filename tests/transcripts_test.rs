@@ -149,7 +149,7 @@ fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
 
 /// Multiple applications of the same inputs must always produce the same outputs.
 #[quickcheck]
-fn determinism(t: Transcript) -> bool {
+fn qc_determinism(t: Transcript) -> bool {
     let a = apply_transcript(&t);
     let b = apply_transcript(&t);
 
@@ -158,7 +158,7 @@ fn determinism(t: Transcript) -> bool {
 
 /// Two different transcripts must produce different outputs.
 #[quickcheck]
-fn divergence(t0: Transcript, t1: Transcript) -> bool {
+fn qc_divergence(t0: Transcript, t1: Transcript) -> bool {
     let a = apply_transcript(&t0);
     let b = apply_transcript(&t1);
 
@@ -168,7 +168,7 @@ fn divergence(t0: Transcript, t1: Transcript) -> bool {
 /// For any transcript, invertible operations (e.g. encrypt/decrypt, seal/open) must produce
 /// matching outputs to inputs.
 #[quickcheck]
-fn invertible(t: Transcript) -> bool {
+fn qc_invertible(t: Transcript) -> bool {
     let (t_inv, a_d) = invert_transcript(&t);
     let (t_p, b_d) = invert_transcript(&t_inv);
 

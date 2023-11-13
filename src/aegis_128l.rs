@@ -543,7 +543,7 @@ mod tests {
     }
 
     #[quickcheck]
-    fn round_trip(k: u128, n: u128, ad: Vec<u8>, msg: Vec<u8>) -> bool {
+    fn qc_round_trip(k: u128, n: u128, ad: Vec<u8>, msg: Vec<u8>) -> bool {
         let mut ct = msg.clone();
         let tag_e = encrypt(&k.to_le_bytes(), &n.to_le_bytes(), &mut ct, &ad);
         let tag_d = decrypt(&k.to_le_bytes(), &n.to_le_bytes(), &mut ct, &ad);
@@ -552,7 +552,7 @@ mod tests {
     }
 
     #[quickcheck]
-    fn interop(k: u128, n: u128, ad: Vec<u8>, msg: Vec<u8>) -> bool {
+    fn qc_interop(k: u128, n: u128, ad: Vec<u8>, msg: Vec<u8>) -> bool {
         let mut ct = msg.clone();
         let tag = encrypt(&k.to_le_bytes(), &n.to_le_bytes(), &mut ct, &ad);
 

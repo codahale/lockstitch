@@ -4,12 +4,12 @@ use proptest::prelude::*;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Input {
-    Mix(Vec<u8>),
-    Derive(usize),
-    Encrypt(Vec<u8>),
-    Decrypt(Vec<u8>),
-    Seal(Vec<u8>),
-    Open(Vec<u8>),
+    Mix(Vec<u8>, Vec<u8>),
+    Derive(Vec<u8>, usize),
+    Encrypt(Vec<u8>, Vec<u8>),
+    Decrypt(Vec<u8>, Vec<u8>),
+    Seal(Vec<u8>, Vec<u8>),
+    Open(Vec<u8>, Vec<u8>),
     Ratchet,
 }
 
@@ -34,32 +34,32 @@ fn apply_transcript(t: &Transcript) -> Vec<Output> {
         .iter()
         .cloned()
         .flat_map(|op| match op {
-            Input::Mix(data) => {
-                protocol.mix(&data);
+            Input::Mix(ref label, ref data) => {
+                protocol.mix(label, data);
                 None
             }
-            Input::Derive(n) => {
+            Input::Derive(ref label, n) => {
                 let mut out = vec![0u8; n];
-                protocol.derive(&mut out);
+                protocol.derive(label, &mut out);
                 Some(Output::Derived(out))
             }
-            Input::Encrypt(mut plaintext) => {
-                protocol.encrypt(&mut plaintext);
+            Input::Encrypt(ref label, mut plaintext) => {
+                protocol.encrypt(label, &mut plaintext);
                 Some(Output::Encrypted(plaintext))
             }
-            Input::Decrypt(mut ciphertext) => {
-                protocol.decrypt(&mut ciphertext);
+            Input::Decrypt(ref label, mut ciphertext) => {
+                protocol.decrypt(label, &mut ciphertext);
                 Some(Output::Decrypted(ciphertext))
             }
-            Input::Seal(plaintext) => {
+            Input::Seal(ref label, ref plaintext) => {
                 let mut ciphertext = vec![0u8; plaintext.len() + TAG_LEN];
-                ciphertext[..plaintext.len()].copy_from_slice(&plaintext);
+                ciphertext[..plaintext.len()].copy_from_slice(plaintext);
 
-                protocol.seal(&mut ciphertext);
+                protocol.seal(label, &mut ciphertext);
                 Some(Output::Sealed(ciphertext))
             }
-            Input::Open(mut ciphertext) => {
-                protocol.open(&mut ciphertext).map(|p| Output::Opened(p.to_vec()))
+            Input::Open(ref label, mut ciphertext) => {
+                protocol.open(label, &mut ciphertext).map(|p| Output::Opened(p.to_vec()))
             }
             Input::Ratchet => {
                 protocol.ratchet();
@@ -77,33 +77,35 @@ fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
         .iter()
         .cloned()
         .map(|op| match op {
-            Input::Mix(data) => {
-                protocol.mix(&data);
-                Input::Mix(data.to_vec())
+            Input::Mix(label, data) => {
+                protocol.mix(&label, &data);
+                Input::Mix(label, data)
             }
-            Input::Derive(n) => {
+            Input::Derive(label, n) => {
                 let mut out = vec![0u8; n];
-                protocol.derive(&mut out);
+                protocol.derive(&label, &mut out);
                 derived.push(out);
-                Input::Derive(n)
+                Input::Derive(label, n)
             }
-            Input::Encrypt(mut plaintext) => {
-                protocol.encrypt(&mut plaintext);
-                Input::Decrypt(plaintext)
+            Input::Encrypt(label, mut plaintext) => {
+                protocol.encrypt(&label, &mut plaintext);
+                Input::Decrypt(label, plaintext)
             }
-            Input::Decrypt(mut ciphertext) => {
-                protocol.decrypt(&mut ciphertext);
-                Input::Encrypt(ciphertext)
+            Input::Decrypt(label, mut ciphertext) => {
+                protocol.decrypt(&label, &mut ciphertext);
+                Input::Encrypt(label, ciphertext)
             }
-            Input::Seal(plaintext) => {
+            Input::Seal(label, plaintext) => {
                 let mut ciphertext = vec![0u8; plaintext.len() + TAG_LEN];
                 ciphertext[..plaintext.len()].copy_from_slice(&plaintext);
 
-                protocol.seal(&mut ciphertext);
-                Input::Open(ciphertext)
+                protocol.seal(&label, &mut ciphertext);
+                Input::Open(label, ciphertext)
             }
-            Input::Open(mut ciphertext) => {
-                Input::Seal(protocol.open(&mut ciphertext).map(|p| p.to_vec()).unwrap_or_default())
+            Input::Open(label, mut ciphertext) => {
+                let plaintext =
+                    protocol.open(&label, &mut ciphertext).map(|p| p.to_vec()).unwrap_or_default();
+                Input::Seal(label, plaintext)
             }
             Input::Ratchet => {
                 protocol.ratchet();
@@ -115,6 +117,10 @@ fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
     (Transcript { domain: t.domain.clone(), inputs }, derived)
 }
 
+fn label() -> impl Strategy<Value = Vec<u8>> {
+    vec(any::<u8>(), 0..200)
+}
+
 fn data() -> impl Strategy<Value = Vec<u8>> {
     vec(any::<u8>(), 0..200)
 }
@@ -122,23 +128,23 @@ fn data() -> impl Strategy<Value = Vec<u8>> {
 fn input() -> impl Strategy<Value = Input> {
     prop_oneof![
         Just(Input::Ratchet),
-        (1usize..256).prop_map(Input::Derive),
-        data().prop_map(Input::Mix),
-        data().prop_map(Input::Encrypt),
-        data().prop_map(Input::Decrypt),
-        data().prop_map(Input::Seal),
-        vec(any::<u8>(), TAG_LEN..200).prop_map(Input::Open)
+        (label(), (1usize..256)).prop_map(|(l, n)| Input::Derive(l, n)),
+        (label(), data()).prop_map(|(l, d)| Input::Mix(l, d)),
+        (label(), data()).prop_map(|(l, d)| Input::Encrypt(l, d)),
+        (label(), data()).prop_map(|(l, d)| Input::Decrypt(l, d)),
+        (label(), data()).prop_map(|(l, d)| Input::Seal(l, d)),
+        (label(), vec(any::<u8>(), TAG_LEN..200)).prop_map(|(l, d)| Input::Open(l, d))
     ]
 }
 
 fn invertible_input() -> impl Strategy<Value = Input> {
     prop_oneof![
         Just(Input::Ratchet),
-        (1usize..256).prop_map(Input::Derive),
-        data().prop_map(Input::Mix),
-        data().prop_map(Input::Encrypt),
-        data().prop_map(Input::Decrypt),
-        data().prop_map(Input::Seal),
+        (label(), (1usize..256)).prop_map(|(l, n)| Input::Derive(l, n)),
+        (label(), data()).prop_map(|(l, d)| Input::Mix(l, d)),
+        (label(), data()).prop_map(|(l, d)| Input::Encrypt(l, d)),
+        (label(), data()).prop_map(|(l, d)| Input::Decrypt(l, d)),
+        (label(), data()).prop_map(|(l, d)| Input::Seal(l, d)),
         // we can't generate inputs for Open that are valid
     ]
 }
@@ -150,7 +156,7 @@ prop_compose! {
         domain: String,
         mut inputs in vec(input(), 0..62),
     ) -> Transcript{
-        inputs.push(Input::Derive(16));
+        inputs.push(Input::Derive(b"final".to_vec(), 16));
         Transcript{domain, inputs}
     }
 }
@@ -162,7 +168,7 @@ prop_compose! {
         domain: String,
         mut inputs in vec(invertible_input(), 0..62),
     ) -> Transcript{
-        inputs.push(Input::Derive(16));
+        inputs.push(Input::Derive(b"final".to_vec(), 16));
         Transcript{domain, inputs}
     }
 }

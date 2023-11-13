@@ -13,11 +13,11 @@ struct Input {
 
 fuzz_target!(|input: Input| {
     let mut aead = Protocol::new("lockstitch.fuzz.aead");
-    aead.mix(&input.key);
-    aead.mix(&input.nonce);
-    aead.mix(&input.ad);
+    aead.mix(b"key", &input.key);
+    aead.mix(b"nonce", &input.nonce);
+    aead.mix(b"ad", &input.ad);
 
     let mut ciphertext = input.plaintext.clone();
     ciphertext.extend_from_slice(&[0u8; TAG_LEN]);
-    aead.seal(&mut ciphertext);
+    aead.seal(b"message", &mut ciphertext);
 });

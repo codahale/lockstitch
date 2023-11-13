@@ -4,58 +4,58 @@ use proptest::prelude::*;
 
 fn md(domain: &str, m: &[u8]) -> [u8; 32] {
     let mut md = Protocol::new(domain);
-    md.mix(m);
-    md.derive_array()
+    md.mix(b"message", m);
+    md.derive_array(b"digest")
 }
 
 fn mac(domain: &str, k: &[u8], m: &[u8]) -> [u8; TAG_LEN] {
     let mut mac = Protocol::new(domain);
-    mac.mix(k);
-    mac.mix(m);
-    mac.derive_array::<TAG_LEN>()
+    mac.mix(b"key", k);
+    mac.mix(b"message", m);
+    mac.derive_array::<TAG_LEN>(b"tag")
 }
 
 fn enc(domain: &str, k: &[u8], n: &[u8], p: &[u8]) -> Vec<u8> {
     let mut stream = Protocol::new(domain);
-    stream.mix(k);
-    stream.mix(n);
+    stream.mix(b"key", k);
+    stream.mix(b"nonce", n);
 
     let mut c = p.to_vec();
-    stream.encrypt(&mut c);
+    stream.encrypt(b"message", &mut c);
     c
 }
 
 fn dec(domain: &str, k: &[u8], n: &[u8], c: &[u8]) -> Vec<u8> {
     let mut stream = Protocol::new(domain);
-    stream.mix(k);
-    stream.mix(n);
+    stream.mix(b"key", k);
+    stream.mix(b"nonce", n);
 
     let mut p = c.to_vec();
-    stream.decrypt(&mut p);
+    stream.decrypt(b"message", &mut p);
     p
 }
 
 fn ae_enc(domain: &str, k: &[u8], n: &[u8], d: &[u8], p: &[u8]) -> Vec<u8> {
     let mut aead = Protocol::new(domain);
-    aead.mix(k);
-    aead.mix(n);
-    aead.mix(d);
+    aead.mix(b"key", k);
+    aead.mix(b"nonce", n);
+    aead.mix(b"ad", d);
 
     let mut out = vec![0u8; p.len() + TAG_LEN];
     out[..p.len()].copy_from_slice(p);
-    aead.seal(&mut out);
+    aead.seal(b"message", &mut out);
 
     out
 }
 
 fn ae_dec(domain: &str, k: &[u8], n: &[u8], d: &[u8], c: &[u8]) -> Option<Vec<u8>> {
     let mut aead = Protocol::new(domain);
-    aead.mix(k);
-    aead.mix(n);
-    aead.mix(d);
+    aead.mix(b"key", k);
+    aead.mix(b"nonce", n);
+    aead.mix(b"ad", d);
 
     let mut p = c.to_vec();
-    aead.open(&mut p).map(|p| p.to_vec())
+    aead.open(b"message", &mut p).map(|p| p.to_vec())
 }
 
 fn dae_enc(domain: &str, k: &[u8], d: &[u8], p: &[u8]) -> Vec<u8> {
@@ -65,17 +65,17 @@ fn dae_enc(domain: &str, k: &[u8], d: &[u8], p: &[u8]) -> Vec<u8> {
 
     // Mix in the key and associated data.
     let mut dae = Protocol::new(domain);
-    dae.mix(k);
-    dae.mix(d);
+    dae.mix(b"key", k);
+    dae.mix(b"ad", d);
 
     // Use a cloned protocol to mix the plaintext and derive a synthetic IV.
     let mut siv = dae.clone();
-    siv.mix(p);
-    siv.derive(iv);
+    siv.mix(b"message", p);
+    siv.derive(b"iv", iv);
 
     // Mix the IV and encrypt the ciphertext.
-    dae.mix(iv);
-    dae.encrypt(ciphertext);
+    dae.mix(b"iv", iv);
+    dae.encrypt(b"message", ciphertext);
 
     out
 }
@@ -86,19 +86,19 @@ fn dae_dec(domain: &str, k: &[u8], d: &[u8], c: &[u8]) -> Option<Vec<u8>> {
 
     // Mix in the key and associated data.
     let mut dae = Protocol::new(domain);
-    dae.mix(k);
-    dae.mix(d);
+    dae.mix(b"key", k);
+    dae.mix(b"ad", d);
 
     // Clone the protocol with just the key and associated data mixed in.
     let mut siv = dae.clone();
 
     // Mix the IV and decrypt the ciphertext.
-    dae.mix(iv);
-    dae.decrypt(&mut plaintext);
+    dae.mix(b"iv", iv);
+    dae.decrypt(b"message", &mut plaintext);
 
     // Re-derive the synthetic IV given the unauthenticated plaintext.
-    siv.mix(&plaintext);
-    let iv_p = siv.derive_array::<TAG_LEN>();
+    siv.mix(b"message", &plaintext);
+    let iv_p = siv.derive_array::<TAG_LEN>(b"iv");
 
     lockstitch::ct_eq(iv, &iv_p).then_some(plaintext)
 }
@@ -106,9 +106,9 @@ fn dae_dec(domain: &str, k: &[u8], d: &[u8], c: &[u8]) -> Option<Vec<u8>> {
 fn tuple_hash(domain: &str, data: &[Vec<u8>]) -> [u8; 32] {
     let mut tuple_hash = Protocol::new(domain);
     for d in data {
-        tuple_hash.mix(d);
+        tuple_hash.mix(b"tuple", d);
     }
-    tuple_hash.derive_array()
+    tuple_hash.derive_array(b"digest")
 }
 
 proptest! {

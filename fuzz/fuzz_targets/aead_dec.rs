@@ -17,10 +17,10 @@ fuzz_target!(|input: Input| {
     }
 
     let mut aead = Protocol::new("lockstitch.fuzz.aead");
-    aead.mix(&input.key);
-    aead.mix(&input.nonce);
-    aead.mix(&input.ad);
+    aead.mix(b"key", &input.key);
+    aead.mix(b"nonce", &input.nonce);
+    aead.mix(b"ad", &input.ad);
 
     let mut ciphertext = input.ciphertext.clone();
-    let _ = aead.open(&mut ciphertext);
+    let _ = aead.open(b"message", &mut ciphertext);
 });

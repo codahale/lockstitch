@@ -276,7 +276,6 @@ mod tests {
 
     use expect_test::expect;
     use hex_literal::hex;
-    use quickcheck_macros::quickcheck;
 
     fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> [u8; 32] {
         let mut state = Aegis128L::new(key, nonce);
@@ -542,21 +541,31 @@ mod tests {
         );
     }
 
-    #[quickcheck]
-    fn qc_round_trip(k: u128, n: u128, ad: Vec<u8>, msg: Vec<u8>) -> bool {
-        let mut ct = msg.clone();
-        let tag_e = encrypt(&k.to_le_bytes(), &n.to_le_bytes(), &mut ct, &ad);
-        let tag_d = decrypt(&k.to_le_bytes(), &n.to_le_bytes(), &mut ct, &ad);
+    #[test]
+    fn round_trip() {
+        bolero::check!().with_type::<([u8; 16], [u8; 16], Vec<u8>, Vec<u8>)>().for_each(
+            |(k, n, ad, msg)| {
+                let mut ct = msg.clone();
+                let tag_e = encrypt(k, n, &mut ct, ad);
+                let tag_d = decrypt(k, n, &mut ct, ad);
 
-        msg == ct && tag_e == tag_d
+                assert_eq!(msg, &ct);
+                assert_eq!(tag_e, tag_d);
+            },
+        );
     }
 
-    #[quickcheck]
-    fn qc_interop(k: u128, n: u128, ad: Vec<u8>, msg: Vec<u8>) -> bool {
-        let mut ct = msg.clone();
-        let tag = encrypt(&k.to_le_bytes(), &n.to_le_bytes(), &mut ct, &ad);
+    #[test]
+    fn interop() {
+        bolero::check!().with_type::<([u8; 16], [u8; 16], Vec<u8>, Vec<u8>)>().for_each(
+            |(k, n, ad, msg)| {
+                let mut ct = msg.clone();
+                let tag = encrypt(k, n, &mut ct, ad);
 
-        let aegis = aegis::aegis128l::Aegis128L::<32>::new(&k.to_le_bytes(), &n.to_le_bytes());
-        aegis.decrypt(&ct, &tag, &ad) == Ok(msg)
+                let aegis = aegis::aegis128l::Aegis128L::<32>::new(k, n);
+
+                assert_eq!(Ok(msg.to_vec()), aegis.decrypt(&ct, &tag, ad));
+            },
+        );
     }
 }

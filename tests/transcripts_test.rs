@@ -1,8 +1,7 @@
-use std::num::NonZeroUsize;
+use std::ops::Bound;
 
+use bolero::TypeGenerator;
 use lockstitch::{Protocol, TAG_LEN};
-use quickcheck::Arbitrary;
-use quickcheck_macros::quickcheck;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Input {
@@ -15,20 +14,21 @@ enum Input {
     Ratchet,
 }
 
-impl Arbitrary for Input {
-    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-        match g.choose(&[0, 1, 2, 3, 4, 5]).expect("should choose a variant") {
-            0 => Input::Mix(Vec::<u8>::arbitrary(g), Vec::<u8>::arbitrary(g)),
-            1 => {
-                Input::Derive(Vec::<u8>::arbitrary(g), NonZeroUsize::arbitrary(g).get() % (1 << 12))
-            }
-            2 => Input::Encrypt(Vec::<u8>::arbitrary(g), Vec::<u8>::arbitrary(g)),
-            3 => Input::Decrypt(Vec::<u8>::arbitrary(g), Vec::<u8>::arbitrary(g)),
-            4 => Input::Seal(Vec::<u8>::arbitrary(g), Vec::<u8>::arbitrary(g)),
+impl TypeGenerator for Input {
+    fn generate<D: bolero::Driver>(driver: &mut D) -> Option<Self> {
+        Some(match driver.gen_u8(Bound::Included(&0), Bound::Included(&5))? {
+            0 => Input::Mix(driver.gen()?, driver.gen()?),
+            1 => Input::Derive(
+                driver.gen()?,
+                driver.gen_usize(Bound::Included(&1), Bound::Included(&1024))?,
+            ),
+            2 => Input::Encrypt(driver.gen()?, driver.gen()?),
+            3 => Input::Decrypt(driver.gen()?, driver.gen()?),
+            4 => Input::Seal(driver.gen()?, driver.gen()?),
             5 => Input::Ratchet,
             // No way to produce valid inputs for Open operations.
             _ => unreachable!(),
-        }
+        })
     }
 }
 
@@ -47,14 +47,14 @@ struct Transcript {
     inputs: Vec<Input>,
 }
 
-impl Arbitrary for Transcript {
-    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-        let mut inputs = Vec::<Input>::arbitrary(g);
+impl TypeGenerator for Transcript {
+    fn generate<D: bolero::Driver>(driver: &mut D) -> Option<Self> {
+        let mut t = Transcript { domain: driver.gen()?, inputs: driver.gen()? };
 
         // All transcripts must end with a Derive operation to capture the final protocol state.
-        inputs.push(Input::Derive(b"final".to_vec(), 16));
+        t.inputs.push(Input::Derive(b"final".to_vec(), 16));
 
-        Self { domain: String::arbitrary(g), inputs }
+        Some(t)
     }
 }
 
@@ -148,29 +148,40 @@ fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
 }
 
 /// Multiple applications of the same inputs must always produce the same outputs.
-#[quickcheck]
-fn qc_determinism(t: Transcript) -> bool {
-    let a = apply_transcript(&t);
-    let b = apply_transcript(&t);
+#[test]
+fn determinism() {
+    bolero::check!().with_type::<Transcript>().for_each(|t| {
+        let a = apply_transcript(t);
+        let b = apply_transcript(t);
 
-    a == b
+        assert_eq!(a, b);
+    });
 }
 
 /// Two different transcripts must produce different outputs.
-#[quickcheck]
-fn qc_divergence(t0: Transcript, t1: Transcript) -> bool {
-    let a = apply_transcript(&t0);
-    let b = apply_transcript(&t1);
+#[test]
+fn divergence() {
+    bolero::check!().with_type::<(Transcript, Transcript)>().for_each(|(t0, t1)| {
+        let a = apply_transcript(t0);
+        let b = apply_transcript(t1);
 
-    t0 == t1 || a != b
+        if t0 == t1 {
+            assert_eq!(a, b);
+        } else {
+            assert_ne!(a, b);
+        }
+    });
 }
 
 /// For any transcript, invertible operations (e.g. encrypt/decrypt, seal/open) must produce
 /// matching outputs to inputs.
-#[quickcheck]
-fn qc_invertible(t: Transcript) -> bool {
-    let (t_inv, a_d) = invert_transcript(&t);
-    let (t_p, b_d) = invert_transcript(&t_inv);
+#[test]
+fn invertible() {
+    bolero::check!().with_type::<Transcript>().for_each(|t| {
+        let (t_inv, a_d) = invert_transcript(t);
+        let (t_p, b_d) = invert_transcript(&t_inv);
 
-    t == t_p && a_d == b_d
+        assert_eq!(t, &t_p);
+        assert_eq!(a_d, b_d);
+    });
 }

@@ -10,7 +10,20 @@ documentation = "https://docs.rs/lockstitch/"
 keywords = ["crypto", "aegis-128l", "sha-256", "hazmat"]
 categories = ["cryptography", "no-std"]
 readme = "README.md"
-include = ["src/**/*", "tests/**/*", "LICENSE", "README.md", "design.md", "perf.md"]
+include = [
+    "src/aegis_128l.rs",
+    "src/intrinsics/aarch64.rs",
+    "src/intrinsics/portable.rs",
+    "src/intrinsics/x86_64.rs",
+    "src/intrinsics.rs",
+    "src/lib.rs",
+    "tests/constructions_test.rs",
+    "tests/transcripts_test.rs",
+    "LICENSE",
+    "README.md",
+    "design.md",
+    "perf.md",
+]
 
 [dependencies]
 aes = { version = "0.8.3", features = ["hazmat"], optional = true }
@@ -31,11 +44,10 @@ members = ["benchmarks", "xtask"]
 
 [dev-dependencies]
 aegis = { version = "0.5.0", features = ["pure-rust"] }
+bolero = "0.10.0"
 expect-test = "1.4.1"
 hex = "0.4.3"
 hex-literal = "0.4.1"
-quickcheck = "1.0.3"
-quickcheck_macros = "1.0.0"
 rand = "0.8.5"
 
 [package.metadata.docs.rs]
@@ -45,3 +57,9 @@ all-features = true
 pre-release-commit-message = "release: version {{version}}"
 tag-message = "release: {{crate_name}} version {{version}}"
 consolidate-commits = false
+
+[profile.fuzz]
+inherits = "dev"
+opt-level = 3
+incremental = false
+codegen-units = 1

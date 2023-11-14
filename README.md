@@ -2,9 +2,9 @@
 
 Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption) in
-complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, and Xoodyak's
-Cyclist mode, Lockstitch uses the [AEGIS-128L][] authenticated cipher and SHA-256 to provide 100+
-Gb/sec performance on modern processors at a 128-bit security level.
+complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, Merlin
+transcripts, and Xoodyak's Cyclist mode, Lockstitch uses the [AEGIS-128L][] authenticated cipher and
+SHA-256 to provide 100+ Gb/sec performance on modern processors at a 128-bit security level.
 
 [AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-05.html
 
@@ -19,11 +19,13 @@ In addition, there is absolutely no guarantee of backwards compatibility.
 
 ## Design
 
-A Lockstitch protocol is a stateful object which has four different operations:
+A Lockstitch protocol is a stateful object which has five different operations:
 
 * `Mix`: Mixes a piece of data into the protocol's state, making all future outputs dependent on it.
 * `Derive`: Outputs bytes of pseudo-random data dependent on the protocol's prior state.
 * `Encrypt`/`Decrypt`: Encrypts and decrypts data using the protocol's state as the key.
+* `Seal`/`Open`: Encrypts and decrypts data with authentication using the protocol's state as the
+  key.
 * `Ratchet`: Irreversibly modifies the protocol's state, preventing rollback.
 
 Using these operations, one can construct a wide variety of symmetric-key constructions.

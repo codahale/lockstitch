@@ -50,10 +50,10 @@ impl Protocol {
         // Initialize a protocol with an empty transcript.
         let mut protocol = Protocol { transcript: Sha256::new() };
 
-        // Begin the INIT operation.
+        // Begin the Init operation.
         protocol.begin_op(OpCode::Init, None);
 
-        // Perform a MIX with the domain.
+        // Perform a Mix with the domain.
         protocol.mix(b"domain", domain.as_bytes());
 
         protocol
@@ -62,7 +62,7 @@ impl Protocol {
     /// Mixes the given label and slice into the protocol state.
     #[inline]
     pub fn mix(&mut self, label: &[u8], input: &[u8]) {
-        // Begin the MIX operation.
+        // Begin the Mix operation.
         self.begin_op(OpCode::Mix, Some(label));
 
         // Append the input to the transcript.
@@ -77,7 +77,7 @@ impl Protocol {
     /// operation and recover the protocol and `inner`.
     #[cfg(feature = "std")]
     pub fn mix_writer<W: std::io::Write>(mut self, label: &[u8], inner: W) -> MixWriter<W> {
-        // Begin the MIX operation.
+        // Begin the Mix operation.
         self.begin_op(OpCode::Mix, Some(label));
 
         // Move the protocol to a MixWriter.
@@ -92,16 +92,16 @@ impl Protocol {
     /// Derive output from the protocol's current state and fill the given slice with it.
     #[inline]
     pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
-        // Begin the DERIVE operation.
+        // Begin the Derive operation.
         self.begin_op(OpCode::Derive, Some(label));
 
-        // Perform a RATCHET operation.
+        // Perform a Ratchet operation.
         let mut aegis = self.ratchet_with_output();
 
         // Generate N bytes of PRF output.
         aegis.prf(out);
 
-        // Perform a MIX operation with the output length.
+        // Perform a Mix operation with the output length.
         self.mix(b"len", left_encode(&mut [0u8; 17], out.len() as u128 * 8));
     }
 
@@ -116,32 +116,32 @@ impl Protocol {
     /// Encrypt the given slice in place.
     #[inline]
     pub fn encrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
-        // Begin the CRYPT operation.
+        // Begin the Crypt operation.
         self.begin_op(OpCode::Crypt, Some(label));
 
-        // Perform a RATCHET operation.
+        // Perform a Ratchet operation.
         let mut aegis = self.ratchet_with_output();
 
         // Encrypt the plaintext.
         aegis.encrypt(in_out);
 
-        // Perform a MIX operation with the AEGIS-128L tag.
+        // Perform a Mix operation with the AEGIS-128L tag.
         self.mix(b"tag", &aegis.finalize());
     }
 
     /// Decrypt the given slice in place.
     #[inline]
     pub fn decrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
-        // Begin the CRYPT operation.
+        // Begin the Crypt operation.
         self.begin_op(OpCode::Crypt, Some(label));
 
-        // Perform a RATCHET operation.
+        // Perform a Ratchet operation.
         let mut aegis = self.ratchet_with_output();
 
         // Decrypt the ciphertext.
         aegis.decrypt(in_out);
 
-        // Perform a MIX operation with the AEGIS-128L tag.
+        // Perform a Mix operation with the AEGIS-128L tag.
         self.mix(b"tag", &aegis.finalize());
     }
 
@@ -153,7 +153,7 @@ impl Protocol {
         // Split the buffer into plaintext and tag.
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Begin the AUTH_CRYPT operation.
+        // Begin the AuthCrypt operation.
         self.begin_op(OpCode::AuthCrypt, Some(label));
 
         // Encrypt the plaintext.
@@ -171,7 +171,7 @@ impl Protocol {
         // Split the buffer into ciphertext and tag.
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Begin the AUTH_CRYPT operation.
+        // Begin the AuthCrypt operation.
         self.begin_op(OpCode::AuthCrypt, Some(label));
 
         // Decrypt the plaintext.
@@ -227,11 +227,11 @@ impl Protocol {
         unreachable!("unable to hedge a valid value in 10,000 tries");
     }
 
-    /// Perform a `RATCHET` operation, returning an AEGIS-128L instance for optional output.
+    /// Perform a `Ratchet` operation, returning an AEGIS-128L instance for optional output.
     #[inline]
     #[must_use]
     fn ratchet_with_output(&mut self) -> Aegis128L {
-        // Begin the RATCHET operation.
+        // Begin the Ratchet operation.
         self.begin_op(OpCode::Ratchet, None);
 
         // Calculate the hash of the transcript and replace it with an empty transcript.
@@ -253,7 +253,7 @@ impl Protocol {
         let (chain_key, output_key) = prf_out.split_at(32);
         let (output_key, output_nonce) = output_key.split_at(16);
 
-        // Perform a MIX operation with the chain key.
+        // Perform a Mix operation with the chain key.
         self.mix(b"chain-key", chain_key);
 
         // Initialize an AEGIS-128L instance for output.
@@ -337,9 +337,8 @@ impl<W: std::io::Write> MixWriter<W> {
     /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
     #[inline]
     pub fn into_inner(mut self) -> (Protocol, W) {
-        // Update the protocol state with the input length.
+        // Append the encoded input length to the protocol transcript.
         self.protocol.transcript.update(right_encode(&mut [0u8; 17], self.len as u128 * 8));
-
         (self.protocol, self.inner)
     }
 }
@@ -348,8 +347,11 @@ impl<W: std::io::Write> MixWriter<W> {
 impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        // Track the written length.
         self.len += u64::try_from(buf.len()).expect("usize should be <= u64");
+        // Append the written slice to the protocol transcript.
         self.protocol.transcript.update(buf);
+        // Pass the slice to the inner writer and return the result.
         self.inner.write(buf)
     }
 

@@ -37,6 +37,7 @@ fn mac() {
         domain: String,
         key: Vec<u8>,
     }
+
     bolero::check!().with_type::<(MacParams, MacParams, Vec<u8>)>().for_each(|(a, b, m)| {
         let t1 = mac(&a.domain, &a.key, m);
         let t2 = mac(&b.domain, &b.key, m);
@@ -77,9 +78,10 @@ fn stream_cipher() {
         key: Vec<u8>,
         nonce: Vec<u8>,
     }
+
     bolero::check!()
         .with_type::<(StreamParams, StreamParams, Vec<u8>)>()
-        .filter(|(_, _, m)| m.len() >= 32)
+        .filter(|(_, _, m)| m.len() >= 32) // skip short messages to avoid false positives from collisions
         .for_each(|(a, b, m)| {
             let c = enc(&a.domain, &a.key, &a.nonce, m);
             let p = dec(&b.domain, &b.key, &b.nonce, &c);
@@ -190,6 +192,7 @@ fn daead() {
         key: Vec<u8>,
         ad: Vec<u8>,
     }
+
     bolero::check!().with_type::<(DaeadParams, DaeadParams, Vec<u8>)>().for_each(|(a, b, m)| {
         let c = dae_enc(&a.domain, &a.key, &a.ad, m);
         let p = dae_dec(&b.domain, &b.key, &b.ad, &c);

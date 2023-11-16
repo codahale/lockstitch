@@ -22,6 +22,9 @@ A Lockstitch protocol supports the following operations:
 * `Seal`/`Open`, which seal and open a message, making the protocol cryptographically dependent on
   the message.
 
+Labels are used for all Lockstitch operations (except `Init` and `Ratchet`) to provide domain
+separation of inputs and outputs.
+
 ### `Mix`
 
 A `Mix` operation accepts a label and an input, encodes them, and appends them to the protocol's

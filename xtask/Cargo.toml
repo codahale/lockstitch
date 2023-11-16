@@ -16,3 +16,6 @@ path = "src/xtask.rs"
 [package.metadata.release]
 release = false
 consolidate-commits = false
+
+[lints]
+workspace = true

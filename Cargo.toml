@@ -51,17 +51,19 @@ opt-level = 3
 incremental = false
 codegen-units = 1
 
-[lints.rust]
-missing_docs = "warn"
+[workspace.lints.rust]
 rust_2018_idioms = "warn"
 trivial_casts = "warn"
 unused_lifetimes = "warn"
 unused_qualifications = "warn"
 missing_debug_implementations = "warn"
 
-[lints.clippy]
+[workspace.lints.clippy]
 cognitive_complexity = "warn"
 missing_const_for_fn = "warn"
 doc_markdown = "warn"
 missing_errors_doc = "warn"
 semicolon_if_nothing_returned = "warn"
+
+[lints]
+workspace = true

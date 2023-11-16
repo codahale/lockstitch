@@ -1,3 +1,5 @@
+#![allow(elided_lifetimes_in_paths)]
+
 use std::io::{self, Read};
 
 use divan::counter::BytesCount;
@@ -6,7 +8,7 @@ use lockstitch::{Protocol, TAG_LEN};
 const LENS: &[usize] = &[16, 256, 1024, 16 * 1024, 1024 * 1024];
 
 fn main() {
-    divan::main()
+    divan::main();
 }
 
 #[divan::bench(consts = LENS)]

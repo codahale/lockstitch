@@ -10,20 +10,7 @@ documentation = "https://docs.rs/lockstitch/"
 keywords = ["crypto", "aegis-128l", "sha-256", "hazmat"]
 categories = ["cryptography", "no-std"]
 readme = "README.md"
-include = [
-    "src/aegis_128l.rs",
-    "src/intrinsics/aarch64.rs",
-    "src/intrinsics/portable.rs",
-    "src/intrinsics/x86_64.rs",
-    "src/intrinsics.rs",
-    "src/lib.rs",
-    "tests/constructions_test.rs",
-    "tests/transcripts_test.rs",
-    "LICENSE",
-    "README.md",
-    "design.md",
-    "perf.md",
-]
+include = ["src/**/*", "tests/**/*", "LICENSE", "README.md", "design.md", "perf.md"]
 
 [dependencies]
 aes = { version = "0.8.3", features = ["hazmat"], optional = true }

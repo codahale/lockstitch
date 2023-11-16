@@ -50,10 +50,10 @@ impl Protocol {
         // Initialize a protocol with an empty transcript.
         let mut protocol = Protocol { transcript: Sha256::new() };
 
-        // Begin the Init operation.
-        protocol.begin_op(OpCode::Init, None);
+        // Append the Init op header to the transcript.
+        protocol.op_header(OpCode::Init, None);
 
-        // Perform a Mix with the domain.
+        // Perform a Mix operation with the domain.
         protocol.mix(b"domain", domain.as_bytes());
 
         protocol
@@ -62,10 +62,10 @@ impl Protocol {
     /// Mixes the given label and slice into the protocol state.
     #[inline]
     pub fn mix(&mut self, label: &[u8], input: &[u8]) {
-        // Begin the Mix operation.
-        self.begin_op(OpCode::Mix, Some(label));
+        // Append a Mix op header with the label to the transcript.
+        self.op_header(OpCode::Mix, Some(label));
 
-        // Append the input to the transcript.
+        // Append the input to the transcript with right-encoded length.
         //
         // input || right_encode(|input|)
         self.transcript.update(input);
@@ -77,8 +77,8 @@ impl Protocol {
     /// operation and recover the protocol and `inner`.
     #[cfg(feature = "std")]
     pub fn mix_writer<W: std::io::Write>(mut self, label: &[u8], inner: W) -> MixWriter<W> {
-        // Begin the Mix operation.
-        self.begin_op(OpCode::Mix, Some(label));
+        // Append a Mix op header with the label to the transcript.
+        self.op_header(OpCode::Mix, Some(label));
 
         // Move the protocol to a MixWriter.
         MixWriter { protocol: self, inner, len: 0 }
@@ -92,8 +92,8 @@ impl Protocol {
     /// Derive output from the protocol's current state and fill the given slice with it.
     #[inline]
     pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
-        // Begin the Derive operation.
-        self.begin_op(OpCode::Derive, Some(label));
+        // Append a Derive op header with the label to the transcript.
+        self.op_header(OpCode::Derive, Some(label));
 
         // Perform a Ratchet operation.
         let mut aegis = self.ratchet_with_output();
@@ -116,8 +116,8 @@ impl Protocol {
     /// Encrypt the given slice in place.
     #[inline]
     pub fn encrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
-        // Begin the Crypt operation.
-        self.begin_op(OpCode::Crypt, Some(label));
+        // Append a Crypt op header with the label to the transcript.
+        self.op_header(OpCode::Crypt, Some(label));
 
         // Perform a Ratchet operation.
         let mut aegis = self.ratchet_with_output();
@@ -132,8 +132,8 @@ impl Protocol {
     /// Decrypt the given slice in place.
     #[inline]
     pub fn decrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
-        // Begin the Crypt operation.
-        self.begin_op(OpCode::Crypt, Some(label));
+        // Append a Crypt op header with the label to the transcript.
+        self.op_header(OpCode::Crypt, Some(label));
 
         // Perform a Ratchet operation.
         let mut aegis = self.ratchet_with_output();
@@ -153,13 +153,13 @@ impl Protocol {
         // Split the buffer into plaintext and tag.
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Begin the AuthCrypt operation.
-        self.begin_op(OpCode::AuthCrypt, Some(label));
+        // Append an AuthCrypt op header with the label to the transcript.
+        self.op_header(OpCode::AuthCrypt, Some(label));
 
-        // Encrypt the plaintext.
+        // Perform a Crypt operation with the plaintext.
         self.encrypt(b"message", in_out);
 
-        // Derive a tag.
+        // Perform a Derive operation to produce an authentication tag.
         self.derive(b"tag", tag);
     }
 
@@ -171,13 +171,13 @@ impl Protocol {
         // Split the buffer into ciphertext and tag.
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Begin the AuthCrypt operation.
-        self.begin_op(OpCode::AuthCrypt, Some(label));
+        // Append an AuthCrypt op header with the label to the transcript.
+        self.op_header(OpCode::AuthCrypt, Some(label));
 
-        // Decrypt the plaintext.
+        // Perform a Crypt operation with the ciphertext.
         self.decrypt(b"message", in_out);
 
-        // Derive a counterfactual tag.
+        // Perform a Derive operation to produce a counterfactual authentication tag.
         let tag_p = self.derive_array::<TAG_LEN>(b"tag");
 
         // Check the tag against the counterfactual tag in constant time.
@@ -231,8 +231,8 @@ impl Protocol {
     #[inline]
     #[must_use]
     fn ratchet_with_output(&mut self) -> Aegis128L {
-        // Begin the Ratchet operation.
-        self.begin_op(OpCode::Ratchet, None);
+        // Append a  Ratchet op header to the transcript.
+        self.op_header(OpCode::Ratchet, None);
 
         // Calculate the hash of the transcript and replace it with an empty transcript.
         let hash = self.transcript.finalize_fixed_reset();
@@ -265,13 +265,13 @@ impl Protocol {
 
     /// Append an operation header with an optional label to the protocol transcript.
     #[inline]
-    fn begin_op(&mut self, op_code: OpCode, label: Option<&[u8]>) {
-        // Append the operation code:
+    fn op_header(&mut self, op_code: OpCode, label: Option<&[u8]>) {
+        // Append the operation code to the transcript:
         //
         //   op_code
         self.transcript.update([op_code as u8]);
 
-        // Append the label, if any:
+        // Append the label, if any, to the transcript:
         //
         //   left_encode(|label|) || label
         if let Some(label) = label {
@@ -337,7 +337,7 @@ impl<W: std::io::Write> MixWriter<W> {
     /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
     #[inline]
     pub fn into_inner(mut self) -> (Protocol, W) {
-        // Append the encoded input length to the protocol transcript.
+        // Append the right-encoded length to the transcript.
         self.protocol.transcript.update(right_encode(&mut [0u8; 17], self.len as u128 * 8));
         (self.protocol, self.inner)
     }

@@ -234,21 +234,16 @@ impl Protocol {
         // Calculate the hash of the transcript and replace it with an empty transcript.
         let ikm = self.transcript.finalize_fixed_reset();
 
-        // Use Concat-KDF to derive a new KDF key.
+        // Use Concat-KDF to derive a new KDF key and any additional output.
         let mut counter = 1u32;
         let mut kdf = Sha256::new();
-        kdf.update(counter.to_be_bytes());
-        kdf.update(ikm);
-        kdf.update(b"lockstitch");
-        let kdf_key = kdf.finalize_reset();
-
-        // Continue using Concat-KDF for any additional output.
-        for chunk in out.chunks_mut(32) {
-            counter += 1;
+        let mut kdf_key = [0u8; 32];
+        for chunk in kdf_key.chunks_mut(32).chain(out.chunks_mut(32)) {
             kdf.update(counter.to_be_bytes());
             kdf.update(ikm);
             kdf.update(b"lockstitch");
             chunk.copy_from_slice(&kdf.finalize_reset()[..chunk.len()]);
+            counter += 1;
         }
 
         // Perform a Mix operation with the KDF key.

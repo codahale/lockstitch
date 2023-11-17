@@ -7,6 +7,7 @@ use core::fmt::Debug;
 use crate::aegis_128l::Aegis128L;
 
 use cmov::CmovEq;
+use concat_kdf::derive_key_into;
 use sha2::digest::{Digest, FixedOutputReset};
 use sha2::Sha256;
 
@@ -74,6 +75,7 @@ impl Protocol {
 
     /// Modifies the protocol's state irreversibly, preventing rollback.
     pub fn ratchet(&mut self) {
+        // Perform a Ratchet operation, ignoring the key and nonce.
         let _ = self.ratchet_with_output();
     }
 
@@ -84,7 +86,8 @@ impl Protocol {
         self.op_header(OpCode::Derive, Some(label));
 
         // Perform a Ratchet operation.
-        let mut aegis = self.ratchet_with_output();
+        let (k, n) = self.ratchet_with_output();
+        let mut aegis = Aegis128L::new(&k, &n);
 
         // Generate N bytes of PRF output.
         aegis.prf(out);
@@ -108,7 +111,8 @@ impl Protocol {
         self.op_header(OpCode::Crypt, Some(label));
 
         // Perform a Ratchet operation.
-        let mut aegis = self.ratchet_with_output();
+        let (k, n) = self.ratchet_with_output();
+        let mut aegis = Aegis128L::new(&k, &n);
 
         // Encrypt the plaintext.
         aegis.encrypt(in_out);
@@ -124,7 +128,8 @@ impl Protocol {
         self.op_header(OpCode::Crypt, Some(label));
 
         // Perform a Ratchet operation.
-        let mut aegis = self.ratchet_with_output();
+        let (k, n) = self.ratchet_with_output();
+        let mut aegis = Aegis128L::new(&k, &n);
 
         // Decrypt the ciphertext.
         aegis.decrypt(in_out);
@@ -218,34 +223,27 @@ impl Protocol {
     /// Perform a `Ratchet` operation, returning an AEGIS-128L instance for optional output.
     #[inline]
     #[must_use]
-    fn ratchet_with_output(&mut self) -> Aegis128L {
+    fn ratchet_with_output(&mut self) -> ([u8; 16], [u8; 16]) {
         // Append a  Ratchet op header to the transcript.
         self.op_header(OpCode::Ratchet, None);
 
         // Calculate the hash of the transcript and replace it with an empty transcript.
-        let hash = self.transcript.finalize_fixed_reset();
+        let ikm = self.transcript.finalize_fixed_reset();
 
-        // Split the hash into a key and nonce and initialize an AEGIS-128L instance for PRF output.
-        let (prf_key, prf_nonce) = hash.split_at(16);
-        let mut prf = Aegis128L::new(
-            prf_key.try_into().expect("should be valid AEGIS-128L key"),
-            prf_nonce.try_into().expect("should be valid AEGIS-128L nonce"),
-        );
+        // Use Concat-KDF with SHA-256 to derive 64 bytes of new key material.
+        let mut kdf_out = [0u8; 64];
+        derive_key_into::<Sha256>(&ikm, b"lockstitch", &mut kdf_out).expect("should derive keys");
 
-        // Generate 64 bytes of PRF output.
-        let mut prf_out = [0u8; 64];
-        prf.prf(&mut prf_out);
-
-        // Split the PRF output into a 32-byte chain key, a 16-byte output key, and a 16-byte output
+        // Split the KDF output into a 32-byte KDF key, a 16-byte output key, and a 16-byte output
         // nonce.
-        let (chain_key, output_key) = prf_out.split_at(32);
+        let (kdf_key, output_key) = kdf_out.split_at(32);
         let (output_key, output_nonce) = output_key.split_at(16);
 
-        // Perform a Mix operation with the chain key.
-        self.mix(b"chain-key", chain_key);
+        // Perform a Mix operation with the KDF key.
+        self.mix(b"kdf-key", kdf_key);
 
-        // Initialize an AEGIS-128L instance for output.
-        Aegis128L::new(
+        // Return the key and nonce for optional use.
+        (
             output_key.try_into().expect("should be valid AEGIS-128L key"),
             output_nonce.try_into().expect("should be valid AEGIS-128L nonce"),
         )
@@ -363,11 +361,11 @@ mod tests {
         protocol.mix(b"first", b"one");
         protocol.mix(b"second", b"two");
 
-        expect!["7fa8fccee0d09015"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
+        expect!["a80e8d73cb0513f7"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(b"fourth", &mut plaintext);
-        expect!["604e98f703c9365c82a225ceac12809a19c3"].assert_eq(&hex::encode(plaintext));
+        expect!["15e4c57d88aca21416cdcbdcde960bdd3b7d"].assert_eq(&hex::encode(plaintext));
 
         protocol.ratchet();
 
@@ -376,10 +374,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(b"fifth", &mut sealed);
 
-        expect!["98f9f7980a9e5dca7821ac6a97f8c2f54f9737d3c100a6d67e3fb1b8a034667cbb34"]
+        expect!["575b7095719784405a1c97df48cf97730e82588427f1a908f02bb2711e55cdd289e8"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["dc37902aea2e8009"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+        expect!["c286877e68890b53"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
     }
 
     #[test]

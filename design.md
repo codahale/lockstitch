@@ -31,7 +31,7 @@ A `Mix` operation accepts a label and an input, encodes them, and appends them t
 transcript along with a constant operation code:
 
 ```text
-function Mix(transcript, label, input):
+function mix(transcript, label, input):
   transcript ǁ 0x01 ǁ left_encode(|label|) ǁ label ǁ input ǁ right_encode(|input|)
 ```
 
@@ -41,15 +41,18 @@ encoding for any combination of label and input, regardless of length. `right_en
 the length of the input to support incremental processing of data streams whose sizes are not known
 in advance.
 
+[NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
+
 **N.B.**: Processing more than 2^64 bytes without generating output will result in undefined
 behavior.
 
 ### `Init`
 
-An `Init` operation uses `Init` to initialize a Lockstitch protocol with a domain separation string:
+An `Init` operation initializes a Lockstitch protocol with a domain separation string by beginning a
+transcript with a constant operation code and then performing a `Mix` operation with the domain:
 
 ```text
-function Init(domain):
+function init(domain):
   0x02 ǁ Mix(ɛ, "domain", domain)
 ```
 
@@ -62,34 +65,36 @@ The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch p
 > different applications or components to inadvertently use the same context string. The safest way
 > to guarantee this is to prevent the context string from including input of any kind.
 
+**N.B.:** The `Init` operation is only performed once, when a protocol is initialized.
+
 ### `Ratchet`
 
 A `Ratchet` operation replaces the protocol's transcript with a single `Mix` operation with a
-derived key of the previous transcript as input and optionally keys an AEGIS-128L instance for
+derived key of the previous transcript as input and returns an AEGIS-128L keys and nonce for
 processing input and producing output.
 
 ```text
-function Ratchet(transcript):
-  K₀ǁN₀ ← sha256(transcript ǁ 0x03)
-  HǁK₁ǁN₁ ← aegis128l::prf(K₀, N₀, 64)
-  transcript ← Mix(ɛ, "chain-key", H) 
-  output ← aegis128l::new(K₁, N₁)
-  (transcript, output)
+function ratchet(transcript):
+  ikm ← sha256(transcript ǁ 0x03)               // Append the op code to the transcript and hash it.
+  kdf_out ← concat_kdf(ikm, "lockstitch", 64)   // Derive 64 bytes of KDF output from the hash.
+  kdf_key ǁ output_key ǁ output_nonce ← kdf_out // Split the KDF output into a KDF key, an output key, and an output nonce.
+  transcript ← mix(ɛ, "kdf-key", kdf_key)       // Replace the transcript with a single Mix operation with the KDF key.
+  (transcript, output_key, output_nonce)        // Return the new transcript along with the output key and nonce.
 ```
 
-#### KDF Security
+`Ratchet` hashes the protocol's transcript (plus an operation code) with SHA-256 and uses the
+resulting digest as keying material for Concat-KDF (Sec. 5.8.1 of [NIST SP 800-56A][]) using SHA-256
+to produce 64 bytes of derived output. The first 32 bytes of that output are used as the KDF key for
+a `Mix` operation; the second 32 bytes are split into an AEGIS-128L key and nonce.
 
-`Ratchet` uses an [HKDF][]-style _Extract-then-Expand_ key derivation function (KDF) with the
-protocol's transcript as the effective keying material, SHA-256 as the strong computational
-extractor for the keying material and AEGIS-128L as the expanding PRF.
-
-[HKDF]: https://www.rfc-editor.org/rfc/rfc5869.html
+[NIST SP 800-56A]: https://csrc.nist.gov/pubs/sp/800/56/a/r3/final
 
 #### KDF Chains
 
-Given that `Ratchet` is KDF secure and replaces the protocol's state with derived output, sequences
-of Lockstitch operations which accept input and output in a protocol therefore constitute a [KDF
-chain][], giving Lockstitch protocols the following security properties:
+Given that `Ratchet` is KDF-secure with respect to the protocol's transcript and replaces the
+protocol's transcript with derived output, sequences of Lockstitch operations which accept input and
+output in a protocol therefore constitute a [KDF chain][], giving Lockstitch protocols the following
+security properties:
 
 [KDF chain]: https://signal.org/docs/specifications/doubleratchet/doubleratchet.pdf
 
@@ -102,14 +107,16 @@ chain][], giving Lockstitch protocols the following security properties:
 
 ### `Derive`
 
-A `Derive` operation ratchets the protocol's state and produces a given number of bytes of PRF
-output, including the number of bytes produced via a `Mix` operation.
+A `Derive` operation appends and operation code and a label to the protocol's transcript, ratchets
+the protocol's state, uses the output key and nonce to produce a given number of bits of AEGIS-128L
+output, and performs a `Mix` operation with the number of bits produced as input.
 
 ```text
-function Derive(transcript, label, n):
-  (transcript, output) ← Ratchet(transcript ǁ 0x04 ǁ left_encode(|label|) ǁ label) 
-  prf ← aegis128l::prf(output, n)
-  transcript ← Mix(transcript, "len", left_encode(n))
+function derive(transcript, label, n):
+  transcript ← transcript ǁ 0x04 ǁ left_encode(|label|) ǁ label
+  (transcript, key, nonce) ← Ratchet(transcript) 
+  prf ← aegis128l::encrypt(key, nonce, [0; n])
+  transcript ← mix(transcript, "len", left_encode(n))
   (transcript, prf)
 ```
 
@@ -128,21 +135,24 @@ beforehand.
 
 ### `Encrypt`/`Decrypt`
 
-`Encrypt` and `Decrypt` operations ratchet the protocol's state, encrypt or decrypt an input with
-AEGIS-128L, and include the AEGIS-128L tag via a `Mix` operation.
+`Encrypt` and `Decrypt` operations append an operation code and a label to the transcript, ratchet
+the protocol's state, encrypt or decrypt an input with AEGIS-128L, and include the AEGIS-128L tag
+via a `Mix` operation.
 
 ```text
-function Encrypt(transcript, label, p):
-  (transcript, output) ← Ratchet(transcript ǁ 0x05 ǁ left_encode(|label|) ǁ label) 
-  cǁt ← aegis128l::encrypt(output, p)
-  transcript ← Mix(transcript, "tag", t)
-  (transcript, c)
+function Encrypt(transcript, label, plaintext):
+  transcript ← transcript ǁ 0x05 ǁ left_encode(|label|) ǁ label
+  (transcript, key ǁ nonce) ← ratchet(transcript) 
+  (ciphertext, tag) ← aegis128l::encrypt(key, nonce, plaintext)
+  transcript ← mix(transcript, "tag", tag)
+  (transcript, ciphertext)
 
-function Decrypt(transcript, label, c):
-  (transcript, output) ← Ratchet(transcript ǁ 0x05 ǁ left_encode(|label|) ǁ label) 
-  pǁt ← aegis128l::decrypt(output, c)
-  transcript ← Mix(transcript, "tag", t)
-  (transcript, c)
+function decrypt(transcript, label, ciphertext):
+  transcript ← transcript ǁ 0x05 ǁ left_encode(|label|) ǁ label
+  (transcript, key ǁ nonce) ← ratchet(transcript) 
+  (plaintext, tag) ← aegis128l::decrypt(key, nonce, ciphertext)
+  transcript ← mix(transcript, "tag", tag)
+  (transcript, plaintext)
 ```
 
 Three points bear mentioning about `Encrypt` and `Decrypt`.
@@ -155,9 +165,11 @@ inclusion of the long tag ensures the protocol's state is dependent on both beca
 key committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
 which produces the same authentication tag is negligible).
 
-**N.B.:** AEGIS-128L by itself is not fully committing, as [tag collisions can be found if
-authenticated data is attacker-controlled](https://eprint.iacr.org/2023/1495.pdf). Lockstitch does
-not pass authenticated data to AEGIS-128L, however, mooting this type of attack.
+**N.B.:** [AEGIS-128L by itself is not fully committing][Iso23], as tag collisions can be found if
+authenticated data is attacker-controlled. Lockstitch does not pass authenticated data to
+AEGIS-128L, however, mooting this type of attack.
+
+[Iso23]: https://eprint.iacr.org/2023/1495
 
 Third, `Encrypt` operations provide no authentication by themselves. An attacker can modify a
 ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
@@ -180,18 +192,20 @@ beforehand.
 authenticated encryption, returning a ciphertext and an authentication tag.
 
 ```text
-function Seal(transcript, label, p):
-  (transcript, c) ← Encrypt(transcript ǁ 0x06 ǁ left_encode(|label|) ǁ label, "message", p) 
-  (transcript, t) ← Derive(transcript, "tag", 16)
-  (c, t)
+function seal(transcript, label, plaintext):
+  transcript ← transcript ǁ 0x06 ǁ left_encode(|label|) ǁ label
+  (transcript, ciphertext) ← encrypt(transcript, "message", plaintext) 
+  (transcript, tag) ← derive(transcript, "tag", 16)
+  (transcript, ciphertext, tag)
 
-function Open(transcript, label, c, t):
-  (transcript, p) ← Decrypt(transcript ǁ 0x06 ǁ left_encode(|label|) ǁ label, "message", c) 
-  (transcript, t′) ← Derive(transcript, "tag", 16)
-  if t = t′:
-    return p
+function open(transcript, label, ciphertext, tag):
+  transcript ← transcript ǁ 0x06 ǁ left_encode(|label|) ǁ label
+  (transcript, plaintext) ← decrypt("message", ciphertext) 
+  (transcript, tag′) ← derive(transcript, "tag", 16)
+  if tag = tag′:
+    return (transcript, plaintext)
   else:
-    return ⊥
+    return (transcript, ⊥)
 ```
 
 ## Basic Protocols
@@ -204,11 +218,11 @@ using a single protocol.
 Calculating a message digest is as simple as a `Mix` and a `Derive`:
 
 ```text
-function MessageDigest(message):
-  md ← Init("com.example.md")            // Initialize a protocol with a domain string.
-  md ← Mix(md, "message", data)          // Mix the message into the protocol.
-  (_, digest) ← Derive(md, "digest", 32) // Derive 32 bytes of output and return it.
-  return digest
+function message_digest(message):
+  md ← init("com.example.md")            // Initialize a protocol with a domain string.
+  md ← mix(md, "message", data)          // Mix the message into the protocol.
+  (_, digest) ← derive(md, "digest", 32) // Derive 32 bytes of output and return it.
+  digest
 ```
 
 This construction is collision-resistant if SHA-256 is collision-resistant.
@@ -218,12 +232,12 @@ This construction is collision-resistant if SHA-256 is collision-resistant.
 Adding a key to the previous construction makes it a MAC:
 
 ```text
-function Mac(key, message):
-  mac ← Init("com.example.mac")      // Initialize a protocol with a domain string.
-  mac ← Mix(mac, "key", key)         // Mix the key into the protocol.
-  mac ← Mix(mac, "message", message) // Mix the message into the protocol.
-  (_, tag) ← Derive(mac, "tag", 16)  // Derive 16 bytes of output and return it.
-  return tag
+function mac_sign(key, message):
+  mac ← init("com.example.mac")      // Initialize a protocol with a domain string.
+  mac ← mix(mac, "key", key)         // Mix the key into the protocol.
+  mac ← mix(mac, "message", message) // Mix the message into the protocol.
+  (_, tag) ← derive(mac, "tag", 16)  // Derive 16 bytes of output and return it.
+  tag
 ```
 
 The use of labels and the encoding of [`Mix` inputs](#mix) ensures that the key and the message will
@@ -232,12 +246,12 @@ never overlap, even if their lengths vary.
 Use a constant-time comparison to verify the MAC:
 
 ```text
-function VerifyMac(key, message, tag):
-  mac ← Init("com.example.mac")      // Initialize a protocol with a domain string.
-  mac ← Mix(mac, "key", key)         // Mix the key into the protocol.
-  mac ← Mix(mac, "message", message) // Mix the data into the protocol.
-  (_, tag′) ← Derive(mac, "tag", 16) // Derive 16 bytes of output.
-  return tag = tag′
+function mac_verify(key, message, tag):
+  mac ← init("com.example.mac")      // Initialize a protocol with a domain string.
+  mac ← mix(mac, "key", key)         // Mix the key into the protocol.
+  mac ← mix(mac, "message", message) // Mix the data into the protocol.
+  (_, tag′) ← derive(mac, "tag", 16) // Derive 16 bytes of output.
+  tag = tag′                         // Compare the tags in constant time.
 ```
 
 ### Authenticated Encryption And Data (AEAD)
@@ -245,36 +259,38 @@ function VerifyMac(key, message, tag):
 Lockstitch can be used to create an AEAD:
 
 ```text
-function Seal(key, nonce, ad, plaintext):
-  aead ← Init("com.example.aead")                    // Initialize a protocol with a domain string.
-  aead ← Mix(aead, "key", key)                       // Mix the key into the protocol.
-  aead ← Mix(aead, "nonce", nonce)                   // Mix the nonce into the protocol.
-  aead ← Mix(aead, "ad", ad)                         // Mix the associated data into the protocol.
-  (_, ciphertext) ← Seal(aead, "message", plaintext) // Seal the plaintext.
-  return ciphertext
+function aead_seal(key, nonce, ad, plaintext):
+  aead ← init("com.example.aead")                         // Initialize a protocol with a domain string.
+  aead ← mix(aead, "key", key)                            // Mix the key into the protocol.
+  aead ← mix(aead, "nonce", nonce)                        // Mix the nonce into the protocol.
+  aead ← mix(aead, "ad", ad)                              // Mix the associated data into the protocol.
+  (_, ciphertext, tag) ← seal(aead, "message", plaintext) // Seal the plaintext.
+  (ciphertext, tag)
 ```
 
 The introduction of a nonce makes the scheme probabilistic (which is required for IND-CCA security).
 
 Unlike many standard AEADs (e.g. AES-GCM and ChaCha20Poly1305), it is fully context-committing: the
-tag is a strong cryptographic commitment to all the inputs. Similar to the
-[CTX construction](https://par.nsf.gov/servlets/purl/10391723), which replaces the tag of an
-existing AEAD with `H(K, N, A, T)`, the final `Seal` operation closes over all inputs--key, nonce,
-associated data, and plaintext--which are also the values used to produce the ciphertext. Finding a
-pair of `(key, nonce, ad, plaintext)` tuples which produce the same tag would similarly imply a lack
-of UF-CMA security for AEGIS-128L or collision resistance for SHA-256.
+tag is a strong cryptographic commitment to all the inputs. Similar to the [CTX construction][CTX],
+which replaces the tag of an existing AEAD with `H(K, N, A, T)`, the final `Seal` operation closes
+over all inputs--key, nonce, associated data, and plaintext--which are also the values used to
+produce the ciphertext. Finding a pair of `(key, nonce, ad, plaintext)` tuples which produce the
+same tag would similarly imply a lack of UF-CMA security for AEGIS-128L or collision resistance for
+SHA-256.
+
+[CTX]: https://par.nsf.gov/servlets/purl/10391723
 
 Also unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces
 of associated data without risk of ambiguous inputs.
 
 ```text
-function Open(key, nonce, ad, ciphertext):
-  aead ← Init("com.example.aead")                    // Initialize a protocol with a domain string.
-  aead ← Mix(aead, "key", key)                       // Mix the key into the protocol.
-  aead ← Mix(aead, "nonce", nonce)                   // Mix the nonce into the protocol.
-  aead ← Mix(aead, "ad", ad)                         // Mix the associated data into the protocol.
-  (_, plaintext) ← Open(aead, "message", ciphertext) // Open the ciphertext.
-  return plaintext                                   // If both tags are equal, return the plaintext.
+function aead_open(key, nonce, ad, ciphertext, tag):
+  aead ← init("com.example.aead")                         // Initialize a protocol with a domain string.
+  aead ← mix(aead, "key", key)                            // Mix the key into the protocol.
+  aead ← mix(aead, "nonce", nonce)                        // Mix the nonce into the protocol.
+  aead ← mix(aead, "ad", ad)                              // Mix the associated data into the protocol.
+  (_, plaintext) ← open(aead, "message", ciphertext, tag) // Open the ciphertext.
+  plaintext                                               // Return the plaintext or an error.
 ```
 
 ## Complex Protocols
@@ -284,29 +300,30 @@ which integrate public- and symmetric-key operations.
 
 ### Hybrid Public-Key Encryption
 
-Lockstitch can be used to build an integrated
-[ECIES](https://en.wikipedia.org/wiki/Integrated_Encryption_Scheme)-style public key encryption
+Lockstitch can be used to build an integrated [ECIES][]-style public key encryption
 scheme:
 
+[ECIES]: https://en.wikipedia.org/wiki/Integrated_Encryption_Scheme
+
 ```text
-function HPKE_Encrypt(receiver.pub, plaintext):
-  ephemeral ← P256::KeyGen()                                   // Generate an ephemeral key pair.
-  hpke ← Init("com.example.hpke")                              // Initialize a protocol with a domain string.
-  hpke ← Mix(hpke, "receiver", receiver.pub)                   // Mix the receiver's public key into the protocol.
-  hpke ← Mix(hpke, "ephemeral", ephemeral.pub)                 // Mix the ephemeral public key into the protocol.
-  hpke ← Mix(hpke, "ecdh", ECDH(receiver.pub, ephemeral.priv)) // Mix the ephemeral ECDH shared secret into the protocol.
-  (_, ciphertext) ← Seal(hpke, "message", plaintext)           // Seal the plaintext.
-  return (ephemeral.pub, ciphertext)                           // Return the ephemeral public key and tag.
+function hpke_encrypt(receiver.pub, plaintext):
+  ephemeral ← p256::key_gen()                                  // Generate an ephemeral key pair.
+  hpke ← init("com.example.hpke")                              // Initialize a protocol with a domain string.
+  hpke ← mix(hpke, "receiver", receiver.pub)                   // Mix the receiver's public key into the protocol.
+  hpke ← mix(hpke, "ephemeral", ephemeral.pub)                 // Mix the ephemeral public key into the protocol.
+  hpke ← mix(hpke, "ecdh", ECDH(receiver.pub, ephemeral.priv)) // Mix the ephemeral ECDH shared secret into the protocol.
+  (_, ciphertext, tag) ← seal(hpke, "message", plaintext)      // Seal the plaintext.
+  (ephemeral.pub, ciphertext, tag)                             // Return the ephemeral public key and tag.
 ```
 
 ```text
-function HPKE_Decrypt(receiver, ephemeral.pub, ciphertext):
-  hpke ← Init("com.example.hpke")                              // Initialize a protocol with a domain string.
-  hpke ← Mix(hpke, "receiver", receiver.pub)                   // Mix the receiver's public key into the protocol.
-  hpke ← Mix(hpke, "ephemeral", ephemeral.pub)                 // Mix the ephemeral public key into the protocol.
-  hpke ← Mix(hpke, "ecdh", ECDH(receiver.priv, ephemeral.pub)) // Mix the ephemeral ECDH shared secret into the protocol.
-  (_, plaintext) ← Open(hpke, "message", ciphertext)           // Open the ciphertext.
-  return plaintext
+function hpke_decrypt(receiver, ephemeral.pub, ciphertext, tag):
+  hpke ← init("com.example.hpke")                              // Initialize a protocol with a domain string.
+  hpke ← mix(hpke, "receiver", receiver.pub)                   // Mix the receiver's public key into the protocol.
+  hpke ← mix(hpke, "ephemeral", ephemeral.pub)                 // Mix the ephemeral public key into the protocol.
+  hpke ← mix(hpke, "ecdh", ecdh(receiver.priv, ephemeral.pub)) // Mix the ephemeral ECDH shared secret into the protocol.
+  (_, plaintext) ← open(hpke, "message", ciphertext, tah)      // Open the ciphertext.
+  plaintext
 ```
 
 **N.B.:** This construction does not provide authentication in the public key setting. An adversary
@@ -328,15 +345,15 @@ senders, a.k.a. key compromise impersonation).
 Lockstitch can be used to implement EdDSA-style Schnorr digital signatures:
 
 ```text
-function Sign(signer, message):
-  schnorr ← Init("com.example.eddsa")                     // Initialize a protocol with a domain string.
-  schnorr ← Mix(schnorr, "signer", signer.pub)            // Mix the signer's public key into the protocol.
-  schnorr ← Mix(schnorr, "message", message)              // Mix the message into the protocol.
-  (k, I) ← P256::KeyGen()                                 // Generate a commitment scalar and point.
-  schnorr ← Mix(schnorr, "commitment", I)                 // Mix the commitment point into the protocol.
-  (_, r) ← P256::Scalar(Derive(schnorr, "challenge", 32)) // Derive a challenge scalar.
+function sign(signer, message):
+  schnorr ← init("com.example.eddsa")                     // Initialize a protocol with a domain string.
+  schnorr ← mix(schnorr, "signer", signer.pub)            // Mix the signer's public key into the protocol.
+  schnorr ← mix(schnorr, "message", message)              // Mix the message into the protocol.
+  (k, I) ← p256::key_gen()                                // Generate a commitment scalar and point.
+  schnorr ← mix(schnorr, "commitment", I)                 // Mix the commitment point into the protocol.
+  (_, r) ← p256::scalar(derive(schnorr, "challenge", 32)) // Derive a challenge scalar.
   s ← signer.priv * r + k                                 // Calculate the proof scalar.
-  return (I, s)                                           // Return the commitment point and proof scalar.
+  (I, s)                                                  // Return the commitment point and proof scalar.
 ```
 
 The resulting signature is strongly bound to both the message and the signer's public key, making it
@@ -344,14 +361,14 @@ sUF-CMA secure. If a non-prime order group like Edwards25519 is used instead of 
 verification function must account for co-factors to be strongly unforgeable.
 
 ```text
-function Verify(signer.pub, message, I, s):
-  schnorr ← Init("com.example.eddsa")                      // Initialize a protocol with a domain string.
-  schnorr ← Mix(schnorr, "signer", signer.pub)             // Mix the signer's public key into the protocol.
-  schnorr ← Mix(schnorr, "message", message)               // Mix the message into the protocol.
-  schnorr ← Mix(schnorr, "commitment", I)                  // Mix the commitment point into the protocol.
-  (_, r′) ← P256::Scalar(Derive(schnorr, "challenge", 32)) // Derive a counterfactual challenge scalar.
+function verify(signer.pub, message, I, s):
+  schnorr ← init("com.example.eddsa")                      // Initialize a protocol with a domain string.
+  schnorr ← mix(schnorr, "signer", signer.pub)             // Mix the signer's public key into the protocol.
+  schnorr ← mix(schnorr, "message", message)               // Mix the message into the protocol.
+  schnorr ← mix(schnorr, "commitment", I)                  // Mix the commitment point into the protocol.
+  (_, r′) ← p256::scalar(derive(schnorr, "challenge", 32)) // Derive a counterfactual challenge scalar.
   I′ ← [s]G - [r′]signer.pub                               // Calculate the counterfactual commitment point.
-  return I = I′                                            // The signature is valid if both points are equal.
+  I = I′                                                   // The signature is valid if both points are equal.
 ```
 
 An additional variation on this construction uses `Encrypt` instead of `Mix` to include the
@@ -366,36 +383,36 @@ a [digital signature](#digital-signatures) scheme to produce a signcryption sche
 confidentiality and strong authentication in the public key setting:
 
 ```text
-function Signcrypt(sender, receiver.pub, plaintext):
-  ephemeral ← P256::KeyGen()                                  // Generate an ephemeral key pair.
-  sc ← Init("com.example.sc")                                 // Initialize a protocol with a domain string.
-  sc ← Mix(state, "receiver", receiver.pub)                   // Mix the receiver's public key into the protocol.
-  sc ← Mix(state, "sender", sender.pub)                       // Mix the sender's public key into the protocol.
-  sc ← Mix(state, "ephemeral", ephemeral.pub)                 // Mix the ephemeral public key into the protocol.
-  sc ← Mix(state, "ecdh", ECDH(receiver.pub, ephemeral.priv)) // Mix the ECDH shared secret into the protocol.
-  (sc, ciphertext) ← Encrypt(state, "message", plaintext)     // Encrypt the plaintext.
-  (k, I) ← P256::KeyGen()                                     // Generate a commitment scalar and point.
-  sc ← Mix(state, "commitment", I)                            // Mix the commitment point into the protocol.
-  (_, r) ← P256::Scalar(Derive(state, "challenge", 32))       // Derive a challenge scalar.
-  s ← sender.priv * r + k                                     // Calculate the proof scalar.
-  return (ephemeral.pub, ciphertext, I, s)                    // Return the ephemeral public key, ciphertext, and signature.
+function signcrypt(sender, receiver.pub, plaintext):
+  ephemeral ← p256::key_gen()                              // Generate an ephemeral key pair.
+  sc ← init("com.example.sc")                              // Initialize a protocol with a domain string.
+  sc ← mix(sc, "receiver", receiver.pub)                   // Mix the receiver's public key into the protocol.
+  sc ← mix(sc, "sender", sender.pub)                       // Mix the sender's public key into the protocol.
+  sc ← mix(sc, "ephemeral", ephemeral.pub)                 // Mix the ephemeral public key into the protocol.
+  sc ← mix(sc, "ecdh", ecdh(receiver.pub, ephemeral.priv)) // Mix the ECDH shared secret into the protocol.
+  (sc, ciphertext) ← encrypt(sc, "message", plaintext)     // Encrypt the plaintext.
+  (k, I) ← p256::key_gen()                                 // Generate a commitment scalar and point.
+  sc ← mix(sc, "commitment", I)                            // Mix the commitment point into the protocol.
+  (_, r) ← p256::scalar(derive(sc, "challenge", 32))       // Derive a challenge scalar.
+  s ← sender.priv * r + k                                  // Calculate the proof scalar.
+  (ephemeral.pub, ciphertext, I, s)                        // Return the ephemeral public key, ciphertext, and signature.
 ```
 
 ```text
-function Unsigncrypt(receiver, sender.pub, ephemeral.pub, I, s):
-  sc ← Init("com.example.sc")                                 // Initialize a protocol with a domain string.
-  sc ← Mix(state, "receiver", receiver.pub)                   // Mix the receiver's public key into the protocol.
-  sc ← Mix(state, "sender", sender.pub)                       // Mix the sender's public key into the protocol.
-  sc ← Mix(state, "ephemeral", ephemeral.pub)                 // Mix the ephemeral public key into the protocol.
-  sc ← Mix(state, "ecdh", ECDH(receiver.priv, ephemeral.pub)) // Mix the ECDH shared secret into the protocol.
-  (sc, plaintext) ← Decrypt(sc, "message", ciphertext)        // Decrypt the ciphertext.
-  sc ← Mix(sc, "commitment", I)                               // Mix the commitment point into the protocol.
-  (_, r′) ← P256::Scalar(Derive(sc, "challenge", 32))         // Derive a counterfactual challenge scalar.
-  I′ ← [s]G - [r′]sender.pub                                  // Calculate the counterfactual commitment point.
+function unsigncrypt(receiver, sender.pub, ephemeral.pub, I, s):
+  sc ← init("com.example.sc")                              // Initialize a protocol with a domain string.
+  sc ← mix(sc, "receiver", receiver.pub)                   // Mix the receiver's public key into the protocol.
+  sc ← mix(sc, "sender", sender.pub)                       // Mix the sender's public key into the protocol.
+  sc ← mix(sc, "ephemeral", ephemeral.pub)                 // Mix the ephemeral public key into the protocol.
+  sc ← mix(sc, "ecdh", ecdh(receiver.priv, ephemeral.pub)) // Mix the ECDH shared secret into the protocol.
+  (sc, plaintext) ← decrypt(sc, "message", ciphertext)     // Decrypt the ciphertext.
+  sc ← mix(sc, "commitment", I)                            // Mix the commitment point into the protocol.
+  (_, r′) ← p256::scalar(derive(sc, "challenge", 32))      // Derive a counterfactual challenge scalar.
+  I′ ← [s]G - [r′]sender.pub                               // Calculate the counterfactual commitment point.
   if I = I′:
-    return plaintext                                          // If both points are equal, return the plaintext.
+    plaintext                                              // If both points are equal, return the plaintext.
   else:
-    return ⊥                                                  // Otherwise, return an error.
+    ⊥                                                      // Otherwise, return an error.
 ```
 
 Because Lockstitch is an incremental, stateful way of building protocols, this integrated
@@ -442,21 +459,19 @@ To generate hedged values, a Lockstitch protocol can be cloned, mixed with secre
 random value, and used to derive a hedged ephemeral:
 
 ```text
-function HedgedSign(signer, message):
-  eddsa ← Init("com.example.eddsa")                     // Initialize a protocol with a domain string.
-  eddsa ← Mix(eddsa, "signer", signer.pub)              // Mix the signer's public key into the protocol.
-  eddsa ← Mix(eddsa, "message", message)                // Mix the message into the protocol.
-  with clone ← Clone(eddsa) do                          // Clone the protocol.
-    clone ← Mix(clone, "signer", signer.priv)           // Mix the signer's private key into the clone.
-    clone ← Mix(clone, "rand", Rand(64))                // Mix 64 random bytes into the clone.
-    k ← P256::Scalar(Derive(clone, "commitment", 32))   // Derive a commitment scalar from the clone.
+function hedged_sign(signer, message):
+  eddsa ← init("com.example.eddsa")                     // Initialize a protocol with a domain string.
+  eddsa ← mix(eddsa, "signer", signer.pub)              // Mix the signer's public key into the protocol.
+  eddsa ← mix(eddsa, "message", message)                // Mix the message into the protocol.
+  with clone ← clone(eddsa) do                          // Clone the protocol.
+    clone ← mix(clone, "signer", signer.priv)           // Mix the signer's private key into the clone.
+    clone ← mix(clone, "rand", Rand(64))                // Mix 64 random bytes into the clone.
+    k ← p256::scalar(derive(clone, "commitment", 32))   // Derive a commitment scalar from the clone.
     I ← [k]G                                            // Calculate the commitment point.
     yield (k, I)                                        // Return the ephemeral key pair to the signing scope.
   end                                                   // Discard the cloned protocol.
-  eddsa ← Mix(eddsa, "commitment", I)                   // Mix the commitment point into the protocol.
-  (_, r) ← P256::Scalar(Derive(eddsa, "challenge", 32)) // Derive a challenge scalar.
+  eddsa ← mix(eddsa, "commitment", I)                   // Mix the commitment point into the protocol.
+  (_, r) ← p256::scalar(derive(eddsa, "challenge", 32)) // Derive a challenge scalar.
   s ← signer.priv * r + k                               // Calculate the proof scalar.
-  return (I, s)                                         // Return the commitment point and proof scalar.
+  (I, s)                                                // Return the commitment point and proof scalar.
 ```
-
-[NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash

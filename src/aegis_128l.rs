@@ -76,26 +76,6 @@ impl Aegis128L {
         self.ad_len += ad.len() as u64;
     }
 
-    /// Fill the given slice with keystream output. Equivalent to encrypting a message of equal
-    /// length consisting of all zeroes.
-    pub fn prf(&mut self, out: &mut [u8]) {
-        // Process whole blocks of output.
-        let mut chunks = out.chunks_exact_mut(BLOCK_LEN);
-        for chunk in chunks.by_ref() {
-            self.enc_zeroes(chunk);
-        }
-
-        // Process the remainder of the output, if any.
-        let chunk = chunks.into_remainder();
-        if !chunk.is_empty() {
-            let mut tmp = [0u8; BLOCK_LEN];
-            self.enc_zeroes(&mut tmp);
-            chunk.copy_from_slice(&tmp[..chunk.len()]);
-        }
-
-        self.mc_len += out.len() as u64;
-    }
-
     /// Encrypt the given slice in place.
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
         // Process whole blocks of plaintext.
@@ -157,19 +137,6 @@ impl Aegis128L {
 
         // Update the cipher state with the two blocks.
         self.update(ai0, xi1);
-    }
-
-    fn enc_zeroes(&mut self, ci: &mut [u8]) {
-        // Generate two blocks of keystream.
-        let z0 = xor3(self.blocks[6], self.blocks[1], and(self.blocks[2], self.blocks[3]));
-        let z1 = xor3(self.blocks[2], self.blocks[5], and(self.blocks[6], self.blocks[7]));
-
-        // Store the keystream blocks in the output.
-        store_2x(ci, z0, z1);
-
-        // Update the cipher state as if two all-zero blocks were encrypted.
-        let xi = zero();
-        self.update(xi, xi);
     }
 
     fn enc(&mut self, in_out: &mut [u8]) {

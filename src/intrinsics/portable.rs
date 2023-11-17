@@ -1,12 +1,6 @@
 /// An AES block.
 pub use aes::Block as AesBlock;
 
-/// Create an all-zero AES block.
-#[inline]
-pub fn zero() -> AesBlock {
-    [0u8; 16].into()
-}
-
 /// Load an AES block from the given slice.
 #[inline]
 pub fn load(bytes: &[u8]) -> AesBlock {

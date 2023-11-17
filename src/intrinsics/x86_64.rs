@@ -7,12 +7,6 @@ use core::arch::x86_64::{self as x86, *};
 /// An AES block.
 pub use x86::__m128i as AesBlock;
 
-/// Create an all-zero AES block.
-#[inline]
-pub fn zero() -> AesBlock {
-    unsafe { _mm_setzero_si128() }
-}
-
 /// Load an AES block from the given slice.
 #[inline]
 pub fn load(bytes: &[u8]) -> AesBlock {

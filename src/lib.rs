@@ -90,7 +90,8 @@ impl Protocol {
         let mut aegis = Aegis128L::new(&k, &n);
 
         // Generate N bytes of PRF output.
-        aegis.prf(out);
+        out.fill(0);
+        aegis.encrypt(out);
 
         // Perform a Mix operation with the output length.
         self.mix(b"len", left_encode(&mut [0u8; 17], out.len() as u128 * 8));

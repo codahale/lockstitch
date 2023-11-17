@@ -75,23 +75,22 @@ The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch p
 ### `Ratchet`
 
 A `Ratchet` operation replaces the protocol's transcript with a single `Mix` operation with a
-derived key of the previous transcript as input and returns an AEGIS-128L keys and nonce for
-processing input and producing output.
+derived key of the previous transcript as input and returns additional KDF output of the given
+length.
 
 ```text
-function ratchet(transcript):
+function ratchet(transcript, n):
   transcript ← transcript ǁ 0x03                // Append a Ratchet op code to the transcript.
   ikm ← sha256(transcript)                      // Hash the transcript in its entirety.
-  kdf_out ← concat_kdf(ikm, "lockstitch", 64)   // Derive 64 bytes of KDF output from the hash.
-  kdf_key ǁ output_key ǁ output_nonce ← kdf_out // Split the KDF output into a KDF key, an output key, and an output nonce.
+  kdf_out ← concat_kdf(ikm, "lockstitch", 32+n) // Derive 32+n bytes of KDF output from the hash.
+  kdf_key ǁ output ← kdf_out                    // Split the KDF output into a 32-byte KDF key and returned output.
   transcript ← mix(ɛ, "kdf-key", kdf_key)       // Replace the transcript with a single Mix operation with the KDF key.
-  (transcript, output_key, output_nonce)        // Return the new transcript along with the output key and nonce.
+  (transcript, output)                          // Return the new transcript along with the output.
 ```
 
 `Ratchet` hashes the protocol's transcript (plus an operation code) with SHA-256 and uses the
-resulting digest as keying material for Concat-KDF (Sec. 5.8.1 of [NIST SP 800-56A][]) using SHA-256
-to produce 64 bytes of derived output. The first 32 bytes of that output are used as the KDF key for
-a `Mix` operation; the second 32 bytes are split into an AEGIS-128L key and nonce.
+result as keying material for Concat-KDF/SHA-256 (Sec. 5.8.1 of [NIST SP 800-56A][]) to derive a
+32-byte KDF key and an additional `n` bytes of output.
 
 [NIST SP 800-56A]: https://csrc.nist.gov/pubs/sp/800/56/a/r3/final
 
@@ -114,24 +113,23 @@ security properties:
 
 ### `Derive`
 
-A `Derive` operation appends an operation code and a label to the protocol's transcript, ratchets
-the transcript, uses the output key and nonce to produce a given number of bits of AEGIS-128L
-output, and performs a `Mix` operation with the number of bits produced as input.
+A `Derive` operation appends an operation code and a label to the protocol's transcript and ratchets
+the transcript, generating the given number of bits of output. Finally, it performs a `Mix`
+operation with the number of bits produced as input.
 
 ```text
 function derive(transcript, label, n):
   transcript ← transcript ǁ 0x04                          // Append a Derive op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
-  (transcript, key, nonce) ← ratchet(transcript)          // Ratchet the protocol transcript.
-  out ← aegis128l::encrypt(key, nonce, [0; n])            // Generate N bytes of output.
+  (transcript, out) ← ratchet(transcript, n)              // Ratchet the protocol transcript and generate output.
   transcript ← mix(transcript, "len", left_encode(n))     // Append a Mix operation with the output length.
   (transcript, out)
 ```
 
 A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
-protocol's transcript prior to the operation provided SHA-256 is collision-resistant and AEGIS-128L
-is PRF secure. The protocol's transcript after the operation is dependent on both the fact that the
-operation was a `Derive` operation as well as the number of bytes produced.
+protocol's transcript prior to the operation, assuming that SHA-256 is collision-resistant and
+Concat-KDF is KDF secure. The protocol's transcript after the operation is dependent on both the
+fact that the operation was a `Derive` operation as well as the number of bytes produced.
 
 `Derive` supports streaming output, thus a shorter `Derive` operation will return a prefix of a
 longer one (e.g.  `Derive("a", 16)` and `Derive("a", 32)` will share the same initial 16 bytes).
@@ -139,19 +137,19 @@ Once the operation is complete, however, the protocols' transcripts will be diff
 requires `Derive` output to be dependent on its length, include the length in a `Mix` operation
 beforehand.
 
-**N.B.**: Each operation is limited to 2^61 bytes of output.
+**N.B.**: Each operation is limited to 2^40-32 bytes of output.
 
 ### `Encrypt`/`Decrypt`
 
 `Encrypt` and `Decrypt` operations append an operation code and a label to the transcript, ratchet
-the protocol's transcript, encrypt or decrypt an input with AEGIS-128L, and include the AEGIS-128L
-tag via a `Mix` operation.
+the protocol's transcript to generate an AEGIS-128L key and nonce, encrypt or decrypt an input with
+AEGIS-128L, and include the AEGIS-128L tag via a `Mix` operation.
 
 ```text
 function encrypt(transcript, label, plaintext):
   transcript ← transcript ǁ 0x05                                // Append a Crypt op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label        // Append the encoded label.
-  (transcript, key ǁ nonce) ← ratchet(transcript)               // Ratchet the protocol transcript.
+  (transcript, key ǁ nonce) ← ratchet(transcript, 32)           // Ratchet the protocol transcript.
   (ciphertext, tag) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
   transcript ← mix(transcript, "tag", tag)                      // Append a Mix operation with the tag.
   (transcript, ciphertext)
@@ -159,7 +157,7 @@ function encrypt(transcript, label, plaintext):
 function decrypt(transcript, label, ciphertext):
   transcript ← transcript ǁ 0x05                                // Append a Crypt op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label        // Append the encoded label.
-  (transcript, key ǁ nonce) ← ratchet(transcript)               // Ratchet the protocol transcript.
+  (transcript, key ǁ nonce) ← ratchet(transcript, 32)           // Ratchet the protocol transcript.
   (plaintext, tag) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
   transcript ← mix(transcript, "tag", tag)                      // Append a Mix operation with the tag.
   (transcript, plaintext)

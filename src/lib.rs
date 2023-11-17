@@ -7,7 +7,6 @@ use core::fmt::Debug;
 use crate::aegis_128l::Aegis128L;
 
 use cmov::CmovEq;
-use concat_kdf::derive_key_into;
 use sha2::digest::{Digest, FixedOutputReset};
 use sha2::Sha256;
 
@@ -76,7 +75,7 @@ impl Protocol {
     /// Modifies the protocol's state irreversibly, preventing rollback.
     pub fn ratchet(&mut self) {
         // Perform a Ratchet operation, ignoring the key and nonce.
-        let _ = self.ratchet_with_output();
+        self.ratchet_with_output(&mut []);
     }
 
     /// Derive output from the protocol's current state and fill the given slice with it.
@@ -85,13 +84,8 @@ impl Protocol {
         // Append a Derive op header with the label to the transcript.
         self.op_header(OpCode::Derive, Some(label));
 
-        // Perform a Ratchet operation.
-        let (k, n) = self.ratchet_with_output();
-        let mut aegis = Aegis128L::new(&k, &n);
-
-        // Generate N bytes of PRF output.
-        out.fill(0);
-        aegis.encrypt(out);
+        // Perform a Ratchet operation and generate N bytes of output.
+        self.ratchet_with_output(out);
 
         // Perform a Mix operation with the output length.
         self.mix(b"len", left_encode(&mut [0u8; 17], out.len() as u128 * 8));
@@ -111,9 +105,14 @@ impl Protocol {
         // Append a Crypt op header with the label to the transcript.
         self.op_header(OpCode::Crypt, Some(label));
 
-        // Perform a Ratchet operation.
-        let (k, n) = self.ratchet_with_output();
-        let mut aegis = Aegis128L::new(&k, &n);
+        // Perform a Ratchet operation and generate an AEGIS-128L key and nonce.
+        let mut kdf_out = [0u8; 32];
+        self.ratchet_with_output(&mut kdf_out);
+        let (k, n) = kdf_out.split_at(16);
+        let mut aegis = Aegis128L::new(
+            k.try_into().expect("should be 16 bytes"),
+            n.try_into().expect("should be 16 bytes"),
+        );
 
         // Encrypt the plaintext.
         aegis.encrypt(in_out);
@@ -128,9 +127,14 @@ impl Protocol {
         // Append a Crypt op header with the label to the transcript.
         self.op_header(OpCode::Crypt, Some(label));
 
-        // Perform a Ratchet operation.
-        let (k, n) = self.ratchet_with_output();
-        let mut aegis = Aegis128L::new(&k, &n);
+        // Perform a Ratchet operation and generate an AEGIS-128L key and nonce.
+        let mut kdf_out = [0u8; 32];
+        self.ratchet_with_output(&mut kdf_out);
+        let (k, n) = kdf_out.split_at(16);
+        let mut aegis = Aegis128L::new(
+            k.try_into().expect("should be 16 bytes"),
+            n.try_into().expect("should be 16 bytes"),
+        );
 
         // Decrypt the ciphertext.
         aegis.decrypt(in_out);
@@ -223,31 +227,32 @@ impl Protocol {
 
     /// Perform a `Ratchet` operation, returning an AEGIS-128L instance for optional output.
     #[inline]
-    #[must_use]
-    fn ratchet_with_output(&mut self) -> ([u8; 16], [u8; 16]) {
+    fn ratchet_with_output(&mut self, out: &mut [u8]) {
         // Append a  Ratchet op header to the transcript.
         self.op_header(OpCode::Ratchet, None);
 
         // Calculate the hash of the transcript and replace it with an empty transcript.
         let ikm = self.transcript.finalize_fixed_reset();
 
-        // Use Concat-KDF with SHA-256 to derive 64 bytes of new key material.
-        let mut kdf_out = [0u8; 64];
-        derive_key_into::<Sha256>(&ikm, b"lockstitch", &mut kdf_out).expect("should derive keys");
+        // Use Concat-KDF to derive a new KDF key.
+        let mut counter = 1u32;
+        let mut kdf = Sha256::new();
+        kdf.update(counter.to_be_bytes());
+        kdf.update(ikm);
+        kdf.update(b"lockstitch");
+        let kdf_key = kdf.finalize_reset();
 
-        // Split the KDF output into a 32-byte KDF key, a 16-byte output key, and a 16-byte output
-        // nonce.
-        let (kdf_key, output_key) = kdf_out.split_at(32);
-        let (output_key, output_nonce) = output_key.split_at(16);
+        // Continue using Concat-KDF for any additional output.
+        for chunk in out.chunks_mut(32) {
+            counter += 1;
+            kdf.update(counter.to_be_bytes());
+            kdf.update(ikm);
+            kdf.update(b"lockstitch");
+            chunk.copy_from_slice(&kdf.finalize_reset()[..chunk.len()]);
+        }
 
         // Perform a Mix operation with the KDF key.
-        self.mix(b"kdf-key", kdf_key);
-
-        // Return the key and nonce for optional use.
-        (
-            output_key.try_into().expect("should be valid AEGIS-128L key"),
-            output_nonce.try_into().expect("should be valid AEGIS-128L nonce"),
-        )
+        self.mix(b"kdf-key", &kdf_key);
     }
 
     /// Append an operation header with an optional label to the protocol transcript.
@@ -362,7 +367,7 @@ mod tests {
         protocol.mix(b"first", b"one");
         protocol.mix(b"second", b"two");
 
-        expect!["a80e8d73cb0513f7"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
+        expect!["43a449dad24f1224"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(b"fourth", &mut plaintext);
@@ -375,10 +380,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(b"fifth", &mut sealed);
 
-        expect!["575b7095719784405a1c97df48cf97730e82588427f1a908f02bb2711e55cdd289e8"]
+        expect!["575b7095719784405a1c97df48cf97730e822790e892ad2a01ace17e1b5389ce570a"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["c286877e68890b53"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+        expect!["4d149520741de725"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
     }
 
     #[test]

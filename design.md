@@ -75,24 +75,26 @@ The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch p
 ### `Ratchet`
 
 A `Ratchet` operation replaces the protocol's transcript with a single `Mix` operation with a
-derived key of the previous transcript as input and returns additional KDF output of the given
+derived key of the previous transcript as input and returns additional derived output of the given
 length.
 
 ```text
 function ratchet(transcript, n):
-  transcript ← transcript ǁ 0x03                // Append a Ratchet op code to the transcript.
-  ikm ← sha256(transcript)                      // Hash the transcript in its entirety.
-  kdf_out ← concat_kdf(ikm, "lockstitch", 32+n) // Derive 32+n bytes of KDF output from the hash.
-  kdf_key ǁ output ← kdf_out                    // Split the KDF output into a 32-byte KDF key and returned output.
-  transcript ← mix(ɛ, "kdf-key", kdf_key)       // Replace the transcript with a single Mix operation with the KDF key.
-  (transcript, output)                          // Return the new transcript along with the output.
+  transcript ← transcript ǁ 0x03          // Append a Ratchet op code to the transcript.
+  ikm ← sha256(transcript)                // Hash the transcript in its entirety.
+  kdf_out ← kdf(ikm, "lockstitch", 32+n)  // Derive 32+n bytes of KDF output from the hash.
+  kdf_key ǁ output ← kdf_out              // Split the KDF output into a 32-byte KDF key and returned output.
+  transcript ← mix(ɛ, "kdf-key", kdf_key) // Replace the transcript with a single Mix operation with the KDF key.
+  (transcript, output)                    // Return the new transcript along with the output.
 ```
 
-`Ratchet` hashes the protocol's transcript (plus an operation code) with SHA-256 and uses the
-result as keying material for Concat-KDF/SHA-256 (Sec. 5.8.1 of [NIST SP 800-56A][]) to derive a
-32-byte KDF key and an additional `n` bytes of output.
+`Ratchet` appends an operation code to the protocol's transcript, hashes the entire transcript with
+SHA-256 and passes the result to the _One-Step Key Derivation_ key derivation function (KDF) from
+Sec. 4 of [NIST SP 800-56C Rev. 2][] (also known as Concat-KDF), using SHA-256 as the `H` function
+and the string `lockstitch` as the `FixedInfo` parameter.  Finally, the transcript is replaced with
+a single `Mix` operation containing the first 32 bytes of KDF output and the remainder is returned.
 
-[NIST SP 800-56A]: https://csrc.nist.gov/pubs/sp/800/56/a/r3/final
+[NIST SP 800-56C Rev. 2]: https://csrc.nist.gov/pubs/sp/800/56/c/r2/final
 
 #### KDF Chains
 

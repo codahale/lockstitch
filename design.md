@@ -130,8 +130,8 @@ function derive(transcript, label, n):
 
 A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
 protocol's transcript prior to the operation, assuming that SHA-256 is collision-resistant and
-Concat-KDF is KDF secure. The protocol's transcript after the operation is dependent on both the
-fact that the operation was a `Derive` operation as well as the number of bytes produced.
+`Ratchet` is KDF secure. The protocol's transcript after the operation is dependent on both the fact
+that the operation was a `Derive` operation as well as the number of bytes produced.
 
 `Derive` supports streaming output, thus a shorter `Derive` operation will return a prefix of a
 longer one (e.g.  `Derive("a", 16)` and `Derive("a", 32)` will share the same initial 16 bytes).

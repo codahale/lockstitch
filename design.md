@@ -32,7 +32,10 @@ transcript along with a constant operation code:
 
 ```text
 function mix(transcript, label, input):
-  transcript ǁ 0x01 ǁ left_encode(|label|) ǁ label ǁ input ǁ right_encode(|input|)
+  transcript ← transcript ǁ 0x01                          // Append a Mix op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
+  transcript ← transcript ǁ input ǁ right_encode(|input|) // Append the encoded input.
+  transcript
 ```
 
 `Mix` encodes the length of the label in bits and the length of the input in bits using
@@ -43,8 +46,8 @@ in advance.
 
 [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 
-**N.B.**: Processing more than 2^64 bytes without generating output will result in undefined
-behavior.
+**N.B.**: Processing more than 2^64 bytes of input without [ratcheting](#ratchet) will result in
+undefined behavior.
 
 ### `Init`
 
@@ -53,7 +56,9 @@ transcript with a constant operation code and then performing a `Mix` operation 
 
 ```text
 function init(domain):
-  0x02 ǁ mix(ɛ, "domain", domain)
+  transcript ← 0x02                                  // Begin a new transcript with an Init op code.
+  transcript ← transcript ǁ mix(ɛ, "domain", domain) // Append a Mix operation with the domain.
+  transcript
 ```
 
 The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch protocol domains:
@@ -75,7 +80,8 @@ processing input and producing output.
 
 ```text
 function ratchet(transcript):
-  ikm ← sha256(transcript ǁ 0x03)               // Append the op code to the transcript and hash it.
+  transcript ← transcript ǁ 0x03                // Append a Ratchet op code to the transcript.
+  ikm ← sha256(transcript)                      // Hash the transcript in its entirety.
   kdf_out ← concat_kdf(ikm, "lockstitch", 64)   // Derive 64 bytes of KDF output from the hash.
   kdf_key ǁ output_key ǁ output_nonce ← kdf_out // Split the KDF output into a KDF key, an output key, and an output nonce.
   transcript ← mix(ɛ, "kdf-key", kdf_key)       // Replace the transcript with a single Mix operation with the KDF key.
@@ -113,11 +119,12 @@ output, and performs a `Mix` operation with the number of bits produced as input
 
 ```text
 function derive(transcript, label, n):
-  transcript ← transcript ǁ 0x04 ǁ left_encode(|label|) ǁ label
-  (transcript, key, nonce) ← ratchet(transcript) 
-  prf ← aegis128l::encrypt(key, nonce, [0; n])
-  transcript ← mix(transcript, "len", left_encode(n))
-  (transcript, prf)
+  transcript ← transcript ǁ 0x04                          // Append a Derive op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
+  (transcript, key, nonce) ← ratchet(transcript)          // Ratchet the protocol state.
+  out ← aegis128l::encrypt(key, nonce, [0; n])            // Generate N bytes of output.
+  transcript ← mix(transcript, "len", left_encode(n))     // Append a Mix operation with the output length.
+  (transcript, out)
 ```
 
 A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
@@ -141,17 +148,19 @@ via a `Mix` operation.
 
 ```text
 function Encrypt(transcript, label, plaintext):
-  transcript ← transcript ǁ 0x05 ǁ left_encode(|label|) ǁ label
-  (transcript, key ǁ nonce) ← ratchet(transcript) 
-  (ciphertext, tag) ← aegis128l::encrypt(key, nonce, plaintext)
-  transcript ← mix(transcript, "tag", tag)
+  transcript ← transcript ǁ 0x05                                // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label        // Append the encoded label.
+  (transcript, key ǁ nonce) ← ratchet(transcript)               // Ratchet the protocol state.
+  (ciphertext, tag) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
+  transcript ← mix(transcript, "tag", tag)                      // Append a Mix operation with the tag.
   (transcript, ciphertext)
 
 function decrypt(transcript, label, ciphertext):
-  transcript ← transcript ǁ 0x05 ǁ left_encode(|label|) ǁ label
-  (transcript, key ǁ nonce) ← ratchet(transcript) 
-  (plaintext, tag) ← aegis128l::decrypt(key, nonce, ciphertext)
-  transcript ← mix(transcript, "tag", tag)
+  transcript ← transcript ǁ 0x05                                // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label        // Append the encoded label.
+  (transcript, key ǁ nonce) ← ratchet(transcript)               // Ratchet the protocol state.
+  (plaintext, tag) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
+  transcript ← mix(transcript, "tag", tag)                      // Append a Mix operation with the tag.
   (transcript, plaintext)
 ```
 
@@ -193,16 +202,18 @@ authenticated encryption, returning a ciphertext and an authentication tag.
 
 ```text
 function seal(transcript, label, plaintext):
-  transcript ← transcript ǁ 0x06 ǁ left_encode(|label|) ǁ label
-  (transcript, ciphertext) ← encrypt(transcript, "message", plaintext) 
-  (transcript, tag) ← derive(transcript, "tag", 16)
+  transcript ← transcript ǁ 0x06                                       // Append an AuthCrypt op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label               // Append the encoded label.
+  (transcript, ciphertext) ← encrypt(transcript, "message", plaintext) // Encrypt the plaintext.
+  (transcript, tag) ← derive(transcript, "tag", 16)                    // Derive an authentication tag.
   (transcript, ciphertext, tag)
 
 function open(transcript, label, ciphertext, tag):
-  transcript ← transcript ǁ 0x06 ǁ left_encode(|label|) ǁ label
-  (transcript, plaintext) ← decrypt("message", ciphertext) 
-  (transcript, tag′) ← derive(transcript, "tag", 16)
-  if tag = tag′:
+  transcript ← transcript ǁ 0x06                                       // Append an AuthCrypt op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label               // Append the encoded label.
+  (transcript, plaintext) ← decrypt("message", ciphertext)             // Decrypt the ciphertext.
+  (transcript, tag′) ← derive(transcript, "tag", 16)                   // Derive a counterfactual authentication tag.
+  if tag = tag′:                                                       // Compare the tags in constant time.
     (transcript, plaintext)
   else:
     (transcript, ⊥)

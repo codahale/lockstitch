@@ -78,5 +78,4 @@ benchmarks      fastest       │ slowest       │ median        │ mean      
    │            12.52 GiB/s   │ 1.758 GiB/s   │ 11.91 GiB/s   │ 11.64 GiB/s   │         │
    ╰─ 1048576   64.79 µs      │ 100.1 µs      │ 66.74 µs      │ 67.22 µs      │ 13628   │ 13628
                 15.07 GiB/s   │ 9.749 GiB/s   │ 14.63 GiB/s   │ 14.52 GiB/s   │         │
-
 ```

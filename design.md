@@ -248,7 +248,7 @@ This construction is collision-resistant if SHA-256 is collision-resistant.
 Adding a key to the previous construction makes it a MAC:
 
 ```text
-function mac_sign(key, message):
+function mac(key, message):
   mac ← init("com.example.mac")      // Initialize a protocol with a domain string.
   mac ← mix(mac, "key", key)         // Mix the key into the protocol.
   mac ← mix(mac, "message", message) // Mix the message into the protocol.
@@ -258,17 +258,6 @@ function mac_sign(key, message):
 
 The use of labels and the encoding of [`Mix` inputs](#mix) ensures that the key and the message will
 never overlap, even if their lengths vary.
-
-Use a constant-time comparison to verify the MAC:
-
-```text
-function mac_verify(key, message, tag):
-  mac ← init("com.example.mac")      // Initialize a protocol with a domain string.
-  mac ← mix(mac, "key", key)         // Mix the key into the protocol.
-  mac ← mix(mac, "message", message) // Mix the data into the protocol.
-  (_, tag′) ← derive(mac, "tag", 16) // Derive 16 bytes of output.
-  tag = tag′                         // Compare the tags in constant time.
-```
 
 ### Authenticated Encryption And Data (AEAD)
 

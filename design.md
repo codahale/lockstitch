@@ -53,7 +53,7 @@ transcript with a constant operation code and then performing a `Mix` operation 
 
 ```text
 function init(domain):
-  0x02 ǁ Mix(ɛ, "domain", domain)
+  0x02 ǁ mix(ɛ, "domain", domain)
 ```
 
 The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch protocol domains:
@@ -114,7 +114,7 @@ output, and performs a `Mix` operation with the number of bits produced as input
 ```text
 function derive(transcript, label, n):
   transcript ← transcript ǁ 0x04 ǁ left_encode(|label|) ǁ label
-  (transcript, key, nonce) ← Ratchet(transcript) 
+  (transcript, key, nonce) ← ratchet(transcript) 
   prf ← aegis128l::encrypt(key, nonce, [0; n])
   transcript ← mix(transcript, "len", left_encode(n))
   (transcript, prf)
@@ -203,9 +203,9 @@ function open(transcript, label, ciphertext, tag):
   (transcript, plaintext) ← decrypt("message", ciphertext) 
   (transcript, tag′) ← derive(transcript, "tag", 16)
   if tag = tag′:
-    return (transcript, plaintext)
+    (transcript, plaintext)
   else:
-    return (transcript, ⊥)
+    (transcript, ⊥)
 ```
 
 ## Basic Protocols
@@ -311,7 +311,7 @@ function hpke_encrypt(receiver.pub, plaintext):
   hpke ← init("com.example.hpke")                              // Initialize a protocol with a domain string.
   hpke ← mix(hpke, "receiver", receiver.pub)                   // Mix the receiver's public key into the protocol.
   hpke ← mix(hpke, "ephemeral", ephemeral.pub)                 // Mix the ephemeral public key into the protocol.
-  hpke ← mix(hpke, "ecdh", ECDH(receiver.pub, ephemeral.priv)) // Mix the ephemeral ECDH shared secret into the protocol.
+  hpke ← mix(hpke, "ecdh", ecdh(receiver.pub, ephemeral.priv)) // Mix the ephemeral ECDH shared secret into the protocol.
   (_, ciphertext, tag) ← seal(hpke, "message", plaintext)      // Seal the plaintext.
   (ephemeral.pub, ciphertext, tag)                             // Return the ephemeral public key and tag.
 ```
@@ -322,7 +322,7 @@ function hpke_decrypt(receiver, ephemeral.pub, ciphertext, tag):
   hpke ← mix(hpke, "receiver", receiver.pub)                   // Mix the receiver's public key into the protocol.
   hpke ← mix(hpke, "ephemeral", ephemeral.pub)                 // Mix the ephemeral public key into the protocol.
   hpke ← mix(hpke, "ecdh", ecdh(receiver.priv, ephemeral.pub)) // Mix the ephemeral ECDH shared secret into the protocol.
-  (_, plaintext) ← open(hpke, "message", ciphertext, tah)      // Open the ciphertext.
+  (_, plaintext) ← open(hpke, "message", ciphertext, tag)      // Open the ciphertext.
   plaintext
 ```
 
@@ -333,7 +333,7 @@ is IND-CCA secure, but the real-world scenarios in which that applies are minima
 is more like a checksum than a MAC, preventing modifications only by adversaries who don't have the
 recipient's public key.
 
-Using a static ECDH shared secret (i.e. `ECDH(receiver.pub, sender.priv)`) would add implicit
+Using a static ECDH shared secret (i.e. `ecdh(receiver.pub, sender.priv)`) would add implicit
 authentication but would require a nonce or an ephemeral key to be IND-CCA secure. The resulting
 scheme would be outsider secure in the public key setting (i.e. an adversary in possession of
 everyone's public keys would be unable to forge or decrypt ciphertexts) but not insider secure (i.e.
@@ -465,7 +465,7 @@ function hedged_sign(signer, message):
   eddsa ← mix(eddsa, "message", message)                // Mix the message into the protocol.
   with clone ← clone(eddsa) do                          // Clone the protocol.
     clone ← mix(clone, "signer", signer.priv)           // Mix the signer's private key into the clone.
-    clone ← mix(clone, "rand", Rand(64))                // Mix 64 random bytes into the clone.
+    clone ← mix(clone, "rand", rand(64))                // Mix 64 random bytes into the clone.
     k ← p256::scalar(derive(clone, "commitment", 32))   // Derive a commitment scalar from the clone.
     I ← [k]G                                            // Calculate the commitment point.
     yield (k, I)                                        // Return the ephemeral key pair to the signing scope.

@@ -8,7 +8,7 @@ top of SHA-256 and [AEGIS-128L][], an authenticated cipher.
 
 ## Protocol
 
-The basic unit of Lockstitch is the protocol, which encapsulates a transcript of encoded inputs.
+The basic unit of Lockstitch is the protocol, which encapsulates a transcript of encoded operations.
 
 A Lockstitch protocol supports the following operations:
 
@@ -16,14 +16,18 @@ A Lockstitch protocol supports the following operations:
 * `Init`, which initializes a protocol with a domain separation string.
 * `Ratchet`, which ratchets the protocol transcript and optionally keys an AEGIS-128L instance.
 * `Derive`, which produces a bitstring of arbitrary length that is cryptographically dependent on
-  all previous inputs.
-* `Encrypt`/`Decrypt`, which encrypt and decrypt a message, making the protocol cryptographically
-  dependent on the message.
-* `Seal`/`Open`, which seal and open a message, making the protocol cryptographically dependent on
-  the message.
+  the protocol's transcript.
+* `Encrypt`/`Decrypt`, which encrypt and decrypt a message, making the protocol transcript
+  cryptographically dependent on the message.
+* `Seal`/`Open`, which encrypt and decrypt a message, using an authenticator tag to ensure the
+  ciphertext has not been modified.
 
 Labels are used for all Lockstitch operations (except `Init` and `Ratchet`) to provide domain
-separation of inputs and outputs.
+separation of inputs and outputs. This ensures that semantically distinct values with identical
+encodings (e.g. public keys or ECDH shared secrets) result in distinctly encoded operations so long
+as the labels are distinct. Labels should be human-readable values which communicate the source of
+the input or the intended use of the output. `server-p256-public-key` is a good label; `step-3a` is
+a bad label.
 
 ### `Mix`
 

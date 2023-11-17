@@ -147,7 +147,7 @@ the protocol's state, encrypt or decrypt an input with AEGIS-128L, and include t
 via a `Mix` operation.
 
 ```text
-function Encrypt(transcript, label, plaintext):
+function encrypt(transcript, label, plaintext):
   transcript ← transcript ǁ 0x05                                // Append a Crypt op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label        // Append the encoded label.
   (transcript, key ǁ nonce) ← ratchet(transcript)               // Ratchet the protocol state.

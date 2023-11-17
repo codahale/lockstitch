@@ -14,7 +14,7 @@ A Lockstitch protocol supports the following operations:
 
 * `Mix`, which makes all future output cryptographically dependent on a given labeled input.
 * `Init`, which initializes a protocol with a domain separation string.
-* `Ratchet`, which ratchets the protocol state and optionally keys an AEGIS-128L instance.
+* `Ratchet`, which ratchets the protocol transcript and optionally keys an AEGIS-128L instance.
 * `Derive`, which produces a bitstring of arbitrary length that is cryptographically dependent on
   all previous inputs.
 * `Encrypt`/`Decrypt`, which encrypt and decrypt a message, making the protocol cryptographically
@@ -107,34 +107,35 @@ security properties:
 * **Resilience**: A protocol's outputs will appear random to an adversary so long as one of the
   inputs is secret, even if the other inputs to the protocol are adversary-controlled.
 * **Forward Security**: A protocol's previous outputs will appear random to an adversary even if the
-  protocol's state is disclosed at some point.
+  protocol's transcript is disclosed at some point.
 * **Break-in Recovery**: A protocol's future outputs will appear random to an adversary in
-  possession of the protocol's state as long as one of the future inputs to the protocol is secret.
+  possession of the protocol's transcript as long as one of the future inputs to the protocol is
+  secret.
 
 ### `Derive`
 
-A `Derive` operation appends and operation code and a label to the protocol's transcript, ratchets
-the protocol's state, uses the output key and nonce to produce a given number of bits of AEGIS-128L
+A `Derive` operation appends an operation code and a label to the protocol's transcript, ratchets
+the transcript, uses the output key and nonce to produce a given number of bits of AEGIS-128L
 output, and performs a `Mix` operation with the number of bits produced as input.
 
 ```text
 function derive(transcript, label, n):
   transcript ← transcript ǁ 0x04                          // Append a Derive op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
-  (transcript, key, nonce) ← ratchet(transcript)          // Ratchet the protocol state.
+  (transcript, key, nonce) ← ratchet(transcript)          // Ratchet the protocol transcript.
   out ← aegis128l::encrypt(key, nonce, [0; n])            // Generate N bytes of output.
   transcript ← mix(transcript, "len", left_encode(n))     // Append a Mix operation with the output length.
   (transcript, out)
 ```
 
 A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
-protocol's state prior to the operation provided SHA-256 is collision-resistant and AEGIS-128L is
-PRF secure. The protocol's state after the operation is dependent on both the fact that the
+protocol's transcript prior to the operation provided SHA-256 is collision-resistant and AEGIS-128L
+is PRF secure. The protocol's transcript after the operation is dependent on both the fact that the
 operation was a `Derive` operation as well as the number of bytes produced.
 
 `Derive` supports streaming output, thus a shorter `Derive` operation will return a prefix of a
 longer one (e.g.  `Derive("a", 16)` and `Derive("a", 32)` will share the same initial 16 bytes).
-Once the operation is complete, however, the protocols' states will be different. If a use case
+Once the operation is complete, however, the protocols' transcripts will be different. If a use case
 requires `Derive` output to be dependent on its length, include the length in a `Mix` operation
 beforehand.
 
@@ -143,14 +144,14 @@ beforehand.
 ### `Encrypt`/`Decrypt`
 
 `Encrypt` and `Decrypt` operations append an operation code and a label to the transcript, ratchet
-the protocol's state, encrypt or decrypt an input with AEGIS-128L, and include the AEGIS-128L tag
-via a `Mix` operation.
+the protocol's transcript, encrypt or decrypt an input with AEGIS-128L, and include the AEGIS-128L
+tag via a `Mix` operation.
 
 ```text
 function encrypt(transcript, label, plaintext):
   transcript ← transcript ǁ 0x05                                // Append a Crypt op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label        // Append the encoded label.
-  (transcript, key ǁ nonce) ← ratchet(transcript)               // Ratchet the protocol state.
+  (transcript, key ǁ nonce) ← ratchet(transcript)               // Ratchet the protocol transcript.
   (ciphertext, tag) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
   transcript ← mix(transcript, "tag", tag)                      // Append a Mix operation with the tag.
   (transcript, ciphertext)
@@ -158,7 +159,7 @@ function encrypt(transcript, label, plaintext):
 function decrypt(transcript, label, ciphertext):
   transcript ← transcript ǁ 0x05                                // Append a Crypt op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label        // Append the encoded label.
-  (transcript, key ǁ nonce) ← ratchet(transcript)               // Ratchet the protocol state.
+  (transcript, key ǁ nonce) ← ratchet(transcript)               // Ratchet the protocol transcript.
   (plaintext, tag) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
   transcript ← mix(transcript, "tag", tag)                      // Append a Mix operation with the tag.
   (transcript, plaintext)
@@ -167,11 +168,11 @@ function decrypt(transcript, label, ciphertext):
 Three points bear mentioning about `Encrypt` and `Decrypt`.
 
 First, both `Encrypt` and `Decrypt` use the same operation code to ensure protocols have the same
-state after both encrypting and decrypting data.
+transcript after both encrypting and decrypting data.
 
-Second, despite not updating the protocol state with either the plaintext or ciphertext, the
-inclusion of the long tag ensures the protocol's state is dependent on both because AEGIS-128L is
-key committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
+Second, despite not updating the protocol transcript with either the plaintext or ciphertext, the
+inclusion of the long tag ensures the protocol's transcript is dependent on both because AEGIS-128L
+is key committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
 which produces the same authentication tag is negligible).
 
 **N.B.:** [AEGIS-128L by itself is not fully committing][Iso23], as tag collisions can be found if
@@ -183,15 +184,15 @@ AEGIS-128L, however, mooting this type of attack.
 Third, `Encrypt` operations provide no authentication by themselves. An attacker can modify a
 ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
 they are EAV secure (i.e. a passive adversary will not be able to read plaintext without knowing the
-protocol's prior state) but not IND-CPA secure (i.e. an active adversary with an encryption oracle
-will be able to detect duplicate plaintexts) or IND-CCA secure (i.e. an active adversary can produce
-modified ciphertexts which successfully decrypt). For IND-CPA and IND-CCA security, use
+protocol's prior transcript) but not IND-CPA secure (i.e. an active adversary with an encryption
+oracle will be able to detect duplicate plaintexts) or IND-CCA secure (i.e. an active adversary can
+produce modified ciphertexts which successfully decrypt). For IND-CPA and IND-CCA security, use
 [`Seal`/`Open`](#sealopen).
 
 As with `Derive`, `Encrypt`'s streaming support means an `Encrypt` operation with a shorter
 plaintext produces a keystream which is a prefix of one with a longer plaintext (e.g.  `Encrypt("0",
 "alpha")` and `Encrypt("0", "alphabet")` will produce ciphertexts with the same initial 5 bytes).
-Once the operation is complete, however, the protocols' states would be different. If a use case
+Once the operation is complete, however, the protocols' transcript would be different. If a use case
 requires ciphertexts to be dependent on their length, include the length in a `Mix` operation
 beforehand.
 
@@ -383,7 +384,7 @@ function verify(signer.pub, message, I, s):
 ```
 
 An additional variation on this construction uses `Encrypt` instead of `Mix` to include the
-commitment point `I` in the protocol's state. This makes it impossible to recover the signer's
+commitment point `I` in the protocol's transcript. This makes it impossible to recover the signer's
 public key from a message and signature (which may be desirable for privacy in some contexts) at the
 expense of making batch verification impossible.
 
@@ -437,15 +438,15 @@ adversary knows. A standard Schnorr signature scheme like Ed25519 derives the ch
 from a hash of the signer's public key and the message being signed (i.e. the ciphertext).
 
 With this scheme, on the other hand, the digital signature isn't of the ciphertext alone, but of all
-inputs to the protocol. The challenge scalar `r` is derived from the protocol's state, which depends
-on (among other things) the ECDH shared secret. Unless the adversary already knows the shared secret
-(i.e. the secret key that the plaintext is encrypted with) they can't create their own signature
-(which they're trying to do in order to trick someone into giving them the plaintext).
+inputs to the protocol. The challenge scalar `r` is derived from the protocol's transcript, which
+depends on (among other things) the ECDH shared secret. Unless the adversary already knows the
+shared secret (i.e. the secret key that the plaintext is encrypted with) they can't create their own
+signature (which they're trying to do in order to trick someone into giving them the plaintext).
 
 An adversary attacking an `StE` scheme can decrypt a signed message sent to them and re-encrypt it
 for someone else, allowing them to pose as the original sender. This scheme makes simple replay
 attacks impossible by including both the intended sender and receiver's public keys in the protocol
-state. The initial [HPKE](#hybrid-public-key-encryption)-style portion of the protocol can be
+transcript. The initial [HPKE](#hybrid-public-key-encryption)-style portion of the protocol can be
 trivially constructed by an adversary with an ephemeral key pair of their choosing, but the final
 portion is the sUF-CMA secure [EdDSA-style Schnorr signature scheme](#digital-signatures) from the
 previous section and unforgeable without the sender's private key.

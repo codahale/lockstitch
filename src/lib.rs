@@ -251,20 +251,23 @@ fn concat_kdf(ikm: &[u8], kdf_key: &mut [u8; 32], out: &mut [u8]) {
     let mut counter = 1u32;
     let mut kdf = Sha256::new();
 
+    // Directly use the first full block of KDF output as the KDF key,
     kdf.update(counter.to_be_bytes());
     kdf.update(ikm);
     kdf.update(b"lockstitch");
     kdf.finalize_into_reset(kdf_key.into());
 
+    // Process all full-sized blocks of output to eliminate bounds checks.
     let mut chunks = out.chunks_exact_mut(32);
     for chunk in chunks.by_ref() {
         counter += 1;
         kdf.update(counter.to_be_bytes());
         kdf.update(ikm);
         kdf.update(b"lockstitch");
-        chunk.copy_from_slice(&kdf.finalize_reset());
+        kdf.finalize_into_reset(chunk.into());
     }
 
+    // Process the remainder, if necessary.
     let remainder = chunks.into_remainder();
     if !remainder.is_empty() {
         counter += 1;

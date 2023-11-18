@@ -455,20 +455,20 @@ mod tests {
     fn test_left_encode() {
         let mut buf = [0; 17];
 
-        assert_eq!(left_encode(&mut buf, 0), [0, 1]);
+        assert_eq!(left_encode(&mut buf, 0), [1, 0]);
 
-        assert_eq!(left_encode(&mut buf, 128), [128, 1]);
+        assert_eq!(left_encode(&mut buf, 128), [1, 128]);
 
-        assert_eq!(left_encode(&mut buf, 65536), [1, 0, 0, 3]);
+        assert_eq!(left_encode(&mut buf, 65536), [3, 1, 0, 0]);
 
-        assert_eq!(left_encode(&mut buf, 4096), [16, 0, 2]);
+        assert_eq!(left_encode(&mut buf, 4096), [2, 16, 0]);
 
         assert_eq!(
             left_encode(&mut buf, 18446744073709551615),
-            [255, 255, 255, 255, 255, 255, 255, 255, 8]
+            [8, 255, 255, 255, 255, 255, 255, 255, 255]
         );
 
-        assert_eq!(left_encode(&mut buf, 12345), [48, 57, 2]);
+        assert_eq!(left_encode(&mut buf, 12345), [2, 48, 57]);
     }
 
     #[test]

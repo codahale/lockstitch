@@ -7,7 +7,7 @@ use core::fmt::Debug;
 use crate::aegis_128l::Aegis128L;
 
 use cmov::CmovEq;
-use sha2::digest::{Digest, FixedOutputReset};
+use sha2::digest::Digest;
 use sha2::Sha256;
 
 mod aegis_128l;
@@ -63,6 +63,7 @@ impl Protocol {
     /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
     /// operation and passing all writes to `inner`. Use [`MixWriter::into_inner`] to finish the
     /// operation and recover the protocol and `inner`.
+    #[inline]
     #[cfg(feature = "std")]
     pub fn mix_writer<W: std::io::Write>(mut self, label: &[u8], inner: W) -> MixWriter<W> {
         // Append a Mix op header with the label to the transcript.
@@ -72,20 +73,21 @@ impl Protocol {
         MixWriter { protocol: self, inner, len: 0 }
     }
 
-    /// Modifies the protocol's state irreversibly, preventing rollback.
-    pub fn ratchet(&mut self) {
-        // Perform a Ratchet operation, ignoring the key and nonce.
-        self.ratchet_with_output(&mut []);
-    }
-
     /// Derive output from the protocol's current state and fill the given slice with it.
     #[inline]
     pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
         // Append a Derive op header with the label to the transcript.
         self.op_header(OpCode::Derive, Some(label));
 
-        // Perform a Ratchet operation and generate N bytes of output.
-        self.ratchet_with_output(out);
+        // Calculate the hash of the transcript and replace it with an empty transcript.
+        let ikm = self.transcript.finalize_reset();
+
+        // Use Concat-KDF to derive a new KDF key and any additional output.
+        let mut kdf_key = [0u8; 32];
+        concat_kdf(&ikm, &mut kdf_key, out);
+
+        // Perform a Mix operation with the KDF key.
+        self.mix(b"kdf-key", &kdf_key);
 
         // Perform a Mix operation with the output length.
         self.mix(b"len", left_encode(&mut [0u8; 17], out.len() as u128 * 8));
@@ -105,10 +107,9 @@ impl Protocol {
         // Append a Crypt op header with the label to the transcript.
         self.op_header(OpCode::Crypt, Some(label));
 
-        // Perform a Ratchet operation and generate an AEGIS-128L key and nonce.
-        let mut kdf_out = [0u8; 32];
-        self.ratchet_with_output(&mut kdf_out);
-        let (k, n) = kdf_out.split_at(16);
+        // Derive an AEGIS-128L key and nonce.
+        let kn = self.derive_array::<32>(b"key");
+        let (k, n) = kn.split_at(16);
         let mut aegis = Aegis128L::new(
             k.try_into().expect("should be 16 bytes"),
             n.try_into().expect("should be 16 bytes"),
@@ -127,10 +128,9 @@ impl Protocol {
         // Append a Crypt op header with the label to the transcript.
         self.op_header(OpCode::Crypt, Some(label));
 
-        // Perform a Ratchet operation and generate an AEGIS-128L key and nonce.
-        let mut kdf_out = [0u8; 32];
-        self.ratchet_with_output(&mut kdf_out);
-        let (k, n) = kdf_out.split_at(16);
+        // Derive an AEGIS-128L key and nonce.
+        let kn = self.derive_array::<32>(b"key");
+        let (k, n) = kn.split_at(16);
         let mut aegis = Aegis128L::new(
             k.try_into().expect("should be 16 bytes"),
             n.try_into().expect("should be 16 bytes"),
@@ -225,30 +225,6 @@ impl Protocol {
         unreachable!("unable to hedge a valid value in 10,000 tries");
     }
 
-    /// Perform a `Ratchet` operation, generating KDF output.
-    fn ratchet_with_output(&mut self, out: &mut [u8]) {
-        // Append a Ratchet op header to the transcript.
-        self.op_header(OpCode::Ratchet, None);
-
-        // Calculate the hash of the transcript and replace it with an empty transcript.
-        let ikm = self.transcript.finalize_fixed_reset();
-
-        // Use Concat-KDF to derive a new KDF key and any additional output.
-        let mut counter = 1u32;
-        let mut kdf = Sha256::new();
-        let mut kdf_key = [0u8; 32];
-        for chunk in kdf_key.chunks_mut(32).chain(out.chunks_mut(32)) {
-            kdf.update(counter.to_be_bytes());
-            kdf.update(ikm);
-            kdf.update(b"lockstitch");
-            chunk.copy_from_slice(&kdf.finalize_reset()[..chunk.len()]);
-            counter += 1;
-        }
-
-        // Perform a Mix operation with the KDF key.
-        self.mix(b"kdf-key", &kdf_key);
-    }
-
     /// Append an operation header with an optional label to the protocol transcript.
     #[inline]
     fn op_header(&mut self, op_code: OpCode, label: Option<&[u8]>) {
@@ -264,6 +240,27 @@ impl Protocol {
             self.transcript.update(left_encode(&mut [0u8; 17], label.len() as u128 * 8));
             self.transcript.update(label);
         }
+    }
+}
+
+/// Derive a KDF key and additional output from [NIST SP 800-56C Rev. 2][]'s  _One-Step Key
+/// Derivation_ with SHA-256.
+///
+/// [NIST SP 800-56C Rev. 2]: https://csrc.nist.gov/pubs/sp/800/56/c/r2/final
+fn concat_kdf(ikm: &[u8], kdf_key: &mut [u8; 32], out: &mut [u8]) {
+    let mut counter = 1u32;
+    let mut kdf = Sha256::new();
+    kdf.update(counter.to_be_bytes());
+    kdf.update(ikm);
+    kdf.update(b"lockstitch");
+    kdf.finalize_into_reset(kdf_key.into());
+
+    for chunk in out.chunks_mut(32) {
+        counter += 1;
+        kdf.update(counter.to_be_bytes());
+        kdf.update(ikm);
+        kdf.update(b"lockstitch");
+        chunk.copy_from_slice(&kdf.finalize_reset()[..chunk.len()]);
     }
 }
 
@@ -302,10 +299,9 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 enum OpCode {
     Mix = 0x01,
     Init = 0x02,
-    Ratchet = 0x03,
-    Derive = 0x04,
-    Crypt = 0x05,
-    AuthCrypt = 0x06,
+    Derive = 0x03,
+    Crypt = 0x04,
+    AuthCrypt = 0x05,
 }
 
 /// A [`Write`] implementation which combines all written data into a single `Mix` operation and
@@ -361,23 +357,21 @@ mod tests {
         protocol.mix(b"first", b"one");
         protocol.mix(b"second", b"two");
 
-        expect!["43a449dad24f1224"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
+        expect!["d3281ffc328326dc"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(b"fourth", &mut plaintext);
-        expect!["15e4c57d88aca21416cdcbdcde960bdd3b7d"].assert_eq(&hex::encode(plaintext));
-
-        protocol.ratchet();
+        expect!["0101c8f7b3db85589aefdb8f7b3107aa6515"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(b"fifth", &mut sealed);
 
-        expect!["575b7095719784405a1c97df48cf97730e822790e892ad2a01ace17e1b5389ce570a"]
+        expect!["121ce00b8110a16cf40a79dd2ec45712d7e82c9160ae14a505492b209a99a7dacfb6"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["4d149520741de725"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+        expect!["6d7406ab1012299f"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
     }
 
     #[test]

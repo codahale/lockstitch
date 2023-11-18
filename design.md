@@ -14,21 +14,18 @@ A Lockstitch protocol supports the following operations:
 
 * `Mix`, which adds a labeled input to the protocol's transcript.
 * `Init`, which initializes a protocol with a domain separation string.
-* `Ratchet`, which replaces the protocol's transcript with a hash of the transcript, preventing
-  rollback.
-* `Derive`, which produces a bitstring of arbitrary length that is cryptographically dependent on
-  the protocol's transcript.
+* `Derive`, which ratchets the protocol's transcript, preventing rollback, and generates a bitstring
+  of arbitrary length that is cryptographically dependent on the protocol's prior transcript.
 * `Encrypt`/`Decrypt`, which encrypt and decrypt a message, adding an authentication tag of the
   ciphertext to the protocol transcript.
 * `Seal`/`Open`, which encrypt and decrypt a message, using an authenticator tag to ensure the
   ciphertext has not been modified.
 
-Labels are used for all Lockstitch operations (except `Init` and `Ratchet`) to provide domain
-separation of inputs and outputs. This ensures that semantically distinct values with identical
-encodings (e.g. public keys or ECDH shared secrets) result in distinctly encoded operations so long
-as the labels are distinct. Labels should be human-readable values which communicate the source of
-the input or the intended use of the output. `server-p256-public-key` is a good label; `step-3a` is
-a bad label.
+Labels are used for all Lockstitch operations (except `Init`) to provide domain separation of inputs
+and outputs. This ensures that semantically distinct values with identical encodings (e.g. public
+keys or ECDH shared secrets) result in distinctly encoded operations so long as the labels are
+distinct. Labels should be human-readable values which communicate the source of the input or the
+intended use of the output. `server-p256-public-key` is a good label; `step-3a` is a bad label.
 
 ### `Mix`
 
@@ -43,15 +40,14 @@ function mix(transcript, label, input):
   transcript
 ```
 
-`Mix` encodes the length of the label in bits and the length of the input in bits using
-`left_encode` and `right_encode` from [NIST SP 800-185][], respectively. This ensures an unambiguous
-encoding for any combination of label and input, regardless of length. `right_encode` is used for
-the length of the input to support incremental processing of data streams whose sizes are not known
-in advance.
+`Mix` encodes the length of the label in bits and the length of the input in bits using [NIST SP
+800-185][]'s `left_encode` and `right_encode`, respectively. This ensures an unambiguous encoding
+for any combination of label and input, regardless of length. `right_encode` is used for the length
+of the input to support incremental processing of data streams whose sizes are not known in advance.
 
 [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 
-**N.B.**: Processing more than 2^64 bytes of input without [ratcheting](#ratchet) will result in
+**N.B.**: Processing more than 2^64 bytes of input without [deriving output](#derive) will result in
 undefined behavior.
 
 ### `Init`
@@ -77,36 +73,46 @@ The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch p
 
 **N.B.:** The `Init` operation is only performed once, when a protocol is initialized.
 
-### `Ratchet`
+### `Derive`
 
-A `Ratchet` operation replaces the protocol's transcript with a single `Mix` operation with a
-derived key of the previous transcript as input and returns additional derived output of the given
-length.
+A `Derive` operation appends an operation code and a label to the protocol's transcript, hashes the
+entirety of the transcript, uses the hash to produce derived output, replaces the transcript with
+`Mix` operations containing derived output and the requested output length, and returns the derived
+output.
 
 ```text
-function ratchet(transcript, n):
-  transcript ← transcript ǁ 0x03          // Append a Ratchet op code to the transcript.
-  ikm ← sha256(transcript)                // Hash the transcript in its entirety.
-  kdf_out ← kdf(ikm, "lockstitch", 32+n)  // Derive 32+n bytes of KDF output from the hash.
-  kdf_key ǁ output ← kdf_out              // Split the KDF output into a 32-byte KDF key and returned output.
-  transcript ← mix(ɛ, "kdf-key", kdf_key) // Replace the transcript with a single Mix operation with the KDF key.
-  (transcript, output)                    // Return the new transcript along with the output.
+function derive(transcript, label, n):
+  transcript ← transcript ǁ 0x03                          // Append a Derive op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
+  ikm ← sha256(transcript)                                // Hash the transcript in its entirety.
+  kdf_out ← concat_kdf(ikm, "lockstitch", 32+n)           // Derive 32+n bytes of KDF output from the hash.
+  kdf_key ǁ output ← kdf_out                              // Split the KDF output into a 32-byte KDF key and returned output.
+  transcript ← mix(ɛ, "kdf-key", kdf_key)                 // Replace the transcript with a single Mix operation with the KDF key.
+  transcript ← mix(transcript, "len", left_encode(n))     // Append a Mix operation with the output length.
+  (transcript, output)                                    // Return the new transcript along with the output.
 ```
 
-`Ratchet` appends an operation code to the protocol's transcript, hashes the entire transcript with
+`Derive` appends an operation code to the protocol's transcript, hashes the entire transcript with
 SHA-256 and passes the result to the _One-Step Key Derivation_ key derivation function (KDF) from
 Sec. 4 of [NIST SP 800-56C Rev. 2][] (also known as Concat-KDF), using SHA-256 as the `H` function
-and the string `lockstitch` as the `FixedInfo` parameter.  Finally, the transcript is replaced with
-a single `Mix` operation containing the first 32 bytes of KDF output and the remainder is returned.
+and the string `lockstitch` as the `FixedInfo` parameter. The transcript is replaced with two `Mix`
+operations: one containing the first 32 bytes of KDF output, the other containing the length of the
+output.  Finally, the remainder of the KDF output is returned.
 
 [NIST SP 800-56C Rev. 2]: https://csrc.nist.gov/pubs/sp/800/56/c/r2/final
 
+`Derive` supports streaming output, thus a shorter `Derive` operation will return a prefix of a
+longer one (e.g.  `Derive("a", 16)` and `Derive("a", 32)` will share the same initial 16 bytes).
+Once the operation is complete, however, the protocols' transcripts will be different. If a use case
+requires `Derive` output to be dependent on its length, include the length in a `Mix` operation
+beforehand.
+
 #### KDF Chains
 
-Given that `Ratchet` is KDF-secure with respect to the protocol's transcript and replaces the
+Given that `Derive` is KDF-secure with respect to the protocol's transcript and replaces the
 protocol's transcript with derived output, sequences of Lockstitch operations which accept input and
-output in a protocol therefore constitute a [KDF chain][], giving Lockstitch protocols the following
-security properties:
+output in a protocol form a [KDF chain][], giving Lockstitch protocols the following security
+properties:
 
 [KDF chain]: https://signal.org/docs/specifications/doubleratchet/doubleratchet.pdf
 
@@ -118,53 +124,27 @@ security properties:
   possession of the protocol's transcript as long as one of the future inputs to the protocol is
   secret.
 
-### `Derive`
-
-A `Derive` operation appends an operation code and a label to the protocol's transcript and ratchets
-the transcript, generating the given number of bits of output. Finally, it performs a `Mix`
-operation with the number of bits produced as input.
-
-```text
-function derive(transcript, label, n):
-  transcript ← transcript ǁ 0x04                          // Append a Derive op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
-  (transcript, out) ← ratchet(transcript, n)              // Ratchet the protocol transcript and generate output.
-  transcript ← mix(transcript, "len", left_encode(n))     // Append a Mix operation with the output length.
-  (transcript, out)
-```
-
-A `Derive` operation's output is indistinguishable from random by an adversary who does not know the
-protocol's transcript prior to the operation, assuming that SHA-256 is collision-resistant and
-`Ratchet` is KDF secure. The protocol's transcript after the operation is dependent on both the fact
-that the operation was a `Derive` operation as well as the number of bytes produced.
-
-`Derive` supports streaming output, thus a shorter `Derive` operation will return a prefix of a
-longer one (e.g.  `Derive("a", 16)` and `Derive("a", 32)` will share the same initial 16 bytes).
-Once the operation is complete, however, the protocols' transcripts will be different. If a use case
-requires `Derive` output to be dependent on its length, include the length in a `Mix` operation
-beforehand.
-
 **N.B.**: Each operation is limited to 2^40-32 bytes of output.
 
 ### `Encrypt`/`Decrypt`
 
-`Encrypt` and `Decrypt` operations append an operation code and a label to the transcript, ratchet
-the protocol's transcript to generate an AEGIS-128L key and nonce, encrypt or decrypt an input with
-AEGIS-128L, and include the AEGIS-128L tag via a `Mix` operation.
+`Encrypt` and `Decrypt` operations append an operation code and a label to the transcript, derive an
+AEGIS-128L key and nonce, encrypt or decrypt an input with AEGIS-128L, and append a `Mix` operation
+with the AEGIS-128L tag to the transcript.
 
 ```text
 function encrypt(transcript, label, plaintext):
-  transcript ← transcript ǁ 0x05                                // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ 0x04                                // Append a Crypt op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label        // Append the encoded label.
-  (transcript, key ǁ nonce) ← ratchet(transcript, 32)           // Ratchet the protocol transcript.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)     // Derive an AEGIS-128L key and nonce.
   (ciphertext, tag) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
   transcript ← mix(transcript, "tag", tag)                      // Append a Mix operation with the tag.
   (transcript, ciphertext)
 
 function decrypt(transcript, label, ciphertext):
-  transcript ← transcript ǁ 0x05                                // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ 0x04                                // Append a Crypt op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label        // Append the encoded label.
-  (transcript, key ǁ nonce) ← ratchet(transcript, 32)           // Ratchet the protocol transcript.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)     // Derive an AEGIS-128L key and nonce.
   (plaintext, tag) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
   transcript ← mix(transcript, "tag", tag)                      // Append a Mix operation with the tag.
   (transcript, plaintext)
@@ -208,14 +188,14 @@ authenticated encryption, returning a ciphertext and an authentication tag.
 
 ```text
 function seal(transcript, label, plaintext):
-  transcript ← transcript ǁ 0x06                                       // Append an AuthCrypt op code to the transcript.
+  transcript ← transcript ǁ 0x05                                       // Append an AuthCrypt op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label               // Append the encoded label.
   (transcript, ciphertext) ← encrypt(transcript, "message", plaintext) // Encrypt the plaintext.
   (transcript, tag) ← derive(transcript, "tag", 16)                    // Derive an authentication tag.
   (transcript, ciphertext, tag)
 
 function open(transcript, label, ciphertext, tag):
-  transcript ← transcript ǁ 0x06                                       // Append an AuthCrypt op code to the transcript.
+  transcript ← transcript ǁ 0x05                                       // Append an AuthCrypt op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label               // Append the encoded label.
   (transcript, plaintext) ← decrypt("message", ciphertext)             // Decrypt the ciphertext.
   (transcript, tag′) ← derive(transcript, "tag", 16)                   // Derive a counterfactual authentication tag.

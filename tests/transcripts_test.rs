@@ -11,12 +11,11 @@ enum Input {
     Decrypt(Vec<u8>, Vec<u8>),
     Seal(Vec<u8>, Vec<u8>),
     Open(Vec<u8>, Vec<u8>),
-    Ratchet,
 }
 
 impl TypeGenerator for Input {
     fn generate<D: bolero::Driver>(driver: &mut D) -> Option<Self> {
-        Some(match driver.gen_u8(Bound::Included(&0), Bound::Included(&5))? {
+        Some(match driver.gen_u8(Bound::Included(&0), Bound::Excluded(&5))? {
             0 => Input::Mix(driver.gen()?, driver.gen()?),
             1 => Input::Derive(
                 driver.gen()?,
@@ -25,7 +24,6 @@ impl TypeGenerator for Input {
             2 => Input::Encrypt(driver.gen()?, driver.gen()?),
             3 => Input::Decrypt(driver.gen()?, driver.gen()?),
             4 => Input::Seal(driver.gen()?, driver.gen()?),
-            5 => Input::Ratchet,
             // No way to produce valid inputs for Open operations.
             _ => unreachable!(),
         })
@@ -91,10 +89,6 @@ fn apply_transcript(t: &Transcript) -> Vec<Output> {
             Input::Open(ref label, mut ciphertext) => {
                 protocol.open(label, &mut ciphertext).map(|p| Output::Opened(p.to_vec()))
             }
-            Input::Ratchet => {
-                protocol.ratchet();
-                None
-            }
         })
         .collect()
 }
@@ -136,10 +130,6 @@ fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
                 let plaintext =
                     protocol.open(&label, &mut ciphertext).map(|p| p.to_vec()).unwrap_or_default();
                 Input::Seal(label, plaintext)
-            }
-            Input::Ratchet => {
-                protocol.ratchet();
-                Input::Ratchet
             }
         })
         .collect();

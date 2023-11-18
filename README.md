@@ -21,13 +21,13 @@ In addition, there is absolutely no guarantee of backwards compatibility.
 
 A Lockstitch protocol is a stateful object which has five different operations:
 
+* `Init`: Initializes a protocol with a domain separation string.
 * `Mix`: Mixes a piece of data into the protocol's transcript, making all future outputs dependent
   on it.
 * `Derive`: Outputs bytes of pseudo-random data dependent on the protocol's transcript.
 * `Encrypt`/`Decrypt`: Encrypts and decrypts data using the protocol's transcript as the key.
 * `Seal`/`Open`: Encrypts and decrypts data with authentication using the protocol's transcript as
   the key.
-* `Ratchet`: Irreversibly modifies the protocol's transcript, preventing rollback.
 
 Using these operations, one can construct a wide variety of symmetric-key constructions.
 

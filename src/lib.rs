@@ -278,20 +278,22 @@ fn concat_kdf(ikm: &[u8], kdf_key: &mut [u8; 32], out: &mut [u8]) {
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
 fn left_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
+    let len = buf.len();
     buf[1..].copy_from_slice(&value.to_be_bytes());
-    let offset = buf.iter().position(|&v| v != 0).unwrap_or(8);
-    buf[offset - 1] = (17 - offset) as u8;
+    let offset = buf.iter().position(|&v| v != 0).unwrap_or(len - 1);
+    buf[offset - 1] = (len - offset) as u8;
     &buf[offset - 1..]
 }
 
-/// Encode a value using [NIST SP 800-185][]'s `left_encode`.
+/// Encode a value using [NIST SP 800-185][]'s `right_encode`.
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
 fn right_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
-    buf[..16].copy_from_slice(&value.to_be_bytes());
-    let offset = buf.iter().position(|&v| v != 0).unwrap_or(7);
-    buf[16] = (16 - offset) as u8;
+    let len = buf.len();
+    buf[..len - 1].copy_from_slice(&value.to_be_bytes());
+    let offset = buf.iter().position(|&v| v != 0).unwrap_or(len - 2);
+    buf[len - 1] = (len - 1 - offset) as u8;
     &buf[offset..]
 }
 
@@ -431,5 +433,45 @@ mod tests {
 
         assert_eq!(message, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
         assert_eq!(tag_s, tag_r);
+    }
+
+    #[test]
+    fn test_left_encode() {
+        let mut buf = [0; 17];
+
+        assert_eq!(left_encode(&mut buf, 0), [1, 0]);
+
+        assert_eq!(left_encode(&mut buf, 128), [1, 128]);
+
+        assert_eq!(left_encode(&mut buf, 65536), [3, 1, 0, 0]);
+
+        assert_eq!(left_encode(&mut buf, 4096), [2, 16, 0]);
+
+        assert_eq!(
+            left_encode(&mut buf, 18446744073709551615),
+            [8, 255, 255, 255, 255, 255, 255, 255, 255]
+        );
+
+        assert_eq!(left_encode(&mut buf, 54321), [2, 212, 49]);
+    }
+
+    #[test]
+    fn test_right_encode() {
+        let mut buf = [0; 17];
+
+        assert_eq!(right_encode(&mut buf, 0), [0, 1]);
+
+        assert_eq!(right_encode(&mut buf, 128), [128, 1]);
+
+        assert_eq!(right_encode(&mut buf, 65536), [1, 0, 0, 3]);
+
+        assert_eq!(right_encode(&mut buf, 4096), [16, 0, 2]);
+
+        assert_eq!(
+            right_encode(&mut buf, 18446744073709551615),
+            [255, 255, 255, 255, 255, 255, 255, 255, 8]
+        );
+
+        assert_eq!(right_encode(&mut buf, 12345), [48, 57, 2]);
     }
 }

@@ -335,11 +335,10 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
-#[allow(clippy::needless_range_loop)]
 fn left_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
     let n = encode_size(value);
-    for i in 1..=n {
-        buf[i] = (value >> (8 * (n - i))) as u8;
+    for (i, v) in buf.iter_mut().enumerate().take(n + 1).skip(1) {
+        *v = (value >> (8 * (n - i))) as u8;
     }
     buf[0] = n as u8;
     &buf[..n + 1]
@@ -351,8 +350,8 @@ fn left_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
 #[inline]
 fn right_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
     let n = encode_size(value);
-    for i in 1..=n {
-        buf[i - 1] = (value >> (8 * (n - i))) as u8;
+    for (i, v) in buf.iter_mut().enumerate().take(n) {
+        *v = (value >> (8 * (n - i - 1))) as u8;
     }
     buf[n] = n as u8;
     &buf[..n + 1]

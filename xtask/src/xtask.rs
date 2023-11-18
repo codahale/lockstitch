@@ -77,7 +77,7 @@ fn ci(sh: &Shell) -> Result<()> {
 }
 
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-const RUSTFLAGS: &str = "-C target-feature=+aes,+ssse3";
+const RUSTFLAGS: &str = "-C target-feature=+aes,+ssse3,+sha,+sse2,+sse4.1";
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
 const RUSTFLAGS: &str = "";

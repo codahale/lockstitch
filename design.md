@@ -12,13 +12,14 @@ The basic unit of Lockstitch is the protocol, which encapsulates a transcript of
 
 A Lockstitch protocol supports the following operations:
 
-* `Mix`, which makes all future output cryptographically dependent on a given labeled input.
+* `Mix`, which adds a labeled input to the protocol's transcript.
 * `Init`, which initializes a protocol with a domain separation string.
-* `Ratchet`, which ratchets the protocol transcript and optionally keys an AEGIS-128L instance.
+* `Ratchet`, which replaces the protocol's transcript with a hash of the transcript, preventing
+  rollback.
 * `Derive`, which produces a bitstring of arbitrary length that is cryptographically dependent on
   the protocol's transcript.
-* `Encrypt`/`Decrypt`, which encrypt and decrypt a message, making the protocol transcript
-  cryptographically dependent on the message.
+* `Encrypt`/`Decrypt`, which encrypt and decrypt a message, adding an authentication tag of the
+  ciphertext to the protocol transcript.
 * `Seal`/`Open`, which encrypt and decrypt a message, using an authenticator tag to ensure the
   ciphertext has not been modified.
 

@@ -26,6 +26,7 @@ and outputs. This ensures that semantically distinct values with identical encod
 keys or ECDH shared secrets) result in distinctly encoded operations so long as the labels are
 distinct. Labels should be human-readable values which communicate the source of the input or the
 intended use of the output. `server-p256-public-key` is a good label; `step-3a` is a bad label.
+Labels can be a maximum of 8196 bytes.
 
 ### `Init`
 

@@ -54,7 +54,7 @@ impl Protocol {
         //
         // input || right_encode(|input|)
         self.transcript.update(input);
-        self.transcript.update(right_encode(&mut [0u8; 17], input.len() as u128 * 8));
+        self.transcript.update(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
     }
 
     /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
@@ -87,7 +87,7 @@ impl Protocol {
         self.mix(b"kdf-key", &kdf_key);
 
         // Perform a Mix operation with the output length.
-        self.mix(b"len", left_encode(&mut [0u8; 17], out.len() as u128 * 8));
+        self.mix(b"len", left_encode(&mut [0u8; 3], out.len() as u16 * 8));
     }
 
     /// Derive output from the protocol's current state and return it as an `N`-byte array.
@@ -233,7 +233,7 @@ impl Protocol {
         // Append the label to the transcript:
         //
         //   left_encode(|label|) || label
-        self.transcript.update(left_encode(&mut [0u8; 17], label.len() as u128 * 8));
+        self.transcript.update(left_encode(&mut [0u8; 3], label.len() as u16 * 8));
         self.transcript.update(label);
     }
 }
@@ -277,19 +277,22 @@ fn concat_kdf(ikm: &[u8], kdf_key: &mut [u8; 32], out: &mut [u8]) {
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
-fn left_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
-    let len = buf.len();
+fn left_encode(buf: &mut [u8; 3], value: u16) -> &[u8] {
     buf[1..].copy_from_slice(&value.to_be_bytes());
-    let offset = buf.iter().position(|&v| v != 0).unwrap_or(len - 1);
-    buf[offset - 1] = (len - offset) as u8;
-    &buf[offset - 1..]
+    if buf[1] == 0 {
+        buf[1] = 1;
+        &buf[1..]
+    } else {
+        buf[0] = 2;
+        buf
+    }
 }
 
 /// Encode a value using [NIST SP 800-185][]'s `right_encode`.
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
-fn right_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
+fn right_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
     let len = buf.len();
     buf[..len - 1].copy_from_slice(&value.to_be_bytes());
     let offset = buf.iter().position(|&v| v != 0).unwrap_or(len - 2);
@@ -331,7 +334,7 @@ impl<W: std::io::Write> MixWriter<W> {
     #[inline]
     pub fn into_inner(mut self) -> (Protocol, W) {
         // Append the right-encoded length to the transcript.
-        self.protocol.transcript.update(right_encode(&mut [0u8; 17], self.len as u128 * 8));
+        self.protocol.transcript.update(right_encode(&mut [0u8; 9], self.len * 8));
         (self.protocol, self.inner)
     }
 }
@@ -437,27 +440,20 @@ mod tests {
 
     #[test]
     fn test_left_encode() {
-        let mut buf = [0; 17];
+        let mut buf = [0; 3];
 
         assert_eq!(left_encode(&mut buf, 0), [1, 0]);
 
         assert_eq!(left_encode(&mut buf, 128), [1, 128]);
 
-        assert_eq!(left_encode(&mut buf, 65536), [3, 1, 0, 0]);
-
         assert_eq!(left_encode(&mut buf, 4096), [2, 16, 0]);
-
-        assert_eq!(
-            left_encode(&mut buf, 18446744073709551615),
-            [8, 255, 255, 255, 255, 255, 255, 255, 255]
-        );
 
         assert_eq!(left_encode(&mut buf, 54321), [2, 212, 49]);
     }
 
     #[test]
     fn test_right_encode() {
-        let mut buf = [0; 17];
+        let mut buf = [0; 9];
 
         assert_eq!(right_encode(&mut buf, 0), [0, 1]);
 

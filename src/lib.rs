@@ -39,7 +39,7 @@ impl Protocol {
         let mut protocol = Protocol { transcript: Sha256::new() };
 
         // Append the Init op header to the transcript with the domain as the label.
-        protocol.op_header(OpCode::Init, Some(domain.as_bytes()));
+        protocol.op_header(OpCode::Init, domain.as_bytes());
 
         protocol
     }
@@ -48,7 +48,7 @@ impl Protocol {
     #[inline]
     pub fn mix(&mut self, label: &[u8], input: &[u8]) {
         // Append a Mix op header with the label to the transcript.
-        self.op_header(OpCode::Mix, Some(label));
+        self.op_header(OpCode::Mix, label);
 
         // Append the input to the transcript with right-encoded length.
         //
@@ -64,7 +64,7 @@ impl Protocol {
     #[cfg(feature = "std")]
     pub fn mix_writer<W: std::io::Write>(mut self, label: &[u8], inner: W) -> MixWriter<W> {
         // Append a Mix op header with the label to the transcript.
-        self.op_header(OpCode::Mix, Some(label));
+        self.op_header(OpCode::Mix, label);
 
         // Move the protocol to a MixWriter.
         MixWriter { protocol: self, inner, len: 0 }
@@ -74,7 +74,7 @@ impl Protocol {
     #[inline]
     pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
         // Append a Derive op header with the label to the transcript.
-        self.op_header(OpCode::Derive, Some(label));
+        self.op_header(OpCode::Derive, label);
 
         // Calculate the hash of the transcript and replace it with an empty transcript.
         let ikm = self.transcript.finalize_reset();
@@ -102,7 +102,7 @@ impl Protocol {
     #[inline]
     pub fn encrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
         // Append a Crypt op header with the label to the transcript.
-        self.op_header(OpCode::Crypt, Some(label));
+        self.op_header(OpCode::Crypt, label);
 
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>(b"key");
@@ -123,7 +123,7 @@ impl Protocol {
     #[inline]
     pub fn decrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
         // Append a Crypt op header with the label to the transcript.
-        self.op_header(OpCode::Crypt, Some(label));
+        self.op_header(OpCode::Crypt, label);
 
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>(b"key");
@@ -149,7 +149,7 @@ impl Protocol {
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Append an AuthCrypt op header with the label to the transcript.
-        self.op_header(OpCode::AuthCrypt, Some(label));
+        self.op_header(OpCode::AuthCrypt, label);
 
         // Perform a Crypt operation with the plaintext.
         self.encrypt(b"message", in_out);
@@ -167,7 +167,7 @@ impl Protocol {
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Append an AuthCrypt op header with the label to the transcript.
-        self.op_header(OpCode::AuthCrypt, Some(label));
+        self.op_header(OpCode::AuthCrypt, label);
 
         // Perform a Crypt operation with the ciphertext.
         self.decrypt(b"message", in_out);
@@ -224,19 +224,17 @@ impl Protocol {
 
     /// Append an operation header with an optional label to the protocol transcript.
     #[inline]
-    fn op_header(&mut self, op_code: OpCode, label: Option<&[u8]>) {
+    fn op_header(&mut self, op_code: OpCode, label: &[u8]) {
         // Append the operation code to the transcript:
         //
         //   op_code
         self.transcript.update([op_code as u8]);
 
-        // Append the label, if any, to the transcript:
+        // Append the label to the transcript:
         //
         //   left_encode(|label|) || label
-        if let Some(label) = label {
-            self.transcript.update(left_encode(&mut [0u8; 17], label.len() as u128 * 8));
-            self.transcript.update(label);
-        }
+        self.transcript.update(left_encode(&mut [0u8; 17], label.len() as u128 * 8));
+        self.transcript.update(label);
     }
 }
 

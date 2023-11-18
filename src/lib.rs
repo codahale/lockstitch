@@ -225,10 +225,9 @@ impl Protocol {
         unreachable!("unable to hedge a valid value in 10,000 tries");
     }
 
-    /// Perform a `Ratchet` operation, returning an AEGIS-128L instance for optional output.
-    #[inline]
+    /// Perform a `Ratchet` operation, generating KDF output.
     fn ratchet_with_output(&mut self, out: &mut [u8]) {
-        // Append a  Ratchet op header to the transcript.
+        // Append a Ratchet op header to the transcript.
         self.op_header(OpCode::Ratchet, None);
 
         // Calculate the hash of the transcript and replace it with an empty transcript.

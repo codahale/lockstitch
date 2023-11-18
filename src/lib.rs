@@ -38,11 +38,8 @@ impl Protocol {
         // Initialize a protocol with an empty transcript.
         let mut protocol = Protocol { transcript: Sha256::new() };
 
-        // Append the Init op header to the transcript.
-        protocol.op_header(OpCode::Init, None);
-
-        // Perform a Mix operation with the domain.
-        protocol.mix(b"domain", domain.as_bytes());
+        // Append the Init op header to the transcript with the domain as the label.
+        protocol.op_header(OpCode::Init, Some(domain.as_bytes()));
 
         protocol
     }
@@ -311,8 +308,8 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 /// All Lockstitch operation types.
 #[derive(Debug, Clone, Copy)]
 enum OpCode {
-    Mix = 0x01,
-    Init = 0x02,
+    Init = 0x01,
+    Mix = 0x02,
     Derive = 0x03,
     Crypt = 0x04,
     AuthCrypt = 0x05,
@@ -371,21 +368,21 @@ mod tests {
         protocol.mix(b"first", b"one");
         protocol.mix(b"second", b"two");
 
-        expect!["d3281ffc328326dc"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
+        expect!["75d890340e76facd"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(b"fourth", &mut plaintext);
-        expect!["0101c8f7b3db85589aefdb8f7b3107aa6515"].assert_eq(&hex::encode(plaintext));
+        expect!["98c34aba949134ead021cbc12596e7c29827"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(b"fifth", &mut sealed);
 
-        expect!["121ce00b8110a16cf40a79dd2ec45712d7e82c9160ae14a505492b209a99a7dacfb6"]
+        expect!["a4f5cebc56e71efc883365751fa99043d21f025bc2f66afb0fd22129908d51614449"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["6d7406ab1012299f"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+        expect!["82643fff7a7bb02e"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
     }
 
     #[test]

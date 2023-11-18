@@ -12,8 +12,8 @@ The basic unit of Lockstitch is the protocol, which encapsulates a transcript of
 
 A Lockstitch protocol supports the following operations:
 
-* `Mix`, which adds a labeled input to the protocol's transcript.
 * `Init`, which initializes a protocol with a domain separation string.
+* `Mix`, which adds a labeled input to the protocol's transcript.
 * `Derive`, which ratchets the protocol's transcript, preventing rollback, and generates a bitstring
   of arbitrary length that is cryptographically dependent on the protocol's prior transcript.
 * `Encrypt`/`Decrypt`, which encrypt and decrypt a message, adding an authentication tag of the
@@ -27,29 +27,6 @@ keys or ECDH shared secrets) result in distinctly encoded operations so long as 
 distinct. Labels should be human-readable values which communicate the source of the input or the
 intended use of the output. `server-p256-public-key` is a good label; `step-3a` is a bad label.
 
-### `Mix`
-
-A `Mix` operation accepts a label and an input, encodes them, and appends them to the protocol's
-transcript along with a constant operation code:
-
-```text
-function mix(transcript, label, input):
-  transcript ← transcript ǁ 0x01                          // Append a Mix op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
-  transcript ← transcript ǁ input ǁ right_encode(|input|) // Append the encoded input.
-  transcript
-```
-
-`Mix` encodes the length of the label in bits and the length of the input in bits using [NIST SP
-800-185][]'s `left_encode` and `right_encode`, respectively. This ensures an unambiguous encoding
-for any combination of label and input, regardless of length. `right_encode` is used for the length
-of the input to support incremental processing of data streams whose sizes are not known in advance.
-
-[NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
-
-**N.B.**: Processing more than 2^64 bytes of input without [deriving output](#derive) will result in
-undefined behavior.
-
 ### `Init`
 
 An `Init` operation initializes a Lockstitch protocol with a domain separation string by beginning a
@@ -57,10 +34,18 @@ transcript with a constant operation code and then performing a `Mix` operation 
 
 ```text
 function init(domain):
-  transcript ← 0x02                                  // Begin a new transcript with an Init op code.
-  transcript ← transcript ǁ mix(ɛ, "domain", domain) // Append a Mix operation with the domain.
+  transcript ← 0x01                                        // Begin the transcript with an Init op code.
+  transcript ← transcript ǁ left_encode(|domain|) ǁ domain // Append the encoded domain.
   transcript
 ```
+
+**N.B.:** The `Init` operation is only performed once, when a protocol is initialized.
+
+`Init` encodes the length of the domain in bits using [NIST SP 800-185][]'s `left_encode`.  This
+ensures an unambiguous encoding for any combination of domain and second operation in the
+transcript.
+
+[NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 
 The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch protocol domains:
 
@@ -71,7 +56,26 @@ The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch p
 > different applications or components to inadvertently use the same context string. The safest way
 > to guarantee this is to prevent the context string from including input of any kind.
 
-**N.B.:** The `Init` operation is only performed once, when a protocol is initialized.
+### `Mix`
+
+A `Mix` operation accepts a label and an input, encodes them, and appends them to the protocol's
+transcript along with a constant operation code:
+
+```text
+function mix(transcript, label, input):
+  transcript ← transcript ǁ 0x02                          // Append a Mix op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
+  transcript ← transcript ǁ input ǁ right_encode(|input|) // Append the encoded input.
+  transcript
+```
+
+`Mix` encodes the length of the label in bits and the length of the input in bits using [NIST SP
+800-185][]'s `left_encode` and `right_encode`, respectively. This ensures an unambiguous encoding
+for any combination of label and input, regardless of length. `right_encode` is used for the length
+of the input to support incremental processing of data streams whose sizes are not known in advance.
+
+**N.B.**: Processing more than 2^64 bytes of input without [deriving output](#derive) will result in
+undefined behavior.
 
 ### `Derive`
 

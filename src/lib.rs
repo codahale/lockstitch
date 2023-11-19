@@ -80,8 +80,8 @@ impl Protocol {
     /// Derive output from the protocol's current state and fill the given slice with it.
     #[inline]
     pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
-        const MAX_LEN: usize = (u32::MAX - 1) as usize * 32;
-        assert!(out.len() < MAX_LEN, "derive is limited to output lengths <= {}", MAX_LEN);
+        const MAX_LEN: u64 = (u32::MAX - 1) as u64 * 32;
+        assert!((out.len() as u64) < MAX_LEN, "derive is limited to output lengths <= {}", MAX_LEN);
 
         // Append a Derive op header with the label to the transcript.
         //

@@ -211,9 +211,10 @@ impl Protocol {
         &self,
         mut rng: impl rand_core::RngCore + rand_core::CryptoRng,
         secrets: &[impl AsRef<[u8]>],
+        max_tries: usize,
         f: impl Fn(&mut Self) -> Option<R>,
     ) -> R {
-        for _ in 0..10_000 {
+        for _ in 0..max_tries {
             // Clone the protocol's state.
             let mut clone = self.clone();
 
@@ -233,7 +234,7 @@ impl Protocol {
             }
         }
 
-        unreachable!("unable to hedge a valid value in 10,000 tries");
+        unreachable!("unable to hedge a valid value in {} tries", max_tries);
     }
 
     /// Append an operation header with an optional label to the protocol transcript.
@@ -403,7 +404,7 @@ mod tests {
     fn hedging() {
         let mut hedger = Protocol::new("com.example.hedge");
         hedger.mix(b"first", b"one");
-        let tag = hedger.hedge(rand::thread_rng(), &[b"two"], |clone| {
+        let tag = hedger.hedge(rand::thread_rng(), &[b"two"], 1_000, |clone| {
             let tag = clone.derive_array::<16>(b"tag");
             (tag[0] == 0).then_some(tag)
         });

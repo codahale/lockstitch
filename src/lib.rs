@@ -455,7 +455,41 @@ mod tests {
     }
 
     #[test]
-    fn test_left_encode() {
+    fn left_encode_injective() {
+        bolero::check!().with_type::<(u64, u64)>().cloned().for_each(|(a, b)| {
+            let mut buf_a = [0u8; 9];
+            let mut buf_b = [0u8; 9];
+
+            let a_e = left_encode(&mut buf_a, a);
+            let b_e = left_encode(&mut buf_b, b);
+
+            if a == b {
+                assert_eq!(a_e, b_e);
+            } else {
+                assert_ne!(a_e, b_e);
+            }
+        });
+    }
+
+    #[test]
+    fn right_encode_injective() {
+        bolero::check!().with_type::<(u64, u64)>().cloned().for_each(|(a, b)| {
+            let mut buf_a = [0u8; 9];
+            let mut buf_b = [0u8; 9];
+
+            let a_e = right_encode(&mut buf_a, a);
+            let b_e = right_encode(&mut buf_b, b);
+
+            if a == b {
+                assert_eq!(a_e, b_e);
+            } else {
+                assert_ne!(a_e, b_e);
+            }
+        });
+    }
+
+    #[test]
+    fn left_encode_test_vectors() {
         let mut buf = [0; 9];
 
         assert_eq!(left_encode(&mut buf, 0), [1, 0]);
@@ -475,7 +509,7 @@ mod tests {
     }
 
     #[test]
-    fn test_right_encode() {
+    fn right_encode_test_vectors() {
         let mut buf = [0; 9];
 
         assert_eq!(right_encode(&mut buf, 0), [0, 1]);

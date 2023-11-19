@@ -10,6 +10,8 @@ jobs:
         target:
             - aegis_128l::tests::round_trip
             - aegis_128l::tests::interop
+            - tests::left_encode_injective
+            - tests::right_encode_injective 
             - aead
             - daead
             - tuple_hash

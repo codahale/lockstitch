@@ -58,7 +58,10 @@ impl Protocol {
         //
         //   input || right_encode(|input|)
         self.transcript.update(input);
-        self.transcript.update(right_encode(&mut [0u8; 17], input.len() as u128 * 8));
+        self.transcript.update(right_encode(
+            &mut [0u8; 9],
+            (input.len() as u64).checked_mul(8).expect("should be <= 2^61 bits"),
+        ));
     }
 
     /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
@@ -77,6 +80,9 @@ impl Protocol {
     /// Derive output from the protocol's current state and fill the given slice with it.
     #[inline]
     pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
+        const MAX_LEN: usize = (u32::MAX - 1) as usize * 32;
+        assert!(out.len() < MAX_LEN, "derive is limited to output lengths <= {}", MAX_LEN);
+
         // Append a Derive op header with the label to the transcript.
         //
         //   0x03 || left_encode(|label|) || label
@@ -93,7 +99,7 @@ impl Protocol {
         self.mix(b"kdf-key", &kdf_key);
 
         // Perform a Mix operation with the output length.
-        self.mix(b"len", left_encode(&mut [0u8; 17], out.len() as u128 * 8));
+        self.mix(b"len", left_encode(&mut [0u8; 9], out.len() as u64 * 8));
     }
 
     /// Derive output from the protocol's current state and return it as an `N`-byte array.
@@ -243,7 +249,7 @@ impl Protocol {
         //
         //   op_code || left_encode(|label|) || label
         self.transcript.update([op_code as u8]);
-        self.transcript.update(left_encode(&mut [0u8; 17], label.len() as u128 * 8));
+        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         self.transcript.update(label);
     }
 }
@@ -317,7 +323,10 @@ impl<W: std::io::Write> MixWriter<W> {
     #[inline]
     pub fn into_inner(mut self) -> (Protocol, W) {
         // Append the right-encoded length to the transcript.
-        self.protocol.transcript.update(right_encode(&mut [0u8; 17], self.len as u128 * 8));
+        self.protocol.transcript.update(right_encode(
+            &mut [0u8; 9],
+            self.len.checked_mul(8).expect("should be <= 2^61 bits"),
+        ));
         (self.protocol, self.inner)
     }
 }
@@ -344,22 +353,24 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
-fn left_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
+fn left_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
+    let len = buf.len();
     buf[1..].copy_from_slice(&value.to_be_bytes());
-    let n = (16 - value.leading_zeros() as usize / 8).max(1);
-    buf[buf.len() - n - 1] = n as u8;
-    &buf[buf.len() - n - 1..]
+    let n = (len - 1 - value.leading_zeros() as usize / 8).max(1);
+    buf[len - n - 1] = n as u8;
+    &buf[len - n - 1..]
 }
 
 /// Encode a value using [NIST SP 800-185][]'s `right_encode`.
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
-fn right_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
-    buf[..16].copy_from_slice(&value.to_be_bytes());
-    let n = (16 - value.leading_zeros() as usize / 8).max(1);
-    buf[buf.len() - 1] = n as u8;
-    &buf[buf.len() - n - 1..]
+fn right_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
+    let len = buf.len();
+    buf[..len - 1].copy_from_slice(&value.to_be_bytes());
+    let n = (len - 1 - value.leading_zeros() as usize / 8).max(1);
+    buf[len - 1] = n as u8;
+    &buf[len - n - 1..]
 }
 
 #[cfg(all(test, feature = "std"))]
@@ -445,7 +456,7 @@ mod tests {
 
     #[test]
     fn test_left_encode() {
-        let mut buf = [0; 17];
+        let mut buf = [0; 9];
 
         assert_eq!(left_encode(&mut buf, 0), [1, 0]);
 
@@ -465,7 +476,7 @@ mod tests {
 
     #[test]
     fn test_right_encode() {
-        let mut buf = [0; 17];
+        let mut buf = [0; 9];
 
         assert_eq!(right_encode(&mut buf, 0), [0, 1]);
 

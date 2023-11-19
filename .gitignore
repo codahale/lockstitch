@@ -1,2 +1,3 @@
 /target
-__fuzz__
+/src/__fuzz__/**/*
+/tests/__fuzz__/**/*

@@ -76,7 +76,7 @@ function mix(transcript, label, input):
 for any combination of label and input, regardless of length. `right_encode` is used for the length
 of the input to support incremental processing of data streams whose sizes are not known in advance.
 
-**N.B.**: Processing more than 2^64 bytes of input without [deriving output](#derive) will result in
+**N.B.**: Processing more than 2^61 bytes of input without [deriving output](#derive) will result in
 undefined behavior.
 
 ### `Derive`

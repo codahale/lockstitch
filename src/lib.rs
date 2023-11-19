@@ -334,16 +334,9 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
-fn left_encode(buf: &mut [u8; 17], mut value: u128) -> &[u8] {
-    let mut n = 0;
-    let mut i = buf.len() - 1;
-    while value != 0 && n < buf.len() {
-        buf[i] = value as u8;
-        value >>= 8;
-        n += 1;
-        i -= 1;
-    }
-    n = n.max(1);
+fn left_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
+    buf[1..].copy_from_slice(&value.to_be_bytes());
+    let n = (16 - value.leading_zeros() as usize / 8).max(1);
     buf[buf.len() - n - 1] = n as u8;
     &buf[buf.len() - n - 1..]
 }
@@ -352,16 +345,9 @@ fn left_encode(buf: &mut [u8; 17], mut value: u128) -> &[u8] {
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
-fn right_encode(buf: &mut [u8; 17], mut value: u128) -> &[u8] {
-    let mut n = 0;
-    let mut i = buf.len() - 2;
-    while value != 0 && n < buf.len() {
-        buf[i] = value as u8;
-        value >>= 8;
-        n += 1;
-        i -= 1;
-    }
-    n = n.max(1);
+fn right_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
+    buf[..16].copy_from_slice(&value.to_be_bytes());
+    let n = (16 - value.leading_zeros() as usize / 8).max(1);
     buf[buf.len() - 1] = n as u8;
     &buf[buf.len() - n - 1..]
 }

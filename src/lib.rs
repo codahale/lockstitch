@@ -404,7 +404,7 @@ mod tests {
     fn hedging() {
         let mut hedger = Protocol::new("com.example.hedge");
         hedger.mix(b"first", b"one");
-        let tag = hedger.hedge(rand::thread_rng(), &[b"two"], 1_000, |clone| {
+        let tag = hedger.hedge(rand::thread_rng(), &[b"two"], 10_000, |clone| {
             let tag = clone.derive_array::<16>(b"tag");
             (tag[0] == 0).then_some(tag)
         });

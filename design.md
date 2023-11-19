@@ -12,14 +12,16 @@ The basic unit of Lockstitch is the protocol, which encapsulates a transcript of
 
 A Lockstitch protocol supports the following operations:
 
-* `Init`, which initializes a protocol with a domain separation string.
-* `Mix`, which adds a labeled input to the protocol's transcript.
-* `Derive`, which ratchets the protocol's transcript, preventing rollback, and generates a bitstring
-  of arbitrary length that is cryptographically dependent on the protocol's prior transcript.
-* `Encrypt`/`Decrypt`, which encrypt and decrypt a message, adding an authentication tag of the
+* `Init`: Initialize a protocol with a domain separation string.
+* `Mix`: Add a labeled input to the protocol's transcript, making all future outputs
+  cryptographically dependent on it.
+* `Derive`: Ratchet the protocol's transcript, preventing rollback, and generate a pseudo-random
+  bitstring of arbitrary length that is cryptographically dependent on the protocol's prior
+  transcript.
+* `Encrypt`/`Decrypt`: Encrypt and decrypt a message, adding an authentication tag of the
   ciphertext to the protocol transcript.
-* `Seal`/`Open`, which encrypt and decrypt a message, using an authenticator tag to ensure the
-  ciphertext has not been modified.
+* `Seal`/`Open`: Encrypt and decrypt a message, using an authenticator tag to ensure the ciphertext
+  has not been modified.
 
 Labels are used for all Lockstitch operations (except `Init`) to provide domain separation of inputs
 and outputs. This ensures that semantically distinct values with identical encodings (e.g. public

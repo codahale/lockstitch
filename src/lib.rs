@@ -39,6 +39,8 @@ impl Protocol {
         let mut protocol = Protocol { transcript: Sha256::new() };
 
         // Append the Init op header to the transcript with the domain as the label.
+        //
+        //   0x01 || left_encode(|domain|) || domain
         protocol.op_header(OpCode::Init, domain.as_bytes());
 
         protocol
@@ -48,11 +50,13 @@ impl Protocol {
     #[inline]
     pub fn mix(&mut self, label: &[u8], input: &[u8]) {
         // Append a Mix op header with the label to the transcript.
+        //
+        //   0x02 || left_encode(|label|) || label
         self.op_header(OpCode::Mix, label);
 
         // Append the input to the transcript with right-encoded length.
         //
-        // input || right_encode(|input|)
+        //   input || right_encode(|input|)
         self.transcript.update(input);
         self.transcript.update(right_encode(&mut [0u8; 17], input.len() as u128 * 8));
     }
@@ -74,6 +78,8 @@ impl Protocol {
     #[inline]
     pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
         // Append a Derive op header with the label to the transcript.
+        //
+        //   0x03 || left_encode(|label|) || label
         self.op_header(OpCode::Derive, label);
 
         // Calculate the hash of the transcript and replace it with an empty transcript.
@@ -102,6 +108,8 @@ impl Protocol {
     #[inline]
     pub fn encrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
         // Append a Crypt op header with the label to the transcript.
+        //
+        //   0x04 || left_encode(|label|) || label
         self.op_header(OpCode::Crypt, label);
 
         // Derive an AEGIS-128L key and nonce.
@@ -123,6 +131,8 @@ impl Protocol {
     #[inline]
     pub fn decrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
         // Append a Crypt op header with the label to the transcript.
+        //
+        //   0x04 || left_encode(|label|) || label
         self.op_header(OpCode::Crypt, label);
 
         // Derive an AEGIS-128L key and nonce.
@@ -149,6 +159,8 @@ impl Protocol {
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Append an AuthCrypt op header with the label to the transcript.
+        //
+        //   0x05 || left_encode(|label|) || label
         self.op_header(OpCode::AuthCrypt, label);
 
         // Perform a Crypt operation with the plaintext.
@@ -167,6 +179,8 @@ impl Protocol {
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Append an AuthCrypt op header with the label to the transcript.
+        //
+        //   0x05 || left_encode(|label|) || label
         self.op_header(OpCode::AuthCrypt, label);
 
         // Perform a Crypt operation with the ciphertext.
@@ -225,17 +239,21 @@ impl Protocol {
     /// Append an operation header with an optional label to the protocol transcript.
     #[inline]
     fn op_header(&mut self, op_code: OpCode, label: &[u8]) {
-        // Append the operation code to the transcript:
+        // Append the operation code and label to the transcript:
         //
-        //   op_code
+        //   op_code || left_encode(|label|) || label
         self.transcript.update([op_code as u8]);
-
-        // Append the label to the transcript:
-        //
-        //   left_encode(|label|) || label
         self.transcript.update(left_encode(&mut [0u8; 17], label.len() as u128 * 8));
         self.transcript.update(label);
     }
+}
+
+/// Compare two slices for equality in constant time.
+#[inline]
+pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    let mut res = 1;
+    a.cmovne(b, 0, &mut res);
+    res != 0
 }
 
 /// Derive a KDF key and additional output from [NIST SP 800-56C Rev. 2][]'s  _One-Step Key
@@ -271,14 +289,6 @@ fn concat_kdf(ikm: &[u8], kdf_key: &mut [u8; 32], out: &mut [u8]) {
         kdf.update(b"lockstitch");
         remainder.copy_from_slice(&kdf.finalize_reset()[..remainder.len()]);
     }
-}
-
-/// Compare two slices for equality in constant time.
-#[inline]
-pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
-    let mut res = 1;
-    a.cmovne(b, 0, &mut res);
-    res != 0
 }
 
 /// All Lockstitch operation types.

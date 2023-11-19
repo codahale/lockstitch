@@ -58,10 +58,7 @@ impl Protocol {
         //
         //   input || right_encode(|input|)
         self.transcript.update(input);
-        self.transcript.update(right_encode(
-            &mut [0u8; 9],
-            (input.len() as u64).checked_mul(8).expect("should be <= 2^61 bits"),
-        ));
+        self.transcript.update(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
     }
 
     /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
@@ -80,9 +77,6 @@ impl Protocol {
     /// Derive output from the protocol's current state and fill the given slice with it.
     #[inline]
     pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
-        const MAX_LEN: u64 = (u32::MAX - 1) as u64 * 32;
-        assert!((out.len() as u64) < MAX_LEN, "derive is limited to output lengths <= {}", MAX_LEN);
-
         // Append a Derive op header with the label to the transcript.
         //
         //   0x03 || left_encode(|label|) || label
@@ -304,10 +298,7 @@ impl<W: std::io::Write> MixWriter<W> {
     #[inline]
     pub fn into_inner(mut self) -> (Protocol, W) {
         // Append the right-encoded length to the transcript.
-        self.protocol.transcript.update(right_encode(
-            &mut [0u8; 9],
-            self.len.checked_mul(8).expect("should be <= 2^61 bits"),
-        ));
+        self.protocol.transcript.update(right_encode(&mut [0u8; 9], self.len * 8));
         (self.protocol, self.inner)
     }
 }

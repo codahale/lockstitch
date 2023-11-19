@@ -3,7 +3,6 @@
 #![warn(missing_docs)]
 
 use core::fmt::Debug;
-use core::mem;
 
 use crate::aegis_128l::Aegis128L;
 
@@ -335,13 +334,12 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
-fn left_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
-    let mut v = value;
+fn left_encode(buf: &mut [u8; 17], mut value: u128) -> &[u8] {
     let mut n = 0;
     let mut i = buf.len() - 1;
-    while v != 0 && n < mem::size_of_val(&value) {
-        buf[i] = v as u8;
-        v >>= 8;
+    while value != 0 && n < buf.len() {
+        buf[i] = value as u8;
+        value >>= 8;
         n += 1;
         i -= 1;
     }
@@ -354,13 +352,12 @@ fn left_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
-fn right_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
-    let mut v = value;
+fn right_encode(buf: &mut [u8; 17], mut value: u128) -> &[u8] {
     let mut n = 0;
     let mut i = buf.len() - 2;
-    while v != 0 && n < mem::size_of_val(&value) {
-        buf[i] = v as u8;
-        v >>= 8;
+    while value != 0 && n < buf.len() {
+        buf[i] = value as u8;
+        value >>= 8;
         n += 1;
         i -= 1;
     }

@@ -336,12 +336,18 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
 fn left_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
-    let n = encode_size(value);
-    for (i, v) in buf.iter_mut().enumerate().take(n + 1).skip(1) {
-        *v = (value >> (8 * (n - i))) as u8;
+    let mut v = value;
+    let mut n = 0;
+    let mut i = buf.len() - 1;
+    while v != 0 && n < mem::size_of_val(&value) {
+        buf[i] = v as u8;
+        v >>= 8;
+        n += 1;
+        i -= 1;
     }
-    buf[0] = n as u8;
-    &buf[..n + 1]
+    n = n.max(1);
+    buf[buf.len() - n - 1] = n as u8;
+    &buf[buf.len() - n - 1..]
 }
 
 /// Encode a value using [NIST SP 800-185][]'s `right_encode`.
@@ -349,24 +355,18 @@ fn left_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
 fn right_encode(buf: &mut [u8; 17], value: u128) -> &[u8] {
-    let n = encode_size(value);
-    for (i, v) in buf.iter_mut().enumerate().take(n) {
-        *v = (value >> (8 * (n - i - 1))) as u8;
-    }
-    buf[n] = n as u8;
-    &buf[..n + 1]
-}
-
-/// Return the minimum number of bytes required to encode the given value.
-#[inline]
-fn encode_size(value: u128) -> usize {
     let mut v = value;
     let mut n = 0;
+    let mut i = buf.len() - 2;
     while v != 0 && n < mem::size_of_val(&value) {
+        buf[i] = v as u8;
         v >>= 8;
         n += 1;
+        i -= 1;
     }
-    n.max(1)
+    n = n.max(1);
+    buf[buf.len() - 1] = n as u8;
+    &buf[buf.len() - n - 1..]
 }
 
 #[cfg(all(test, feature = "std"))]

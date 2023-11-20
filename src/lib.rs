@@ -309,7 +309,7 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         // Track the written length.
-        self.len += u64::try_from(buf.len()).expect("usize should be <= u64");
+        self.len += buf.len() as u64;
         // Append the written slice to the protocol transcript.
         self.protocol.transcript.update(buf);
         // Pass the slice to the inner writer and return the result.

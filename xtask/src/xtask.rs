@@ -94,7 +94,7 @@ fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
 }
 
 fn cloud_create(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute instances create lockstitch-benchmark --zone=us-central1-a --machine-type=n2-standard-4 --min-cpu-platform 'Intel Ice Lake' --image-project 'debian-cloud' --image-family 'debian-11'").run()?;
+    cmd!(sh, "gcloud compute instances create lockstitch-benchmark --zone=us-central1-a --machine-type=c3-standard-4 --min-cpu-platform 'Intel Sapphire Rapids' --image-project 'debian-cloud' --image-family 'debian-11'").run()?;
 
     Ok(())
 }

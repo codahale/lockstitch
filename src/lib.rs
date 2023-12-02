@@ -32,7 +32,7 @@ pub struct Protocol {
 }
 
 impl Protocol {
-    /// Create a new protocol with the given domain.
+    /// Creates a new protocol with the given domain.
     #[inline]
     pub fn new(domain: &str) -> Protocol {
         // Initialize a protocol with an empty transcript.
@@ -62,8 +62,9 @@ impl Protocol {
     }
 
     /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
-    /// operation and passing all writes to `inner`. Use [`MixWriter::into_inner`] to finish the
-    /// operation and recover the protocol and `inner`.
+    /// operation and passing all writes to `inner`.
+    ///
+    /// Use [`MixWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
     #[inline]
     #[cfg(feature = "std")]
     pub fn mix_writer<W: std::io::Write>(mut self, label: &[u8], inner: W) -> MixWriter<W> {
@@ -74,7 +75,7 @@ impl Protocol {
         MixWriter { protocol: self, inner, len: 0 }
     }
 
-    /// Derive output from the protocol's current state and fill the given slice with it.
+    /// Derives output from the protocol's current state and fills the given slice with it.
     #[inline]
     pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
         // Append a Derive op header with the label to the transcript.
@@ -96,7 +97,7 @@ impl Protocol {
         self.mix(b"len", left_encode(&mut [0u8; 9], out.len() as u64 * 8));
     }
 
-    /// Derive output from the protocol's current state and return it as an `N`-byte array.
+    /// Derives output from the protocol's current state and returns it as an `N`-byte array.
     #[inline]
     pub fn derive_array<const N: usize>(&mut self, label: &[u8]) -> [u8; N] {
         let mut out = [0u8; N];
@@ -104,7 +105,7 @@ impl Protocol {
         out
     }
 
-    /// Encrypt the given slice in place.
+    /// Encrypts the given slice in place.
     #[inline]
     pub fn encrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
         // Append a Crypt op header with the label to the transcript.
@@ -127,7 +128,7 @@ impl Protocol {
         self.mix(b"tag", &aegis.finalize());
     }
 
-    /// Decrypt the given slice in place.
+    /// Decrypts the given slice in place.
     #[inline]
     pub fn decrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
         // Append a Crypt op header with the label to the transcript.
@@ -209,7 +210,7 @@ impl Protocol {
     #[must_use]
     pub fn hedge<R>(
         &self,
-        mut rng: impl rand_core::RngCore + rand_core::CryptoRng,
+        mut rng: impl rand_core::CryptoRngCore,
         secrets: &[impl AsRef<[u8]>],
         max_tries: usize,
         f: impl Fn(&mut Self) -> Option<R>,
@@ -237,7 +238,7 @@ impl Protocol {
         unreachable!("unable to hedge a valid value in {} tries", max_tries);
     }
 
-    /// Append an operation header with an optional label to the protocol transcript.
+    /// Appends an operation header with an optional label to the protocol transcript.
     #[inline]
     fn op_header(&mut self, op_code: OpCode, label: &[u8]) {
         // Append the operation code and label to the transcript:
@@ -249,7 +250,7 @@ impl Protocol {
     }
 }
 
-/// Compare two slices for equality in constant time.
+/// Compares two slices for equality in constant time.
 #[inline]
 pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     let mut res = 1;
@@ -257,7 +258,7 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     res != 0
 }
 
-/// Derive a KDF key and additional output from [NIST SP 800-56C Rev. 2][]'s  _One-Step Key
+/// Derives a KDF key and additional output from [NIST SP 800-56C Rev. 2][]'s  _One-Step Key
 /// Derivation_ with SHA-256.
 ///
 /// [NIST SP 800-56C Rev. 2]: https://csrc.nist.gov/pubs/sp/800/56/c/r2/final
@@ -322,7 +323,7 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     }
 }
 
-/// Encode a value using [NIST SP 800-185][]'s `left_encode`.
+/// Encodes a value using [NIST SP 800-185][]'s `left_encode`.
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
@@ -334,7 +335,7 @@ fn left_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
     &buf[len - n - 1..]
 }
 
-/// Encode a value using [NIST SP 800-185][]'s `right_encode`.
+/// Encodes a value using [NIST SP 800-185][]'s `right_encode`.
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]

@@ -15,7 +15,7 @@ pub struct Aegis128L {
 }
 
 impl Aegis128L {
-    /// Create a new AEGIS-128L instance with the given key and nonce.
+    /// Creates a new AEGIS-128L instance with the given key and nonce.
     pub fn new(key: &[u8; AES_BLOCK_LEN], nonce: &[u8; AES_BLOCK_LEN]) -> Self {
         // Initialize constants.
         let c0 = load(&[
@@ -55,7 +55,7 @@ impl Aegis128L {
         state
     }
 
-    /// Process the given authenticated data.
+    /// Processes the given authenticated data.
     #[cfg(all(test, feature = "std"))]
     pub fn ad(&mut self, ad: &[u8]) {
         // Process whole blocks of associated data.
@@ -76,7 +76,7 @@ impl Aegis128L {
         self.ad_len += ad.len() as u64;
     }
 
-    /// Encrypt the given slice in place.
+    /// Encrypts the given slice in place.
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
         // Process whole blocks of plaintext.
         let mut chunks = in_out.chunks_exact_mut(BLOCK_LEN);
@@ -96,7 +96,7 @@ impl Aegis128L {
         self.mc_len += in_out.len() as u64;
     }
 
-    /// Decrypt the given slice in place.
+    /// Decrypts the given slice in place.
     pub fn decrypt(&mut self, in_out: &mut [u8]) {
         // Process whole blocks of ciphertext.
         let mut chunks = in_out.chunks_exact_mut(BLOCK_LEN);
@@ -113,7 +113,7 @@ impl Aegis128L {
         self.mc_len += in_out.len() as u64;
     }
 
-    /// Finalize the cipher state into a 256-bit authentication tag.
+    /// Finalizes the cipher state into a 256-bit authentication tag.
     pub fn finalize(&mut self) -> [u8; BLOCK_LEN] {
         // Create a block from the associated data and message lengths, in bits, XOR it with the 3rd
         // state block and update the state with that value.
@@ -222,14 +222,14 @@ impl Aegis128L {
     }
 }
 
-/// Load two AES blocks from the given slice.
+/// Loads two AES blocks from the given slice.
 #[inline]
 fn load_2x(bytes: &[u8]) -> (AesBlock, AesBlock) {
     let (hi, lo) = bytes.split_at(AES_BLOCK_LEN);
     (load(hi), load(lo))
 }
 
-/// Store two AES blocks in the given slice.
+/// Stores two AES blocks in the given slice.
 #[inline]
 fn store_2x(bytes: &mut [u8], hi: AesBlock, lo: AesBlock) {
     let (b_hi, b_lo) = bytes.split_at_mut(AES_BLOCK_LEN);

@@ -114,7 +114,7 @@ impl Aegis128L {
     }
 
     /// Finalizes the cipher state into a 256-bit authentication tag.
-    pub fn finalize(&mut self) -> [u8; BLOCK_LEN] {
+    pub fn finalize(mut self) -> [u8; BLOCK_LEN] {
         // Create a block from the associated data and message lengths, in bits, XOR it with the 3rd
         // state block and update the state with that value.
         let t = xor(load_64x2(self.ad_len * 8, self.mc_len * 8), self.blocks[2]);

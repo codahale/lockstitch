@@ -266,29 +266,29 @@ fn concat_kdf(ikm: &[u8], kdf_key: &mut [u8; 32], out: &mut [u8]) {
     let mut counter = 0u32;
     let mut kdf = Sha256::new();
 
-    macro_rules! kdf {
-        () => {{
+    macro_rules! expand {
+        {$out:expr} => {{
             counter += 1;
             kdf.update(counter.to_be_bytes());
             kdf.update(ikm);
             kdf.update(b"lockstitch");
-            &mut kdf
+            $out;
         }};
     }
 
     // Use the first block of KDF output as the KDF key.
-    kdf!().finalize_into_reset(kdf_key.into());
+    expand! { kdf.finalize_into_reset(kdf_key.into()) };
 
     // Process the output slice in full blocks.
     let mut chunks = out.chunks_exact_mut(32);
     for block in chunks.by_ref() {
-        kdf!().finalize_into_reset(block.into());
+        expand! { kdf.finalize_into_reset(block.into()) };
     }
 
     // Handle any partial block if needed.
     let remainder = chunks.into_remainder();
     if !remainder.is_empty() {
-        remainder.copy_from_slice(&kdf!().finalize_reset()[..remainder.len()]);
+        expand! { remainder.copy_from_slice(&kdf.finalize()[..remainder.len()]) };
     }
 }
 

@@ -263,14 +263,34 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 ///
 /// [NIST SP 800-56C Rev. 2]: https://csrc.nist.gov/pubs/sp/800/56/c/r2/final
 fn concat_kdf(ikm: &[u8], kdf_key: &mut [u8; 32], out: &mut [u8]) {
-    let mut counter = 1u32;
+    let mut counter = 0u32;
     let mut kdf = Sha256::new();
-    for block in kdf_key.chunks_mut(32).chain(out.chunks_mut(32)) {
-        kdf.update(counter.to_be_bytes());
-        kdf.update(ikm);
-        kdf.update(b"lockstitch");
-        block.copy_from_slice(&kdf.finalize_reset()[..block.len()]);
-        counter += 1;
+
+    macro_rules! round {
+        () => {
+            counter += 1;
+            kdf.update(counter.to_be_bytes());
+            kdf.update(ikm);
+            kdf.update(b"lockstitch");
+        };
+    }
+
+    // Use the first block of KDF output as the KDF key.
+    round!();
+    kdf.finalize_into_reset(kdf_key.into());
+
+    // Process the output slice in full blocks.
+    let mut chunks = out.chunks_exact_mut(32);
+    for block in chunks.by_ref() {
+        round!();
+        kdf.finalize_into_reset(block.into());
+    }
+
+    // Handle any partial block if needed.
+    let remainder = chunks.into_remainder();
+    if !remainder.is_empty() {
+        round!();
+        remainder.copy_from_slice(&kdf.finalize_reset()[..remainder.len()]);
     }
 }
 

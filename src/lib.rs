@@ -88,7 +88,7 @@ impl Protocol {
 
         // Use Concat-KDF to derive a new KDF key and any additional output.
         let mut kdf_key = [0u8; 32];
-        concat_kdf(&ikm, &mut kdf_key, out);
+        concat_kdf(&ikm.into(), &mut kdf_key, out);
 
         // Perform a Mix operation with the KDF key.
         self.mix(b"kdf-key", &kdf_key);
@@ -262,16 +262,18 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 /// Derivation_ with SHA-256.
 ///
 /// [NIST SP 800-56C Rev. 2]: https://csrc.nist.gov/pubs/sp/800/56/c/r2/final
-fn concat_kdf(ikm: &[u8], kdf_key: &mut [u8; 32], out: &mut [u8]) {
+fn concat_kdf(ikm: &[u8; 32], kdf_key: &mut [u8; 32], out: &mut [u8]) {
     let mut counter = 0u32;
     let mut kdf = Sha256::new();
+    let mut input = [0u8; 4 + 32 + 10];
+    input[4..4 + 32].copy_from_slice(ikm);
+    input[4 + 32..].copy_from_slice(b"lockstitch");
 
     macro_rules! expand {
         {$out:expr} => {{
             counter += 1;
-            kdf.update(counter.to_be_bytes());
-            kdf.update(ikm);
-            kdf.update(b"lockstitch");
+            input[..4].copy_from_slice(&counter.to_be_bytes());
+            kdf.update(&input);
             $out;
         }};
     }

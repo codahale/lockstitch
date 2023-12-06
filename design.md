@@ -285,6 +285,46 @@ function aead_open(key, nonce, ad, ciphertext, tag):
   plaintext                                               // Return the plaintext or an error.
 ```
 
+#### Expanded Transcript
+
+To make it clear what Lockstitch is doing behind the scenes, the Lockstich API can be converted into
+a series of SHA-256 and AEGIS-128L operations. For example, consider the following concrete use of
+the `aead_seal` function:
+
+```text
+key ← 0x06c47a03da9a2e6cdebdcafdfd62b57d
+nonce ← 0x3f4ac18bfa54206f5c6de81517618d43
+plaintext ← "this is a secret"
+ad ← "this is public"
+(ciphertext, tag) ← aead_seal(key, nonce, ad, plaintext)
+```
+
+First, we expand the `init` and `mix` operations:
+
+```text
+t0 ← 0x01 || 0x01, 0x80 || "com.example.aead"
+t1 ← t0 || 0x02 || 0x01, 0x03 || "key" || 0x06c47a03da9a2e6cdebdcafdfd62b57d || 0x80, 0x01 
+t2 ← t1 || 0x02 || 0x01, 0x05 || "nonce" || 0x3f4ac18bfa54206f5c6de81517618d43 || 0x80, 0x01 
+t3 ← t2 || 0x02 || 0x01, 0x02 || "ad" || "this is public" || 0x0e, 0x01 
+t4 ← t3 || 0x05 || 0x01, 0x07 || "message"
+t5 ← t4 || 0x04 || 0x01, 0x07 || "message"
+t6 ← t5 || 0x03 || 0x01, 0x03 || "key"
+ikm0 ← sha256(t6)
+kdf_key0 ← sha256(u32_be(1) || ikm0 || "lockstitch")
+aegis_key ← sha256(u32_be(2) || ikm0 || "lockstitch")
+t7 ← 0x03 || 0x01, 0x07 || "kdf-key" || kdf_key0 || 0x20, 0x01
+t8 ← t7 || 0x03 || 0x01, 0x03 || "len" || 0x01, 0x20 || 0x02, 0x01
+(ciphertext, t) ← aegis128l::encrypt(aegis_key, "this is a secret")
+t9 ← t8 || 0x03 || 0x01, 0x03 || "tag" || t || 0x20, 0x01
+t10 ← t9 || 0x03 || 0x01, 0x03 || "tag"
+ikm1 ← sha256(t10)
+kdf_key1 ← sha256(u32_be(1) || ikm1 || "lockstitch")
+tag ← sha256(u32_be(2) || ikm1 || "lockstitch")[..16]
+t11 ← 0x03 || 0x01, 0x07 || "kdf-key" || kdf_key1 || 0x20, 0x01
+t12 ← t11 || 0x03 || 0x01, 0x03 || "len" || 0x01, 0x10 || 0x02, 0x01
+(ciphertext, tag)
+```
+
 ## Complex Protocols
 
 Given an elliptic curve group like NIST P-256, Lockstitch can be used to build complex protocols

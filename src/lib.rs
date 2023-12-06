@@ -175,7 +175,7 @@ impl Protocol {
     /// was authenticated. The last [`TAG_LEN`] bytes of the slice will be unmodified.
     #[inline]
     #[must_use]
-    pub fn open<'a>(&mut self, label: &[u8], in_out: &'a mut [u8]) -> Option<&'a [u8]> {
+    pub fn open<'ct>(&mut self, label: &[u8], in_out: &'ct mut [u8]) -> Option<&'ct [u8]> {
         // Split the buffer into ciphertext and tag.
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 

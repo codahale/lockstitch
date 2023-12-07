@@ -1,0 +1,73 @@
+(* Lockstitch's KDF expansion, encryption, and tag derivation is IND-CPA. *)
+
+(* Common key type for encryption and MAC *)
+
+type key [fixed, large].
+
+(* (CPA Stream cipher, assumed to use a nonce) *)
+
+proba Penc.
+
+expand IND_CPA_sym_enc(key, bitstring, bitstring, enc, dec, injbot, Z, Penc).
+
+(* Mac *)
+
+type tag [fixed].
+
+proba Pmac.
+
+expand SUF_CMA_det_mac(key, bitstring, tag, mac, verify, Pmac).
+
+(* Hash *)
+
+type hash_key [fixed, large].
+type input [fixed, large].
+type digest [fixed, large].
+
+expand ROM_hash(hash_key, input, digest, kdf_extract, Okdf_extract, qKDFextract).
+
+(* PRF *)
+
+type ctr [fixed].
+const ctr1, ctr2, ctr3: ctr.
+
+proba Pkdf.
+
+expand PRF(digest, ctr, key, kdf_expand, Pkdf).
+
+(* Construction *)
+
+fun concat(bitstring, key): bitstring [data].
+fun ratchet(key, tag): input [data].
+
+letfun full_enc(m: bitstring, hk: hash_key, ikm: input) =
+    prk1 <- kdf_extract(hk, ikm);
+    k1 <- kdf_expand(prk1, ctr1);
+    k2 <- kdf_expand(prk1, ctr2);
+    k3 <- kdf_expand(prk1, ctr3);
+    c1 <- enc(m, k2);
+    t1 <- mac(c1, k3);
+    prk2 <- kdf_extract(hk, ratchet(k1, t1));
+    k5 <- kdf_expand(prk2, ctr2);
+    concat(c1, k5).
+
+(* Queries *)
+
+param qEnc.
+
+query secret b.
+
+let QencLR(b0: bool, hk: hash_key, ikm: input) = 
+    foreach i <= qEnc do
+        Oenc (m1: bitstring, m2: bitstring) :=
+        if Z(m1) = Z(m2) then (* m1 and m2 have the same length *)
+        m0 <- if b0 then m1 else m2;
+        return(full_enc(m0, hk, ikm)).
+
+process 
+    Ostart() :=
+    b <-R bool;
+    hk <-R hash_key;
+    ikm <-R input;
+    return;
+    run QencLR(b, hk, ikm)

@@ -36,6 +36,7 @@ expect-test = "1.4.1"
 hex = "0.4.3"
 hex-literal = "0.4.1"
 rand = "0.8.5"
+wycheproof = "0.5.1"
 
 [package.metadata.docs.rs]
 all-features = true

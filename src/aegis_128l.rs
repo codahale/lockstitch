@@ -246,6 +246,8 @@ mod tests {
 
     use expect_test::expect;
     use hex_literal::hex;
+    use wycheproof::aead::{TestName, TestSet};
+    use wycheproof::TestResult;
 
     fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> ([u8; 16], [u8; 32]) {
         let mut state = Aegis128L::new(key, nonce);
@@ -546,5 +548,28 @@ mod tests {
                 assert_eq!(Ok(msg.to_vec()), aegis.decrypt(&ct, &tag, ad));
             },
         );
+    }
+
+    #[test]
+    fn wycheproof() {
+        let set = TestSet::load(TestName::Aegis128L).expect("should have AEGIS-128L test vectors");
+        for group in set.test_groups {
+            for test in group.tests {
+                let mut ct = test.pt.to_vec();
+                let (short_tag, _long_tag) = encrypt(
+                    &test.key.as_ref().try_into().expect("should be 16 bytes"),
+                    &test.nonce.as_ref().try_into().expect("should be 16 bytes"),
+                    &mut ct,
+                    &test.aad,
+                );
+
+                if test.result == TestResult::Valid {
+                    assert_eq!(test.ct.as_ref(), &ct);
+                    assert_eq!(test.tag.as_ref(), &short_tag);
+                } else {
+                    assert_ne!(test.tag.as_ref(), &short_tag);
+                }
+            }
+        }
     }
 }

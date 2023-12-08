@@ -274,7 +274,8 @@ function stream_decrypt(key, nonce, ciphertext):
 This construction is IND-CPA-secure under the following assumptions:
 
 1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
-2. SHA-256 is indistinguishable from a random oracle.
+2. SHA-256 is indistinguishable from a random oracle when hashing the transcript.
+3. SHA-256 is PRF-secure when hashing a counter.
 
 ### Authenticated Encryption And Data (AEAD)
 
@@ -312,8 +313,9 @@ function aead_open(key, nonce, ad, ciphertext, tag):
 This construction is IND-CCA2-secure (i.e. both IND-CPA and INT-CTXT) under the following
 assumptions:
 
-1. AEGIS-128L is AEAD-secure when used with a unique nonce and a fixed associated data string.
-2. SHA-256 is indistinguishable from a random oracle.
+1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
+2. SHA-256 is indistinguishable from a random oracle when hashing the transcript.
+3. SHA-256 is PRF-secure when hashing a counter.
 
 #### Expanded Transcript
 

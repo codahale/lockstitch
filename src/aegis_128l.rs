@@ -3,9 +3,6 @@ use crate::intrinsics::*;
 /// The length of an AEGIS-128L block.
 pub const BLOCK_LEN: usize = 32;
 
-/// The length of an AES block.
-const AES_BLOCK_LEN: usize = 16;
-
 /// An AEGIS-128L instance.
 #[derive(Debug, Clone)]
 pub struct Aegis128L {
@@ -223,21 +220,6 @@ impl Aegis128L {
         self.blocks[0] = xor(self.blocks[0], m0);
         self.blocks[4] = xor(self.blocks[4], m1);
     }
-}
-
-/// Loads two AES blocks from the given slice.
-#[inline]
-fn load_2x(bytes: &[u8]) -> (AesBlock, AesBlock) {
-    let (hi, lo) = bytes.split_at(AES_BLOCK_LEN);
-    (load(hi), load(lo))
-}
-
-/// Stores two AES blocks in the given slice.
-#[inline]
-fn store_2x(bytes: &mut [u8], hi: AesBlock, lo: AesBlock) {
-    let (b_hi, b_lo) = bytes.split_at_mut(AES_BLOCK_LEN);
-    store(b_hi, hi);
-    store(b_lo, lo);
 }
 
 #[cfg(all(test, feature = "std"))]

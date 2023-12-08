@@ -541,11 +541,13 @@ mod tests {
         bolero::check!().with_type::<([u8; 16], [u8; 16], Vec<u8>, Vec<u8>)>().for_each(
             |(k, n, ad, msg)| {
                 let mut ct = msg.clone();
-                let (_, tag) = encrypt(k, n, &mut ct, ad);
+                let (short_tag, long_tag) = encrypt(k, n, &mut ct, ad);
 
-                let aegis = aegis::aegis128l::Aegis128L::<32>::new(k, n);
+                let aegis16 = aegis::aegis128l::Aegis128L::<16>::new(k, n);
+                let aegis32 = aegis::aegis128l::Aegis128L::<32>::new(k, n);
 
-                assert_eq!(Ok(msg.to_vec()), aegis.decrypt(&ct, &tag, ad));
+                assert_eq!(Ok(msg.to_vec()), aegis16.decrypt(&ct, &short_tag, ad));
+                assert_eq!(Ok(msg.to_vec()), aegis32.decrypt(&ct, &long_tag, ad));
             },
         );
     }

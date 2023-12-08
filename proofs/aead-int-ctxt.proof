@@ -422,7 +422,7 @@ Game 8 is
      ))
 
 
-Applying simplify [probability qKDFextract / |transcript|]
+Applying simplify [probability qKDFextract * Pcoll1rand(transcript)]
   - Global dependency analysis on t_2
 yields
 
@@ -2482,9 +2482,9 @@ Game 35 is
 
 
 Proved event(bad) ==> false in game 35
-Pr[Game 1: bad] <= qEnc * Pencctxt(time_4, 1 + qEnc, qDec, maxlength(game 30: m0), maxlength(game 30: c_1), maxlength(game 30: d), length(ad)) + qDec * Pencctxt(time_3, qEnc, 1 + qDec, maxlength(game 24: m0), maxlength(game 24: c_1), maxlength(game 24: d), length(ad)) + qEnc * Pkdf(time_2, 1) + qDec * Pkdf(time_1, 1) + qKDFextract / |transcript| + Pr[Game 35: bad]
+Pr[Game 1: bad] <= qEnc * Pencctxt(time_4, 1 + qEnc, qDec, maxlength(game 30: m0), maxlength(game 30: c_1), maxlength(game 30: d), length(ad)) + qDec * Pencctxt(time_3, qEnc, 1 + qDec, maxlength(game 24: m0), maxlength(game 24: c_1), maxlength(game 24: d), length(ad)) + qEnc * Pkdf(time_2, 1) + qDec * Pkdf(time_1, 1) + qKDFextract * Pcoll1rand(transcript) + Pr[Game 35: bad]
 Pr[Game 35: bad] <= 0
-RESULT Proved event(bad) ==> false up to probability qEnc * Pencctxt(time_4, 1 + qEnc, qDec, maxlength(game 30: m0), maxlength(game 30: c_1), maxlength(game 30: d), length(ad)) + qDec * Pencctxt(time_3, qEnc, 1 + qDec, maxlength(game 24: m0), maxlength(game 24: c_1), maxlength(game 24: d), length(ad)) + qEnc * Pkdf(time_2, 1) + qDec * Pkdf(time_1, 1) + qKDFextract / |transcript|
+RESULT Proved event(bad) ==> false up to probability qEnc * Pencctxt(time_4, 1 + qEnc, qDec, maxlength(game 30: m0), maxlength(game 30: c_1), maxlength(game 30: d), length(ad)) + qDec * Pencctxt(time_3, qEnc, 1 + qDec, maxlength(game 24: m0), maxlength(game 24: c_1), maxlength(game 24: d), length(ad)) + qEnc * Pkdf(time_2, 1) + qDec * Pkdf(time_1, 1) + qKDFextract * Pcoll1rand(transcript)
 RESULT time_1 = (qEnc + 2 * qDec - 1) * time(kdf_expand) + qEnc * time(enc_r, maxlength(game 12: m0), maxlength(game 12: d)) + qDec * qEnc * time(= bitstring, maxlength(game 12: c0), maxlength(game 12: c_1)) + qDec * time(<> bitstringbot, length(dec, maxlength(game 12: c_1), length(ad)), length(bottom)) + qDec * time(dec, maxlength(game 12: c_1), length(ad)) + qDec * time(([1,qDec])) + time
 RESULT time_2 = qEnc * time(enc_r, maxlength(game 18: m0), maxlength(game 18: d)) + qDec * qEnc * time(= bitstring, maxlength(game 18: c0), maxlength(game 18: c_1)) + qDec * time(<> bitstringbot, length(dec, maxlength(game 18: c_1), length(ad)), length(bottom)) + qDec * time(dec, maxlength(game 18: c_1), length(ad)) + qDec * time(([1,qDec])) + time + (qEnc - 1) * time(kdf_expand)
 RESULT time_3 = qDec * qEnc * time(= bitstring, maxlength(game 24: c0), maxlength(game 24: c_1)) + qDec * time(<> bitstringbot, length(dec, maxlength(game 24: c_1), length(ad)), length(bottom)) + qDec * time(([1,qDec])) + time + 2 * qEnc * time(enc_r, maxlength(game 24: m0), maxlength(game 24: d)) + 2 * qDec * time(dec, maxlength(game 24: c_1), length(ad))

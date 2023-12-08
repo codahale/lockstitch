@@ -348,7 +348,7 @@ Game 8 is
      ))
 
 
-Applying simplify [probability qKDFextract / |transcript|]
+Applying simplify [probability qKDFextract * Pcoll1rand(transcript)]
   - Global dependency analysis on t_2
 yields
 
@@ -1502,10 +1502,10 @@ Game 31 is
      ))
 
 
-Proved secrecy of b in game 31
-Adv[Game 1: secrecy of b] <= 2 * qEnc * Penc(time_4, 1 + qEnc, maxlength(game 27: m1)) + 2 * qEnc * Penc(time_3, 1 + qEnc, maxlength(game 24: m2)) + 2 * qEnc * Pkdf(time_2, 1) + 2 * qEnc * Pkdf(time_1, 1) + 2 * qKDFextract / |transcript| + Adv[Game 31: secrecy of b]
-Adv[Game 31: secrecy of b] <= 0
-RESULT Proved secrecy of b up to probability 2 * qEnc * Penc(time_4, 1 + qEnc, maxlength(game 27: m1)) + 2 * qEnc * Penc(time_3, 1 + qEnc, maxlength(game 24: m2)) + 2 * qEnc * Pkdf(time_2, 1) + 2 * qEnc * Pkdf(time_1, 1) + 2 * qKDFextract / |transcript|
+Proved bit secrecy of b in game 31
+Adv[Game 1: bit secrecy of b] <= 2 * qEnc * Penc(time_4, 1 + qEnc, maxlength(game 27: m1)) + 2 * qEnc * Penc(time_3, 1 + qEnc, maxlength(game 24: m2)) + 2 * qEnc * Pkdf(time_2, 1) + 2 * qEnc * Pkdf(time_1, 1) + 2 * qKDFextract * Pcoll1rand(transcript) + Adv[Game 31: bit secrecy of b]
+Adv[Game 31: bit secrecy of b] <= 0
+RESULT Proved bit secrecy of b up to probability 2 * qEnc * Penc(time_4, 1 + qEnc, maxlength(game 27: m1)) + 2 * qEnc * Penc(time_3, 1 + qEnc, maxlength(game 24: m2)) + 2 * qEnc * Pkdf(time_2, 1) + 2 * qEnc * Pkdf(time_1, 1) + 2 * qKDFextract * Pcoll1rand(transcript)
 RESULT time_1 = qEnc * time(= bitstring, length(Z, maxlength(game 12: m1)), length(Z, maxlength(game 12: m2))) + qEnc * time(Z, maxlength(game 12: m2)) + qEnc * time(Z, maxlength(game 12: m1)) + qEnc * time(enc_r, maxlength(game 12: m1), maxlength(game 12: d)) + qEnc * time(enc_r, maxlength(game 12: m2), maxlength(game 12: d)) + time + (2 * qEnc - 1) * time(kdf_expand)
 RESULT time_2 = qEnc * time(= bitstring, length(Z, maxlength(game 18: m1)), length(Z, maxlength(game 18: m2))) + qEnc * time(Z, maxlength(game 18: m2)) + qEnc * time(Z, maxlength(game 18: m1)) + qEnc * time(enc_r, maxlength(game 18: m1), maxlength(game 18: d)) + qEnc * time(enc_r, maxlength(game 18: m2), maxlength(game 18: d)) + time + (qEnc - 1) * time(kdf_expand)
 RESULT time_3 = qEnc * time(= bitstring, length(Z, maxlength(game 24: m1)), length(Z, maxlength(game 24: m2))) + qEnc * time(Z, maxlength(game 24: m2)) + qEnc * time(Z, maxlength(game 24: m1)) + qEnc * time(enc_r, maxlength(game 24: m1), maxlength(game 24: d)) + time + qEnc * max(time(enc_r, maxlength(game 24: m2), maxlength(game 24: d)), time(Z, max(maxlength(game 25: x_1), maxlength(game 25: x))) + time(enc_r', length(Z, max(maxlength(game 25: x_1), maxlength(game 25: x))), max(maxlength(game 25: d_2), maxlength(game 25: d_1))))

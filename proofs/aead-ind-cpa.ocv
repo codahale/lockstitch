@@ -70,4 +70,4 @@ process
     hk <-R hash_key;
     ikm <-R input;
     return;
-    run QencLR(b, hk, ikm)
+    (run QencLR(b, hk, ikm) | run Okdf_extract(hk))

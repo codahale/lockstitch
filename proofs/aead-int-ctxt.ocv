@@ -103,4 +103,4 @@ process
     hk <-R hash_key;
     ikm <-R input;
     return;
-    (run Qenc(hk, ikm) | run QdecTest(hk, ikm))
+    (run Qenc(hk, ikm) | run QdecTest(hk, ikm) | run Okdf_extract(hk))

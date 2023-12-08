@@ -12,7 +12,7 @@ expand AEAD(key, bitstring, bitstring, bitstring, enc, dec, injbot, Z, Penc, Pen
 (* Using SHA-256 to hash the transcript is assumed to be a random oracle. *)
 
 type hash_key [fixed].
-type transcript [bounded, large].
+type transcript [bounded, large, nonuniform].
 type prk [fixed, large].
 
 expand ROM_hash(hash_key, transcript, prk, kdf_extract, Okdf_extract, qKDFextract).

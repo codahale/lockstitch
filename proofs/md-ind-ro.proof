@@ -1,0 +1,423 @@
+Initial state
+Game 1 is
+     Ostart() :=
+     b <-R bool;
+     hk_2 <-R hash_key;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     d: prk <- (if b then prk1: prk <- kdf_extract(hk_2, t_1); k1: prk <- kdf_expand(prk1, ctr1); k1 else kdf_extract(hk_2, t_1));
+     return(d)
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 2 is
+     Ostart() :=
+     b <-R bool;
+     hk_2 <-R hash_key;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       prk1: prk <- kdf_extract(hk_2, t_1);
+       k1: prk <- kdf_expand(prk1, ctr1);
+       d: prk <- k1;
+       return(d)
+     else
+       d: prk <- kdf_extract(hk_2, t_1);
+       return(d)
+
+
+Applying remove assignments of findcond
+  - Remove assignments on d (definition removed, all usages removed)
+yields
+
+Game 3 is
+     Ostart() :=
+     b <-R bool;
+     hk_2 <-R hash_key;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       prk1: prk <- kdf_extract(hk_2, t_1);
+       k1: prk <- kdf_expand(prk1, ctr1);
+       return(k1)
+     else
+       d: prk <- kdf_extract(hk_2, t_1);
+       return(d)
+
+
+Applying equivalence rom(kdf_extract)
+  - Equivalence rom(kdf_extract) with variables: hk_2 -> hk_3
+yields
+
+Game 4 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       prk1: prk <- (x_O: transcript <- t_1; {14}find [unique] u_3 = ri_3 <= qMD suchthat defined(x_O[ri_3], r[ri_3]) && (x_O = x_O[ri_3]) then r[u_3] orfind u_2 = ri_2 <= qMD suchthat defined(x_O_1[ri_2], r_1[ri_2]) && {27}(x_O = x_O_1[ri_2]) then r_1[u_2] else r <-R prk; r);
+       k1: prk <- kdf_expand(prk1, ctr1);
+       return(k1)
+     else
+       d: prk <- (x_O_1: transcript <- t_1; {54}find [unique] u_1 = ri_1 <= qMD suchthat defined(x_O[ri_1], r[ri_1]) && {57}(x_O_1 = x_O[ri_1]) then r[u_1] orfind u = ri <= qMD suchthat defined(x_O_1[ri], r_1[ri]) && (x_O_1 = x_O_1[ri]) then r_1[u] else r_1 <-R prk; r_1);
+       return(d)
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Replaced (x_O = x_O_1[ri_2]) with false at 27
+    - Remove branch 2 in find at 14
+    - Replaced (x_O_1 = x_O[ri_1]) with false at 57
+    - Remove branch 1 in find at 54
+yields
+
+Game 5 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       prk1: prk <- (x_O: transcript <- t_1; find [unique] u_3 = ri_3 <= qMD suchthat defined(x_O[ri_3], r[ri_3]) && (x_O = x_O[ri_3]) then r[u_3] else r <-R prk; r);
+       k1: prk <- kdf_expand(prk1, ctr1);
+       return(k1)
+     else
+       d: prk <- (x_O_1: transcript <- t_1; find [unique] u = ri <= qMD suchthat defined(x_O_1[ri], r_1[ri]) && (x_O_1 = x_O_1[ri]) then r_1[u] else r_1 <-R prk; r_1);
+       return(d)
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 6 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       x_O: transcript <- t_1;
+       find [unique] u_3 = ri_3 <= qMD suchthat defined(x_O[ri_3], r[ri_3]) && (x_O = x_O[ri_3]) then
+         prk1: prk <- r[u_3];
+         k1: prk <- kdf_expand(prk1, ctr1);
+         return(k1)
+       else
+         r <-R prk;
+         prk1: prk <- r;
+         k1: prk <- kdf_expand(prk1, ctr1);
+         return(k1)
+     else
+       x_O_1: transcript <- t_1;
+       find [unique] u = ri <= qMD suchthat defined(x_O_1[ri], r_1[ri]) && (x_O_1 = x_O_1[ri]) then
+         d: prk <- r_1[u];
+         return(d)
+       else
+         r_1 <-R prk;
+         d: prk <- r_1;
+         return(d)
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_1 (definition point kept, all usages removed)
+  - Remove assignments on d (definition removed, all usages removed)
+  - Remove assignments on d (definition removed, all usages removed)
+  - Remove assignments on x_O (definition point kept, all usages removed)
+  - Remove assignments on prk1 (definition removed, all usages removed)
+  - Remove assignments on prk1 (definition removed, all usages removed)
+yields
+
+Game 7 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       x_O: transcript <- cst_transcript;
+ {12}  find [unique] u_3 = ri_3 <= qMD suchthat defined(t_1[ri_3], x_O[ri_3], r[ri_3]) && (t_1 = t_1[ri_3]) then
+         k1: prk <- kdf_expand(r[u_3], ctr1);
+         return(k1)
+       else
+         r <-R prk;
+         k1: prk <- kdf_expand(r, ctr1);
+         return(k1)
+     else
+       x_O_1: transcript <- cst_transcript;
+ {48}  find [unique] u = ri <= qMD suchthat defined(t_1[ri], x_O_1[ri], r_1[ri]) && (t_1 = t_1[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R prk;
+         return(r_1)
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced defined condition t_1[ri], x_O_1[ri], r_1[ri] with r_1[ri], t_1[ri] in find at 48
+    - Replaced defined condition t_1[ri_3], x_O[ri_3], r[ri_3] with r[ri_3], t_1[ri_3] in find at 12
+yields
+
+Game 8 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       x_O: transcript <- cst_transcript;
+       find [unique] u_3 = ri_3 <= qMD suchthat defined(r[ri_3], t_1[ri_3]) && (t_1 = t_1[ri_3]) then
+         k1: prk <- kdf_expand(r[u_3], ctr1);
+         return(k1)
+       else
+         r <-R prk;
+         k1: prk <- kdf_expand(r, ctr1);
+         return(k1)
+     else
+       x_O_1: transcript <- cst_transcript;
+       find [unique] u = ri <= qMD suchthat defined(r_1[ri], t_1[ri]) && (t_1 = t_1[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R prk;
+         return(r_1)
+
+
+Applying move all binders
+  - Move assignment to x_O_1
+  - Move assignment to x_O
+yields
+
+Game 9 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       find [unique] u_3 = ri_3 <= qMD suchthat defined(r[ri_3], t_1[ri_3]) && (t_1 = t_1[ri_3]) then
+         k1: prk <- kdf_expand(r[u_3], ctr1);
+         return(k1)
+       else
+         r <-R prk;
+         k1: prk <- kdf_expand(r, ctr1);
+         return(k1)
+     else
+       find [unique] u = ri <= qMD suchthat defined(r_1[ri], t_1[ri]) && (t_1 = t_1[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R prk;
+         return(r_1)
+
+
+Applying equivalence prf(kdf_expand) [probability qMD * Pkdf(time_1, 1)]
+  - Equivalence prf(kdf_expand) with variables: r -> k_1
+yields
+
+Game 10 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       find [unique] u_3 = ri_3 <= qMD suchthat defined(r[ri_3], t_1[ri_3]) && (t_1 = t_1[ri_3]) then
+         k1: prk <- (x_O_3: ctr <- ctr1; find [unique]  suchthat defined(x_O_2[u_3], r_2[u_3]) && {26}(x_O_3 = x_O_2[u_3]) then r_2[u_3] orfind u_5 = ri_6 <= qMD suchthat defined(r_3[ri_6], x_O_3[ri_6], u_3[ri_6]) && (u_3[ri_6] = u_3) && (x_O_3 = x_O_3[ri_6]) then r_3[u_5] else r_3 <-R prk; r_3);
+         return(k1)
+       else
+         r: prk <- cst_prk;
+         k1: prk <- (x_O_2: ctr <- ctr1; {66}find [unique] u_4 = ri_4 <= qMD suchthat defined(u_3[ri_4], x_O_3[ri_4], r_3[ri_4]) && {70}((u_3[ri_4] = i) && (x_O_2 = x_O_3[ri_4])) then r_3[u_4] else r_2 <-R prk; r_2);
+         return(k1)
+     else
+       find [unique] u = ri <= qMD suchthat defined(r_1[ri], t_1[ri]) && (t_1 = t_1[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R prk;
+         return(r_1)
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Replaced (x_O_3 = x_O_2[u_3]) with true at 26
+    - Replaced ((u_3[ri_4] = i) && (x_O_2 = x_O_3[ri_4])) with false at 70
+    - Remove branch 1 in find at 66
+    - Find at 66 removed (else branch kept if any)
+yields
+
+Game 11 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       find [unique] u_3 = ri_3 <= qMD suchthat defined(r[ri_3], t_1[ri_3]) && (t_1 = t_1[ri_3]) then
+         k1: prk <- (x_O_3: ctr <- ctr1; {21}find [unique]  suchthat defined(x_O_2[u_3], r_2[u_3]) then r_2[u_3] orfind u_5 = ri_6 <= qMD suchthat defined(r_3[ri_6], x_O_3[ri_6], u_3[ri_6]) && (u_3[ri_6] = u_3) && (x_O_3 = x_O_3[ri_6]) then r_3[u_5] else r_3 <-R prk; r_3);
+         return(k1)
+       else
+         r: prk <- cst_prk;
+         k1: prk <- (x_O_2: ctr <- ctr1; r_2 <-R prk; r_2);
+         return(k1)
+     else
+       find [unique] u = ri <= qMD suchthat defined(r_1[ri], t_1[ri]) && (t_1 = t_1[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R prk;
+         return(r_1)
+
+
+Applying expand
+  - Expand if/find/let
+    - Replaced defined condition x_O_2[u_3], r_2[u_3] with r_2[u_3] in find at 21
+yields
+
+Game 12 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       find [unique] u_3 = ri_3 <= qMD suchthat defined(r[ri_3], t_1[ri_3]) && (t_1 = t_1[ri_3]) then
+         x_O_3: ctr <- ctr1;
+         find [unique]  suchthat defined(r_2[u_3]) then
+           k1: prk <- r_2[u_3];
+           return(k1)
+         orfind u_5 = ri_6 <= qMD suchthat defined(r_3[ri_6], x_O_3[ri_6], u_3[ri_6]) && (u_3[ri_6] = u_3) && (x_O_3 = x_O_3[ri_6]) then
+           k1: prk <- r_3[u_5];
+           return(k1)
+         else
+           r_3 <-R prk;
+           k1: prk <- r_3;
+           return(k1)
+       else
+         r: prk <- cst_prk;
+         x_O_2: ctr <- ctr1;
+         r_2 <-R prk;
+         k1: prk <- r_2;
+         return(k1)
+     else
+       find [unique] u = ri <= qMD suchthat defined(r_1[ri], t_1[ri]) && (t_1 = t_1[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R prk;
+         return(r_1)
+
+
+Applying remove assignments of findcond
+  - Remove assignments on r (definition removed, all usages removed)
+  - Remove assignments on x_O_2 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+yields
+
+Game 13 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       find [unique] u_3 = ri_3 <= qMD suchthat defined(r_2[ri_3], t_1[ri_3]) && (t_1 = t_1[ri_3]) then
+         x_O_3: ctr <- ctr1;
+ {20}    find [unique]  suchthat defined(r_2[u_3]) then
+           return(r_2[u_3])
+         orfind u_5 = ri_6 <= qMD suchthat defined(r_3[ri_6], x_O_3[ri_6], u_3[ri_6]) && (u_3[ri_6] = u_3) && (x_O_3 = x_O_3[ri_6]) then
+           return(r_3[u_5])
+         else
+           r_3 <-R prk;
+           return(r_3)
+       else
+         r_2 <-R prk;
+         return(r_2)
+     else
+       find [unique] u = ri <= qMD suchthat defined(r_1[ri], t_1[ri]) && (t_1 = t_1[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R prk;
+         return(r_1)
+
+
+Applying simplify
+  - Simplification pass
+    - Remove else branch of find at 20
+    - Remove branch 2 in find at 20
+    - Replaced defined condition r_2[u_3] with an empty condition in find at 20
+    - A single branch always succeeds in find at 20
+yields
+
+Game 14 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     if b then
+       find [unique] u_3 = ri_3 <= qMD suchthat defined(r_2[ri_3], t_1[ri_3]) && (t_1 = t_1[ri_3]) then
+         x_O_3: ctr <- ctr1;
+         return(r_2[u_3])
+       else
+         r_2 <-R prk;
+         return(r_2)
+     else
+       find [unique] u = ri <= qMD suchthat defined(r_1[ri], t_1[ri]) && (t_1 = t_1[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R prk;
+         return(r_1)
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on x_O_3 (definition removed, all usages removed)
+yields
+
+Game 15 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+  {8}if b then
+       find [unique] u_3 = ri_3 <= qMD suchthat defined(r_2[ri_3], t_1[ri_3]) && (t_1 = t_1[ri_3]) then
+         return(r_2[u_3])
+       else
+         r_2 <-R prk;
+         return(r_2)
+     else
+       find [unique] u = ri <= qMD suchthat defined(r_1[ri], t_1[ri]) && (t_1 = t_1[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R prk;
+         return(r_1)
+
+
+Applying merge branches
+  - Merge branches of test at 8
+yields
+
+Game 16 is
+     Ostart() :=
+     b <-R bool;
+     return();
+     foreach i <= qMD do
+     Omd(t_1: transcript) :=
+     find [unique] u = ri <= qMD suchthat defined(r_1[ri], t_1[ri]) && (t_1 = t_1[ri]) then
+       return(r_1[u])
+     else
+       r_1 <-R prk;
+       return(r_1)
+
+
+Proved bit secrecy of b in game 16
+Adv[Game 1: bit secrecy of b] <= 2 * qMD * Pkdf(time_1, 1) + Adv[Game 16: bit secrecy of b]
+Adv[Game 16: bit secrecy of b] <= 0
+RESULT Proved bit secrecy of b up to probability 2 * qMD * Pkdf(time_1, 1)
+RESULT time_1 = time + (qMD - 1) * time(kdf_expand)
+All queries proved.

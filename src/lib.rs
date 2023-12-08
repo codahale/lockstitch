@@ -125,10 +125,10 @@ impl Protocol {
         aegis.encrypt(in_out);
 
         // Finalize the long AEGIS-128L tag.
-        let (_, tag) = aegis.finalize();
+        let (_, long_tag) = aegis.finalize();
 
         // Perform a Mix operation with the long AEGIS-128L tag.
-        self.mix(b"tag", &tag);
+        self.mix(b"tag", &long_tag);
     }
 
     /// Decrypts the given slice in place.
@@ -151,10 +151,10 @@ impl Protocol {
         aegis.decrypt(in_out);
 
         // Finalize the long AEGIS-128L tag.
-        let (_, tag) = aegis.finalize();
+        let (_, long_tag) = aegis.finalize();
 
         // Perform a Mix operation with the long AEGIS-128L tag.
-        self.mix(b"tag", &tag);
+        self.mix(b"tag", &long_tag);
     }
 
     /// Seals the given mutable slice in place.

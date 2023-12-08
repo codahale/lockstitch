@@ -1,78 +1,45 @@
-(* Lockstitch's KDF expansion, encryption, and tag derivation is INT-CTXT. *)
-(* XXX DOES NOT WORK YET XXX *)
-(* TODO figure out how to tell CryptoVerif it can compare the KDF output of the tag to verify the tag *)
+(* Lockstitch's KDF expansion and authenticated encryption is INT-CTXT. *)
 
-(* Common key type for encryption and MAC *)
-
-type key [fixed, large].
-
-(* (CPA Stream cipher, assumed to use a nonce) *)
+(* AEGIS-128L is assumed to be a secure AEAD when used with a unique nonce. *)
 
 proba Penc.
+proba Pencctxt.
 
-expand IND_CPA_sym_enc(key, bitstring, bitstring, enc, dec, injbot, Z, Penc).
+type key [fixed].
 
-(* Mac *)
+expand AEAD(key, bitstring, bitstring, bitstring, enc, dec, injbot, Z, Penc, Pencctxt).
 
-type tag [fixed].
+(* Using SHA-256 to hash the transcript is assumed to be a random oracle. *)
 
-proba Pmac.
+type hash_key [fixed].
+type transcript [bounded, large].
+type prk [fixed, large].
 
-expand SUF_CMA_det_mac(key, bitstring, tag, mac, verify, Pmac).
+expand ROM_hash(hash_key, transcript, prk, kdf_extract, Okdf_extract, qKDFextract).
 
-(* Hash *)
-
-type hash_key [fixed, large].
-type input [fixed, large].
-type digest [fixed, large].
-
-expand ROM_hash(hash_key, input, digest, kdf_extract, Okdf_extract, qKDFextract).
-
-(* PRF *)
+(* Using SHA-256 to hash a counter is assumed to be a PRF. *)
 
 type ctr [fixed].
-const ctr1, ctr2, ctr3: ctr.
+const ctr1: ctr.
 
 proba Pkdf.
 
-expand PRF(digest, ctr, key, kdf_expand, Pkdf).
+expand PRF(prk, ctr, key, kdf_expand, Pkdf).
 
 (* Construction *)
 
-fun concat(bitstring, key): bitstring [data].
-fun ratchet(key, tag): input [data].
+(* No associated data is used with AEGIS-128L. *)
+const ad: bitstring.
 
-(* equation forall k: key, k2: key, hk: hash_key;
-    veirfy(k, kfd_expand(kdf_extract())) = true. *)
-
-letfun full_enc(m: bitstring, hk: hash_key, ikm: input) =
-    prk1 <- kdf_extract(hk, ikm);
+letfun full_enc(m: bitstring, hk: hash_key, t: transcript) =
+    prk1 <- kdf_extract(hk, t);
     k1 <- kdf_expand(prk1, ctr1);
-    k2 <- kdf_expand(prk1, ctr2);
-    k3 <- kdf_expand(prk1, ctr3);
-    c1 <- enc(m, k2);
-    t1 <- mac(c1, k3);
-    prk2 <- kdf_extract(hk, ratchet(k1, t1));
-    k5 <- kdf_expand(prk2, ctr2);
-    concat(c1, k5).
+    enc(m, ad, k1).
 
-letfun full_dec(c: bitstring, hk: hash_key, ikm: input) =
-    let concat(c1, k5) = c in
-    (
-        prk1 <- kdf_extract(hk, ikm);
-        k1 <- kdf_expand(prk1, ctr1);
-        k2 <- kdf_expand(prk1, ctr2);
-        k3 <- kdf_expand(prk1, ctr3);
-        t1 <- mac(c1, k3);
-        prk2 <- kdf_extract(hk, ratchet(k1, t1));
-        k5' <- kdf_expand(prk2, ctr2);
-        if k5 = k5' then
-            dec(c1, k1)
-        else
-            bottom
-    )
-    else
-        bottom.
+letfun full_dec(c: bitstring, hk: hash_key, t: transcript) =
+    prk1 <- kdf_extract(hk, t);
+    k1 <- kdf_expand(prk1, ctr1);
+    dec(c, ad, k1).
 
 (* Queries *)
 
@@ -83,24 +50,24 @@ query event(bad) ==> false.
 
 table ciphertexts(bitstring).
  
-let Qenc(hk: hash_key, ikm: input) = 
+let Qenc(hk: hash_key, t: transcript) = 
     foreach ienc <= qEnc do
         OEnc(m0: bitstring) :=
-            c0 <- full_enc(m0, hk, ikm);
+            c0 <- full_enc(m0, hk, t);
             insert ciphertexts(c0);
             return(c0).
 
-let QdecTest(hk: hash_key, ikm: input) =
+let QdecTest(hk: hash_key, t: transcript) =
     foreach idec <= qDec do
         ODec(c: bitstring) :=
             get ciphertexts(=c) in return(true) else
-                if full_dec(c, hk, ikm) <> bottom
+                if full_dec(c, hk, t) <> bottom
                 then event bad; return(true)
                 else return(false).
 
 process 
     Ostart() :=
     hk <-R hash_key;
-    ikm <-R input;
+    t <-R transcript;
     return;
-    (run Qenc(hk, ikm) | run QdecTest(hk, ikm) | run Okdf_extract(hk))
+    (run Qenc(hk, t) | run QdecTest(hk, t) | run Okdf_extract(hk))

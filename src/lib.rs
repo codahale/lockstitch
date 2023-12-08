@@ -124,8 +124,11 @@ impl Protocol {
         // Encrypt the plaintext.
         aegis.encrypt(in_out);
 
-        // Perform a Mix operation with the AEGIS-128L tag.
-        self.mix(b"tag", &aegis.finalize());
+        // Finalize the long AEGIS-128L tag.
+        let (_, tag) = aegis.finalize();
+
+        // Perform a Mix operation with the long AEGIS-128L tag.
+        self.mix(b"tag", &tag);
     }
 
     /// Decrypts the given slice in place.
@@ -147,8 +150,11 @@ impl Protocol {
         // Decrypt the ciphertext.
         aegis.decrypt(in_out);
 
-        // Perform a Mix operation with the AEGIS-128L tag.
-        self.mix(b"tag", &aegis.finalize());
+        // Finalize the long AEGIS-128L tag.
+        let (_, tag) = aegis.finalize();
+
+        // Perform a Mix operation with the long AEGIS-128L tag.
+        self.mix(b"tag", &tag);
     }
 
     /// Seals the given mutable slice in place.
@@ -164,11 +170,25 @@ impl Protocol {
         //   0x05 || left_encode(|label|) || label
         self.op_header(OpCode::AuthCrypt, label);
 
-        // Perform a Crypt operation with the plaintext.
-        self.encrypt(b"message", in_out);
+        // Derive an AEGIS-128L key and nonce.
+        let kn = self.derive_array::<32>(b"key");
+        let (k, n) = kn.split_at(16);
+        let mut aegis = Aegis128L::new(
+            k.try_into().expect("should be 16 bytes"),
+            n.try_into().expect("should be 16 bytes"),
+        );
 
-        // Perform a Derive operation to produce an authentication tag.
-        self.derive(b"tag", tag);
+        // Encrypt the plaintext.
+        aegis.encrypt(in_out);
+
+        // Finalize the AEGIS-128L tags.
+        let (short_tag, long_tag) = aegis.finalize();
+
+        // Append the short AEGIS-128L tag to the ciphertext.
+        tag.copy_from_slice(&short_tag);
+
+        // Perform a Mix operation with the long AEGIS-128L tag.
+        self.mix(b"tag", &long_tag);
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -184,14 +204,25 @@ impl Protocol {
         //   0x05 || left_encode(|label|) || label
         self.op_header(OpCode::AuthCrypt, label);
 
-        // Perform a Crypt operation with the ciphertext.
-        self.decrypt(b"message", in_out);
+        // Derive an AEGIS-128L key and nonce.
+        let kn = self.derive_array::<32>(b"key");
+        let (k, n) = kn.split_at(16);
+        let mut aegis = Aegis128L::new(
+            k.try_into().expect("should be 16 bytes"),
+            n.try_into().expect("should be 16 bytes"),
+        );
 
-        // Perform a Derive operation to produce a counterfactual authentication tag.
-        let tag_p = self.derive_array::<TAG_LEN>(b"tag");
+        // Decrypt the ciphertext.
+        aegis.decrypt(in_out);
+
+        // Finalize the AEGIS-128L tags.
+        let (short_tag, long_tag) = aegis.finalize();
+
+        // Perform a Mix operation with the long AEGIS-128L tag.
+        self.mix(b"tag", &long_tag);
 
         // Check the tag against the counterfactual tag in constant time.
-        if ct_eq(tag, &tag_p) {
+        if ct_eq(tag, &short_tag) {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -392,10 +423,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(b"fifth", &mut sealed);
 
-        expect!["a4f5cebc56e71efc883365751fa99043d21f025bc2f66afb0fd22129908d51614449"]
+        expect!["ad35e4cbb9649e5fddaa1ab103f793e7c9b8a0e60040d8c9f3ce957b996ddc73e353"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["82643fff7a7bb02e"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+        expect!["6192e4961e3c0280"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
     }
 
     #[test]

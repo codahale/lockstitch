@@ -1,13 +1,12 @@
-(* Lockstitch's KDF expansion and authenticated encryption is IND-CPA. *)
+(* Lockstitch's KDF expansion and unauthenticated encryption is IND-CPA. *)
 
-(* AEGIS-128L is assumed to be a secure AEAD when used with a unique nonce. *)
+(* AEGIS-128L is assumed to be IND-CPA when used with a unique nonce. *)
 
 proba Penc.
-proba Pencctxt.
 
 type key [fixed].
 
-expand AEAD(key, bitstring, bitstring, bitstring, enc, dec, injbot, Z, Penc, Pencctxt).
+expand IND_CPA_sym_enc(key, bitstring, bitstring, enc, dec, injbot, Z, Penc).
 
 (* Using SHA-256 to hash the transcript is assumed to be a random oracle. *)
 
@@ -28,13 +27,10 @@ expand PRF(prk, ctr, key, kdf_expand, Pkdf).
 
 (* Construction *)
 
-(* No associated data is used with AEGIS-128L. *)
-const ad: bitstring.
-
 letfun full_enc(m: bitstring, hk: hash_key, t: transcript) =
     prk1 <- kdf_extract(hk, t);
     k1 <- kdf_expand(prk1, ctr1);
-    enc(m, ad, k1).
+    enc(m, k1).
 
 (* Queries *)
 

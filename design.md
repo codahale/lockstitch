@@ -136,23 +136,23 @@ properties:
 
 `Encrypt` and `Decrypt` operations append an operation code and a label to the transcript, derive an
 AEGIS-128L key and nonce, encrypt or decrypt an input with AEGIS-128L, and append a `Mix` operation
-with the AEGIS-128L tag to the transcript.
+with the 32-byte AEGIS-128L tag to the transcript.
 
 ```text
 function encrypt(transcript, label, plaintext):
-  transcript ← transcript ǁ 0x04                                // Append a Crypt op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label        // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)     // Derive an AEGIS-128L key and nonce.
-  (ciphertext, tag) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
-  transcript ← mix(transcript, "tag", tag)                      // Append a Mix operation with the tag.
+  transcript ← transcript ǁ 0x04                                  // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label          // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)       // Derive an AEGIS-128L key and nonce.
+  (ciphertext, tag32) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
+  transcript ← mix(transcript, "tag", tag32)                      // Append a Mix operation with the tag.
   (transcript, ciphertext)
 
 function decrypt(transcript, label, ciphertext):
-  transcript ← transcript ǁ 0x04                                // Append a Crypt op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label        // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)     // Derive an AEGIS-128L key and nonce.
-  (plaintext, tag) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
-  transcript ← mix(transcript, "tag", tag)                      // Append a Mix operation with the tag.
+  transcript ← transcript ǁ 0x04                                  // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label          // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)       // Derive an AEGIS-128L key and nonce.
+  (plaintext, tag32) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
+  transcript ← mix(transcript, "tag", tag32)                      // Append a Mix operation with the tag.
   (transcript, plaintext)
 ```
 
@@ -194,18 +194,20 @@ authenticated encryption, returning a ciphertext and an authentication tag.
 
 ```text
 function seal(transcript, label, plaintext):
-  transcript ← transcript ǁ 0x05                                       // Append an AuthCrypt op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label               // Append the encoded label.
-  (transcript, ciphertext) ← encrypt(transcript, "message", plaintext) // Encrypt the plaintext.
-  (transcript, tag) ← derive(transcript, "tag", 16)                    // Derive an authentication tag.
-  (transcript, ciphertext, tag)
+  transcript ← transcript ǁ 0x05                                         // Append an AuthCrypt op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label                 // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)              // Derive an AEGIS-128L key and nonce.
+  (ciphertext, tag16, tag32) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
+  transcript ← mix(transcript, "tag", tag32)                             // Append a Mix operation with the long tag.
+  (transcript, ciphertext, tag16)                                        // Return the ciphertext and the short tag.
 
 function open(transcript, label, ciphertext, tag):
-  transcript ← transcript ǁ 0x05                                       // Append an AuthCrypt op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label               // Append the encoded label.
-  (transcript, plaintext) ← decrypt("message", ciphertext)             // Decrypt the ciphertext.
-  (transcript, tag′) ← derive(transcript, "tag", 16)                   // Derive a counterfactual authentication tag.
-  if tag = tag′:                                                       // Compare the tags in constant time.
+  transcript ← transcript ǁ 0x05                                         // Append an AuthCrypt op code to the transcript.
+  transcript ← transcript ǁ left_encode(|label|) ǁ label                 // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)              // Derive an AEGIS-128L key and nonce.
+  (plaintext, tag16, tag32) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
+  transcript ← mix(transcript, "tag", tag32)                             // Append a Mix operation with the long tag.
+  if tag = tag16′:                                                       // Compare the short tags in constant time.
     (transcript, plaintext)
   else:
     (transcript, ⊥)
@@ -246,6 +248,32 @@ function mac(key, message):
 The use of labels and the encoding of [`Mix` inputs](#mix) ensures that the key and the message will
 never overlap, even if their lengths vary.
 
+### Stream Ciphers
+
+Lockstitch can be used to create a stream cipher:
+
+```text
+function stream_encrypt(key, nonce, plaintext):
+  stream ← init("com.example.stream")                         // Initialize a protocol with a domain string.
+  stream ← mix(stream, "key", key)                            // Mix the key into the protocol.
+  stream ← mix(stream, "nonce", nonce)                        // Mix the nonce into the protocol.
+  (_, ciphertext) ← encrypt(stream, "message", plaintext)     // Encrypt the plaintext.
+  ciphertext
+
+function stream_decrypt(key, nonce, ciphertext):
+  stream ← init("com.example.stream")                         // Initialize a protocol with a domain string.
+  stream ← mix(stream, "key", key)                            // Mix the key into the protocol.
+  stream ← mix(stream, "nonce", nonce)                        // Mix the nonce into the protocol.
+  (_, plaintext) ← decrypt(stream, "message", ciphertext)     // Decrypt the ciphertext.
+  plaintext 
+```
+
+This construction is IND-CPA-secure under the following assumptions:
+
+1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
+2. SHA-256 is indistinguishable from a random oracle when hashing the transcript.
+3. SHA-256 is PRF-secure when hashing a counter.
+
 ### Authenticated Encryption And Data (AEAD)
 
 Lockstitch can be used to create an AEAD:
@@ -263,14 +291,8 @@ function aead_seal(key, nonce, ad, plaintext):
 The introduction of a nonce makes the scheme probabilistic (which is required for IND-CCA security).
 
 Unlike many standard AEADs (e.g. AES-GCM and ChaCha20Poly1305), it is fully context-committing: the
-tag is a strong cryptographic commitment to all the inputs. Similar to the [CTX construction][CTX],
-which replaces the tag of an existing AEAD with `H(K, N, A, T)`, the final `Seal` operation closes
-over all inputs--key, nonce, associated data, and plaintext--which are also the values used to
-produce the ciphertext. Finding a pair of `(key, nonce, ad, plaintext)` tuples which produce the
-same tag would similarly imply a lack of UF-CMA security for AEGIS-128L or collision resistance for
-SHA-256.
-
-[CTX]: https://par.nsf.gov/servlets/purl/10391723
+tag is a strong cryptographic commitment to all the inputs. AEGIS-128L is key-committing and both
+the key and the nonce are derived from the transcript using Concat-KDF.
 
 Also unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces
 of associated data without risk of ambiguous inputs.
@@ -284,6 +306,13 @@ function aead_open(key, nonce, ad, ciphertext, tag):
   (_, plaintext) ← open(aead, "message", ciphertext, tag) // Open the ciphertext.
   plaintext                                               // Return the plaintext or an error.
 ```
+
+This construction is IND-CCA2-secure (i.e. both IND-CPA and INT-CTXT) under the following
+assumptions:
+
+1. AEGIS-128L is AEAD-secure when used with a unique nonce and a fixed associated data string.
+2. SHA-256 is indistinguishable from a random oracle when hashing the transcript.
+3. SHA-256 is PRF-secure when hashing a counter.
 
 #### Expanded Transcript
 
@@ -307,22 +336,15 @@ t1 ← t0 || 0x02 || 0x01, 0x03 || "key" || 0x06c47a03da9a2e6cdebdcafdfd62b57d |
 t2 ← t1 || 0x02 || 0x01, 0x05 || "nonce" || 0x3f4ac18bfa54206f5c6de81517618d43 || 0x80, 0x01 
 t3 ← t2 || 0x02 || 0x01, 0x02 || "ad" || "this is public" || 0x0e, 0x01 
 t4 ← t3 || 0x05 || 0x01, 0x07 || "message"
-t5 ← t4 || 0x04 || 0x01, 0x07 || "message"
-t6 ← t5 || 0x03 || 0x01, 0x03 || "key"
+t5 ← t4 || 0x03 || 0x01, 0x03 || "key"
 ikm0 ← sha256(t6)
 kdf_key0 ← sha256(u32_be(1) || ikm0 || "lockstitch")
 aegis_key ← sha256(u32_be(2) || ikm0 || "lockstitch")
-t7 ← 0x03 || 0x01, 0x07 || "kdf-key" || kdf_key0 || 0x20, 0x01
-t8 ← t7 || 0x03 || 0x01, 0x03 || "len" || 0x01, 0x20 || 0x02, 0x01
-(ciphertext, t) ← aegis128l::encrypt(aegis_key, "this is a secret")
-t9 ← t8 || 0x03 || 0x01, 0x03 || "tag" || t || 0x20, 0x01
-t10 ← t9 || 0x03 || 0x01, 0x03 || "tag"
-ikm1 ← sha256(t10)
-kdf_key1 ← sha256(u32_be(1) || ikm1 || "lockstitch")
-tag ← sha256(u32_be(2) || ikm1 || "lockstitch")[..16]
-t11 ← 0x03 || 0x01, 0x07 || "kdf-key" || kdf_key1 || 0x20, 0x01
-t12 ← t11 || 0x03 || 0x01, 0x03 || "len" || 0x01, 0x10 || 0x02, 0x01
-(ciphertext, tag)
+t6 ← 0x03 || 0x01, 0x07 || "kdf-key" || kdf_key0 || 0x20, 0x01
+t7 ← t6 || 0x03 || 0x01, 0x03 || "len" || 0x01, 0x20 || 0x02, 0x01
+(ciphertext, tag16, tag32) ← aegis128l::encrypt(aegis_key, "this is a secret")
+t8 ← t7 || 0x03 || 0x01, 0x03 || "tag" || tag32 || 0x20, 0x01
+(ciphertext, tag16)
 ```
 
 ## Complex Protocols

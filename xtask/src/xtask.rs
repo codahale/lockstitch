@@ -83,7 +83,7 @@ fn ci(sh: &Shell) -> Result<()> {
 fn proofs(sh: &Shell) -> Result<()> {
     for model in sh.read_dir("proofs").expect("should have a proofs dir") {
         if model.extension().map(|s| s == "ocv").unwrap_or(false) {
-            let proof = model.with_extension("ocp");
+            let proof = model.with_extension("proof");
             cmd!(sh, "cryptoverif -oproof {proof} {model}").run()?;
         }
     }

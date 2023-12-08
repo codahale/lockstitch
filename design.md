@@ -18,8 +18,8 @@ A Lockstitch protocol supports the following operations:
 * `Derive`: Ratchet the protocol's transcript, preventing rollback, and generate a pseudo-random
   bitstring of arbitrary length that is cryptographically dependent on the protocol's prior
   transcript.
-* `Encrypt`/`Decrypt`: Encrypt and decrypt a message, adding an authentication tag of the
-  ciphertext to the protocol transcript.
+* `Encrypt`/`Decrypt`: Encrypt and decrypt a message, adding an authenticator tag of the ciphertext
+  to the protocol transcript.
 * `Seal`/`Open`: Encrypt and decrypt a message, using an authenticator tag to ensure the ciphertext
   has not been modified.
 
@@ -189,8 +189,10 @@ beforehand.
 
 ### `Seal`/`Open`
 
-`Seal` and `Open` operations combine an `Encrypt` operation with a `Derive` operation to provide
-authenticated encryption, returning a ciphertext and an authentication tag.
+`Seal` and `Open` operations append an operation code and a label to the transcript, derive an
+AEGIS-128L key and nonce, encrypt or decrypt an input with AEGIS-128L, append a `Mix` operation with
+the 32-byte AEGIS-128L tag to the transcript, and append the 16-byte AEGIS-128L tag to the
+ciphertext.
 
 ```text
 function seal(transcript, label, plaintext):
@@ -230,7 +232,8 @@ function message_digest(message):
   digest
 ```
 
-This construction is collision-resistant if SHA-256 is collision-resistant.
+This construction is indistinguishable from a random oracle if SHA-256 is indistinguishable from a
+random oracle.
 
 ### Message Authentication Codes
 
@@ -271,8 +274,7 @@ function stream_decrypt(key, nonce, ciphertext):
 This construction is IND-CPA-secure under the following assumptions:
 
 1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
-2. SHA-256 is indistinguishable from a random oracle when hashing the transcript.
-3. SHA-256 is PRF-secure when hashing a counter.
+2. SHA-256 is indistinguishable from a random oracle.
 
 ### Authenticated Encryption And Data (AEAD)
 
@@ -311,8 +313,7 @@ This construction is IND-CCA2-secure (i.e. both IND-CPA and INT-CTXT) under the 
 assumptions:
 
 1. AEGIS-128L is AEAD-secure when used with a unique nonce and a fixed associated data string.
-2. SHA-256 is indistinguishable from a random oracle when hashing the transcript.
-3. SHA-256 is PRF-secure when hashing a counter.
+2. SHA-256 is indistinguishable from a random oracle.
 
 #### Expanded Transcript
 

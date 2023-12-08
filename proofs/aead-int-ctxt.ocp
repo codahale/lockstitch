@@ -1,0 +1,2492 @@
+Initial state
+Game 1 is
+     Ostart() :=
+     hk_2 <-R hash_key;
+     t_2 <-R transcript;
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       c0: bitstring <- (m: bitstring <- m0; prk1: prk <- kdf_extract(hk_2, t_2); k1: key <- kdf_expand(prk1, ctr1); m_1: bitstring <- m; d: bitstring <- ad; k: key <- k1; r <-R enc_seed; enc_r(m_1, d, k, r));
+       insert ciphertexts(c0);
+       return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       get ciphertexts(=c_1) in
+         return(true)
+       else
+         if (prk1_1: prk <- kdf_extract(hk_2, t_2); k1_1: key <- kdf_expand(prk1_1, ctr1); dec(c_1, ad, k1_1)) <> bottom then
+           event bad;
+           return(true)
+         else
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       return(kdf_extract(hk_2, x1))
+     ))
+
+
+Applying expand get, insert and prove unique annotations
+  - Expand get/insert for table ciphertexts
+yields
+
+Game 2 is
+     Ostart() :=
+     hk_2 <-R hash_key;
+     t_2 <-R transcript;
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       c0: bitstring <- (m: bitstring <- m0; prk1: prk <- kdf_extract(hk_2, t_2); k1: key <- kdf_expand(prk1, ctr1); m_1: bitstring <- m; d: bitstring <- ad; k: key <- k1; r <-R enc_seed; enc_r(m_1, d, k, r));
+       ciphertexts_1: bitstring <- c0;
+       return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(ciphertexts_1[u_1]) && (ciphertexts_1[u_1] = c_1) then
+         return(true)
+       else
+         if (prk1_1: prk <- kdf_extract(hk_2, t_2); k1_1: key <- kdf_expand(prk1_1, ctr1); dec(c_1, ad, k1_1)) <> bottom then
+           event bad;
+           return(true)
+         else
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       return(kdf_extract(hk_2, x1))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 3 is
+     Ostart() :=
+     hk_2 <-R hash_key;
+     t_2 <-R transcript;
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       m: bitstring <- m0;
+       prk1: prk <- kdf_extract(hk_2, t_2);
+       k1: key <- kdf_expand(prk1, ctr1);
+       m_1: bitstring <- m;
+       d: bitstring <- ad;
+       k: key <- k1;
+       r <-R enc_seed;
+       c0: bitstring <- enc_r(m_1, d, k, r);
+       ciphertexts_1: bitstring <- c0;
+       return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(ciphertexts_1[u_1]) && (ciphertexts_1[u_1] = c_1) then
+         return(true)
+       else
+         prk1_1: prk <- kdf_extract(hk_2, t_2);
+         k1_1: key <- kdf_expand(prk1_1, ctr1);
+         if dec(c_1, ad, k1_1) <> bottom then
+           event bad;
+           return(true)
+         else
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       return(kdf_extract(hk_2, x1))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on m (definition removed, all usages removed)
+  - Remove assignments on m_1 (definition removed, all usages removed)
+  - Remove assignments on k (definition removed, all usages removed)
+  - Remove assignments on ciphertexts_1 (definition removed, all usages removed)
+yields
+
+Game 4 is
+     Ostart() :=
+     hk_2 <-R hash_key;
+     t_2 <-R transcript;
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       prk1: prk <- kdf_extract(hk_2, t_2);
+       k1: key <- kdf_expand(prk1, ctr1);
+       d: bitstring <- ad;
+       r <-R enc_seed;
+       c0: bitstring <- enc_r(m0, d, k1, r);
+       return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         prk1_1: prk <- kdf_extract(hk_2, t_2);
+         k1_1: key <- kdf_expand(prk1_1, ctr1);
+         if dec(c_1, ad, k1_1) <> bottom then
+           event bad;
+           return(true)
+         else
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       return(kdf_extract(hk_2, x1))
+     ))
+
+
+Applying equivalence rom(kdf_extract)
+  - Equivalence rom(kdf_extract) with variables: hk_2 -> hk_3
+yields
+
+Game 5 is
+     Ostart() :=
+     t_2 <-R transcript;
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       prk1: prk <- (x_O: transcript <- t_2; find [unique] u_10 = ri_8 <= qEnc suchthat defined(x_O[ri_8], r_1[ri_8]) && {16}(x_O = x_O[ri_8]) then r_1[u_10] orfind u_9 = ri_7 <= qDec suchthat defined(x_O_1[ri_7], r_2[ri_7]) && {26}(x_O = x_O_1[ri_7]) then r_2[u_9] orfind u_8 = ri_6 <= qKDFextract suchthat defined(x_O_2[ri_6], r_3[ri_6]) && (x_O = x_O_2[ri_6]) then r_3[u_8] else r_1 <-R prk; r_1);
+       k1: key <- kdf_expand(prk1, ctr1);
+       d: bitstring <- ad;
+       r <-R enc_seed;
+       c0: bitstring <- enc_r(m0, d, k1, r);
+       return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         prk1_1: prk <- (x_O_1: transcript <- t_2; find [unique] u_7 = ri_5 <= qEnc suchthat defined(x_O[ri_5], r_1[ri_5]) && {94}(x_O_1 = x_O[ri_5]) then r_1[u_7] orfind u_6 = ri_4 <= qDec suchthat defined(x_O_1[ri_4], r_2[ri_4]) && {104}(x_O_1 = x_O_1[ri_4]) then r_2[u_6] orfind u_5 = ri_3 <= qKDFextract suchthat defined(x_O_2[ri_3], r_3[ri_3]) && (x_O_1 = x_O_2[ri_3]) then r_3[u_5] else r_2 <-R prk; r_2);
+         k1_1: key <- kdf_expand(prk1_1, ctr1);
+         if dec(c_1, ad, k1_1) <> bottom then
+           event bad;
+           return(true)
+         else
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       return((x_O_2: transcript <- x1; find [unique] u_4 = ri_2 <= qEnc suchthat defined(x_O[ri_2], r_1[ri_2]) && (x_O_2 = x_O[ri_2]) then r_1[u_4] orfind u_3 = ri_1 <= qDec suchthat defined(x_O_1[ri_1], r_2[ri_1]) && (x_O_2 = x_O_1[ri_1]) then r_2[u_3] orfind u_2 = ri <= qKDFextract suchthat defined(x_O_2[ri], r_3[ri]) && (x_O_2 = x_O_2[ri]) then r_3[u_2] else r_3 <-R prk; r_3))
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Replaced (x_O = x_O_1[ri_7]) with true at 26
+    - Replaced (x_O = x_O[ri_8]) with true at 16
+    - Replaced (x_O_1 = x_O_1[ri_4]) with true at 104
+    - Replaced (x_O_1 = x_O[ri_5]) with true at 94
+yields
+
+Game 6 is
+     Ostart() :=
+     t_2 <-R transcript;
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       prk1: prk <- (x_O: transcript <- t_2; {13}find [unique] u_10 = ri_8 <= qEnc suchthat defined(x_O[ri_8], r_1[ri_8]) then r_1[u_10] orfind u_9 = ri_7 <= qDec suchthat defined(x_O_1[ri_7], r_2[ri_7]) then r_2[u_9] orfind u_8 = ri_6 <= qKDFextract suchthat defined(x_O_2[ri_6], r_3[ri_6]) && (x_O = x_O_2[ri_6]) then r_3[u_8] else r_1 <-R prk; r_1);
+       k1: key <- kdf_expand(prk1, ctr1);
+       d: bitstring <- ad;
+       r <-R enc_seed;
+       c0: bitstring <- enc_r(m0, d, k1, r);
+       return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         prk1_1: prk <- (x_O_1: transcript <- t_2; {83}find [unique] u_7 = ri_5 <= qEnc suchthat defined(x_O[ri_5], r_1[ri_5]) then r_1[u_7] orfind u_6 = ri_4 <= qDec suchthat defined(x_O_1[ri_4], r_2[ri_4]) then r_2[u_6] orfind u_5 = ri_3 <= qKDFextract suchthat defined(x_O_2[ri_3], r_3[ri_3]) && (x_O_1 = x_O_2[ri_3]) then r_3[u_5] else r_2 <-R prk; r_2);
+         k1_1: key <- kdf_expand(prk1_1, ctr1);
+         if dec(c_1, ad, k1_1) <> bottom then
+           event bad;
+           return(true)
+         else
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       return((x_O_2: transcript <- x1; find [unique] u_4 = ri_2 <= qEnc suchthat defined(x_O[ri_2], r_1[ri_2]) && (x_O_2 = x_O[ri_2]) then r_1[u_4] orfind u_3 = ri_1 <= qDec suchthat defined(x_O_1[ri_1], r_2[ri_1]) && (x_O_2 = x_O_1[ri_1]) then r_2[u_3] orfind u_2 = ri <= qKDFextract suchthat defined(x_O_2[ri], r_3[ri]) && (x_O_2 = x_O_2[ri]) then r_3[u_2] else r_3 <-R prk; r_3))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Replaced defined condition x_O_1[ri_4], r_2[ri_4] with r_2[ri_4] in find at 83
+    - Replaced defined condition x_O[ri_5], r_1[ri_5] with r_1[ri_5] in find at 83
+    - Replaced defined condition x_O_1[ri_7], r_2[ri_7] with r_2[ri_7] in find at 13
+    - Replaced defined condition x_O[ri_8], r_1[ri_8] with r_1[ri_8] in find at 13
+yields
+
+Game 7 is
+     Ostart() :=
+     t_2 <-R transcript;
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       x_O: transcript <- t_2;
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         prk1: prk <- r_1[u_10];
+         k1: key <- kdf_expand(prk1, ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_2[ri_7]) then
+         prk1: prk <- r_2[u_9];
+         k1: key <- kdf_expand(prk1, ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       orfind u_8 = ri_6 <= qKDFextract suchthat defined(x_O_2[ri_6], r_3[ri_6]) && (x_O = x_O_2[ri_6]) then
+         prk1: prk <- r_3[u_8];
+         k1: key <- kdf_expand(prk1, ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       else
+         r_1 <-R prk;
+         prk1: prk <- r_1;
+         k1: key <- kdf_expand(prk1, ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         x_O_1: transcript <- t_2;
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           prk1_1: prk <- r_1[u_7];
+           k1_1: key <- kdf_expand(prk1_1, ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_2[ri_4]) then
+           prk1_1: prk <- r_2[u_6];
+           k1_1: key <- kdf_expand(prk1_1, ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_5 = ri_3 <= qKDFextract suchthat defined(x_O_2[ri_3], r_3[ri_3]) && (x_O_1 = x_O_2[ri_3]) then
+           prk1_1: prk <- r_3[u_5];
+           k1_1: key <- kdf_expand(prk1_1, ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_2 <-R prk;
+           prk1_1: prk <- r_2;
+           k1_1: key <- kdf_expand(prk1_1, ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       x_O_2: transcript <- x1;
+       find [unique] u_4 = ri_2 <= qEnc suchthat defined(x_O[ri_2], r_1[ri_2]) && (x_O_2 = x_O[ri_2]) then
+         return(r_1[u_4])
+       orfind u_3 = ri_1 <= qDec suchthat defined(x_O_1[ri_1], r_2[ri_1]) && (x_O_2 = x_O_1[ri_1]) then
+         return(r_2[u_3])
+       orfind u_2 = ri <= qKDFextract suchthat defined(x_O_2[ri], r_3[ri]) && (x_O_2 = x_O_2[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_2 (definition point kept, all usages removed)
+  - Remove assignments on x_O_1 (definition point kept, all usages removed)
+  - Remove assignments on prk1_1 (definition removed, all usages removed)
+  - Remove assignments on prk1_1 (definition removed, all usages removed)
+  - Remove assignments on prk1_1 (definition removed, all usages removed)
+  - Remove assignments on prk1_1 (definition removed, all usages removed)
+  - Remove assignments on x_O (definition point kept, all usages removed)
+  - Remove assignments on prk1 (definition removed, all usages removed)
+  - Remove assignments on prk1 (definition removed, all usages removed)
+  - Remove assignments on prk1 (definition removed, all usages removed)
+  - Remove assignments on prk1 (definition removed, all usages removed)
+yields
+
+Game 8 is
+     Ostart() :=
+     t_2 <-R transcript;
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       x_O: transcript <- cst_transcript;
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- kdf_expand(r_1[u_10], ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_2[ri_7]) then
+         k1: key <- kdf_expand(r_2[u_9], ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       orfind u_8 = ri_6 <= qKDFextract suchthat defined(x1[ri_6], x_O_2[ri_6], r_3[ri_6]) && (t_2 = x1[ri_6]) then
+         k1: key <- kdf_expand(r_3[u_8], ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       else
+         r_1 <-R prk;
+         k1: key <- kdf_expand(r_1, ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         x_O_1: transcript <- cst_transcript;
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- kdf_expand(r_1[u_7], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_2[ri_4]) then
+           k1_1: key <- kdf_expand(r_2[u_6], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_5 = ri_3 <= qKDFextract suchthat defined(x1[ri_3], x_O_2[ri_3], r_3[ri_3]) && (t_2 = x1[ri_3]) then
+           k1_1: key <- kdf_expand(r_3[u_5], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_2 <-R prk;
+           k1_1: key <- kdf_expand(r_2, ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       x_O_2: transcript <- cst_transcript;
+       find [unique] u_4 = ri_2 <= qEnc suchthat defined(t_2, x_O[ri_2], r_1[ri_2]) && (x1 = t_2) then
+         return(r_1[u_4])
+       orfind u_3 = ri_1 <= qDec suchthat defined(t_2, x_O_1[ri_1], r_2[ri_1]) && (x1 = t_2) then
+         return(r_2[u_3])
+       orfind u_2 = ri <= qKDFextract suchthat defined(x1[ri], x_O_2[ri], r_3[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying simplify [probability qKDFextract / |transcript|]
+  - Global dependency analysis on t_2
+yields
+
+Game 9 is
+     Ostart() :=
+  {2}t_2 <-R transcript;
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       x_O: transcript <- cst_transcript;
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- kdf_expand(r_1[u_10], ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_2[ri_7]) then
+         k1: key <- kdf_expand(r_2[u_9], ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       else
+         r_1 <-R prk;
+         k1: key <- kdf_expand(r_1, ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         x_O_1: transcript <- cst_transcript;
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- kdf_expand(r_1[u_7], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_2[ri_4]) then
+           k1_1: key <- kdf_expand(r_2[u_6], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_2 <-R prk;
+           k1_1: key <- kdf_expand(r_2, ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       x_O_2: transcript <- cst_transcript;
+{210}  find [unique] u_2 = ri <= qKDFextract suchthat defined(x1[ri], x_O_2[ri], r_3[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced defined condition x1[ri], x_O_2[ri], r_3[ri] with r_3[ri], x1[ri] in find at 210
+    - Remove random number generation at 2
+yields
+
+Game 10 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       x_O: transcript <- cst_transcript;
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- kdf_expand(r_1[u_10], ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_2[ri_7]) then
+         k1: key <- kdf_expand(r_2[u_9], ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       else
+         r_1 <-R prk;
+         k1: key <- kdf_expand(r_1, ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         x_O_1: transcript <- cst_transcript;
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- kdf_expand(r_1[u_7], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_2[ri_4]) then
+           k1_1: key <- kdf_expand(r_2[u_6], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_2 <-R prk;
+           k1_1: key <- kdf_expand(r_2, ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       x_O_2: transcript <- cst_transcript;
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying move all binders
+  - Move assignment to x_O_2
+  - Move assignment to x_O_1
+  - Move assignment to x_O
+yields
+
+Game 11 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- kdf_expand(r_1[u_10], ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_2[ri_7]) then
+         k1: key <- kdf_expand(r_2[u_9], ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+       else
+         r_1 <-R prk;
+         k1: key <- kdf_expand(r_1, ctr1);
+         d: bitstring <- ad;
+         r <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- kdf_expand(r_1[u_7], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_2[ri_4]) then
+           k1_1: key <- kdf_expand(r_2[u_6], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_2 <-R prk;
+           k1_1: key <- kdf_expand(r_2, ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Rename variable r into r_6, r_5, r_4
+yields
+
+Game 12 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- kdf_expand(r_1[u_10], ctr1);
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_2[ri_7]) then
+         k1: key <- kdf_expand(r_2[u_9], ctr1);
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_6);
+         return(c0)
+       else
+         r_1 <-R prk;
+         k1: key <- kdf_expand(r_1, ctr1);
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- kdf_expand(r_1[u_7], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_2[ri_4]) then
+           k1_1: key <- kdf_expand(r_2[u_6], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_2 <-R prk;
+           k1_1: key <- kdf_expand(r_2, ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying equivalence prf(kdf_expand) [probability qDec * Pkdf(time_1, 1)]
+  - Equivalence prf(kdf_expand) with variables: r_2 -> k_2
+yields
+
+Game 13 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- kdf_expand(r_1[u_10], ctr1);
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_2[ri_7]) then
+         k1: key <- (x_O_3: ctr <- ctr1; find [unique] u_16 = ri_17 <= qEnc suchthat defined(r_7[ri_17], x_O_3[ri_17], u_9[ri_17]) && (u_9[ri_17] = u_9) && (x_O_3 = x_O_3[ri_17]) then r_7[u_16] orfind  suchthat defined(x_O_4[u_9], r_8[u_9]) && {66}(x_O_3 = x_O_4[u_9]) then r_8[u_9] orfind u_15 = ri_15 <= qDec suchthat defined(r_9[ri_15], x_O_5[ri_15], u_6[ri_15]) && (u_6[ri_15] = u_9) && (x_O_3 = x_O_5[ri_15]) then r_9[u_15] else r_7 <-R key; r_7);
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_6);
+         return(c0)
+       else
+         r_1 <-R prk;
+         k1: key <- kdf_expand(r_1, ctr1);
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- kdf_expand(r_1[u_7], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_2[ri_4]) then
+           k1_1: key <- (x_O_5: ctr <- ctr1; find [unique] u_14 = ri_14 <= qEnc suchthat defined(r_7[ri_14], x_O_3[ri_14], u_9[ri_14]) && (u_9[ri_14] = u_6) && (x_O_5 = x_O_3[ri_14]) then r_7[u_14] orfind  suchthat defined(x_O_4[u_6], r_8[u_6]) && {215}(x_O_5 = x_O_4[u_6]) then r_8[u_6] orfind u_13 = ri_12 <= qDec suchthat defined(r_9[ri_12], x_O_5[ri_12], u_6[ri_12]) && (u_6[ri_12] = u_6) && (x_O_5 = x_O_5[ri_12]) then r_9[u_13] else r_9 <-R key; r_9);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_2: prk <- cst_prk;
+           k1_1: key <- (x_O_4: ctr <- ctr1; {271}find [unique] u_12 = ri_11 <= qEnc suchthat defined(u_9[ri_11], x_O_3[ri_11], r_7[ri_11]) && {275}((u_9[ri_11] = idec) && (x_O_4 = x_O_3[ri_11])) then r_7[u_12] orfind u_11 = ri_9 <= qDec suchthat defined(u_6[ri_9], x_O_5[ri_9], r_9[ri_9]) && {291}((u_6[ri_9] = idec) && (x_O_4 = x_O_5[ri_9])) then r_9[u_11] else r_8 <-R key; r_8);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Replaced (x_O_3 = x_O_4[u_9]) with true at 66
+    - Replaced (x_O_5 = x_O_4[u_6]) with true at 215
+    - Replaced ((u_6[ri_9] = idec) && (x_O_4 = x_O_5[ri_9])) with false at 291
+    - Remove branch 2 in find at 271
+    - Replaced ((u_9[ri_11] = idec) && (x_O_4 = x_O_3[ri_11])) with false at 275
+    - Remove branch 1 in find at 271
+    - Find at 271 removed (else branch kept if any)
+yields
+
+Game 14 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- kdf_expand(r_1[u_10], ctr1);
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_2[ri_7]) then
+         k1: key <- (x_O_3: ctr <- ctr1; {44}find [unique] u_16 = ri_17 <= qEnc suchthat defined(r_7[ri_17], x_O_3[ri_17], u_9[ri_17]) && (u_9[ri_17] = u_9) && (x_O_3 = x_O_3[ri_17]) then r_7[u_16] orfind  suchthat defined(x_O_4[u_9], r_8[u_9]) then r_8[u_9] orfind u_15 = ri_15 <= qDec suchthat defined(r_9[ri_15], x_O_5[ri_15], u_6[ri_15]) && (u_6[ri_15] = u_9) && (x_O_3 = x_O_5[ri_15]) then r_9[u_15] else r_7 <-R key; r_7);
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_6);
+         return(c0)
+       else
+         r_1 <-R prk;
+         k1: key <- kdf_expand(r_1, ctr1);
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- kdf_expand(r_1[u_7], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_2[ri_4]) then
+           k1_1: key <- (x_O_5: ctr <- ctr1; {188}find [unique] u_14 = ri_14 <= qEnc suchthat defined(r_7[ri_14], x_O_3[ri_14], u_9[ri_14]) && (u_9[ri_14] = u_6) && (x_O_5 = x_O_3[ri_14]) then r_7[u_14] orfind  suchthat defined(x_O_4[u_6], r_8[u_6]) then r_8[u_6] orfind u_13 = ri_12 <= qDec suchthat defined(r_9[ri_12], x_O_5[ri_12], u_6[ri_12]) && (u_6[ri_12] = u_6) && (x_O_5 = x_O_5[ri_12]) then r_9[u_13] else r_9 <-R key; r_9);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_2: prk <- cst_prk;
+           k1_1: key <- (x_O_4: ctr <- ctr1; r_8 <-R key; r_8);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Replaced defined condition r_9[ri_12], x_O_5[ri_12], u_6[ri_12] with r_9[ri_12] in find at 188
+    - Replaced defined condition x_O_4[u_6], r_8[u_6] with r_8[u_6] in find at 188
+    - Replaced defined condition r_7[ri_14], x_O_3[ri_14], u_9[ri_14] with r_7[ri_14] in find at 188
+    - Replaced defined condition r_9[ri_15], x_O_5[ri_15], u_6[ri_15] with r_9[ri_15] in find at 44
+    - Replaced defined condition x_O_4[u_9], r_8[u_9] with r_8[u_9] in find at 44
+    - Replaced defined condition r_7[ri_17], x_O_3[ri_17], u_9[ri_17] with r_7[ri_17] in find at 44
+yields
+
+Game 15 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- kdf_expand(r_1[u_10], ctr1);
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_2[ri_7]) then
+         x_O_3: ctr <- ctr1;
+         find [unique] u_16 = ri_17 <= qEnc suchthat defined(r_7[ri_17]) then
+           k1: key <- r_7[u_16];
+           d: bitstring <- ad;
+           r_6 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, k1, r_6);
+           return(c0)
+         orfind  suchthat defined(r_8[u_9]) then
+           k1: key <- r_8[u_9];
+           d: bitstring <- ad;
+           r_6 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, k1, r_6);
+           return(c0)
+         orfind u_15 = ri_15 <= qDec suchthat defined(r_9[ri_15]) then
+           k1: key <- r_9[u_15];
+           d: bitstring <- ad;
+           r_6 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, k1, r_6);
+           return(c0)
+         else
+           r_7 <-R key;
+           k1: key <- r_7;
+           d: bitstring <- ad;
+           r_6 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, k1, r_6);
+           return(c0)
+       else
+         r_1 <-R prk;
+         k1: key <- kdf_expand(r_1, ctr1);
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- kdf_expand(r_1[u_7], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_2[ri_4]) then
+           x_O_5: ctr <- ctr1;
+           find [unique] u_14 = ri_14 <= qEnc suchthat defined(r_7[ri_14]) then
+             k1_1: key <- r_7[u_14];
+             if dec(c_1, ad, k1_1) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           orfind  suchthat defined(r_8[u_6]) then
+             k1_1: key <- r_8[u_6];
+             if dec(c_1, ad, k1_1) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           orfind u_13 = ri_12 <= qDec suchthat defined(r_9[ri_12]) then
+             k1_1: key <- r_9[u_13];
+             if dec(c_1, ad, k1_1) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           else
+             r_9 <-R key;
+             k1_1: key <- r_9;
+             if dec(c_1, ad, k1_1) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+         else
+           r_2: prk <- cst_prk;
+           x_O_4: ctr <- ctr1;
+           r_8 <-R key;
+           k1_1: key <- r_8;
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on r_2 (definition removed, all usages removed)
+  - Remove assignments on x_O_4 (definition removed, all usages removed)
+  - Remove assignments on k1_1 (definition removed, all usages removed)
+  - Remove assignments on x_O_5 (definition removed, all usages removed)
+  - Remove assignments on k1_1 (definition removed, all usages removed)
+  - Remove assignments on k1_1 (definition removed, all usages removed)
+  - Remove assignments on k1_1 (definition removed, all usages removed)
+  - Remove assignments on k1_1 (definition removed, all usages removed)
+  - Remove assignments on x_O_3 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+yields
+
+Game 16 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+  {9}  find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- kdf_expand(r_1[u_10], ctr1);
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+ {41}    find [unique] u_16 = ri_17 <= qEnc suchthat defined(r_7[ri_17]) then
+           d: bitstring <- ad;
+           r_6 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, r_7[u_16], r_6);
+           return(c0)
+         orfind  suchthat defined(r_8[u_9]) then
+           d: bitstring <- ad;
+           r_6 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+           return(c0)
+         orfind u_15 = ri_15 <= qDec suchthat defined(r_9[ri_15]) then
+           d: bitstring <- ad;
+           r_6 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, r_9[u_15], r_6);
+           return(c0)
+         else
+           r_7 <-R key;
+           d: bitstring <- ad;
+           r_6 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, r_7, r_6);
+           return(c0)
+       else
+         r_1 <-R prk;
+         k1: key <- kdf_expand(r_1, ctr1);
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+{174}    find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- kdf_expand(r_1[u_7], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+{207}      find [unique] u_14 = ri_14 <= qEnc suchthat defined(r_7[ri_14]) then
+             if dec(c_1, ad, r_7[u_14]) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           orfind  suchthat defined(r_8[u_6]) then
+             if dec(c_1, ad, r_8[u_6]) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           orfind u_13 = ri_12 <= qDec suchthat defined(r_9[ri_12]) then
+             if dec(c_1, ad, r_9[u_13]) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           else
+             r_9 <-R key;
+             if dec(c_1, ad, r_9) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+         else
+           r_8 <-R key;
+           if dec(c_1, ad, r_8) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Simplified find at 207 in branch of find at 174
+    - Simplified find at 41 in branch of find at 9
+yields
+
+Game 17 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+  {9}  find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- kdf_expand(r_1[u_10], ctr1);
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec, u_16 = ri_17 <= qEnc suchthat defined(r_8[ri_7], r_7[ri_17]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_7[u_16], r_6);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7], r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec, u_15 = ri_15 <= qDec suchthat defined(r_8[ri_7], r_9[ri_15]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_9[u_15], r_6);
+         return(c0)
+       else
+{111}    find [unique] u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+           r_7 <-R key;
+           d: bitstring <- ad;
+           r_6 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, r_7, r_6);
+           return(c0)
+         else
+           r_1 <-R prk;
+           k1: key <- kdf_expand(r_1, ctr1);
+           d: bitstring <- ad;
+           r_4 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, k1, r_4);
+           return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+{176}    find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- kdf_expand(r_1[u_7], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec, u_14 = ri_14 <= qEnc suchthat defined(r_8[ri_4], r_7[ri_14]) then
+           if dec(c_1, ad, r_7[u_14]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4], r_8[ri_4]) then
+           if dec(c_1, ad, r_8[u_6]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec, u_13 = ri_12 <= qDec suchthat defined(r_8[ri_4], r_9[ri_12]) then
+           if dec(c_1, ad, r_9[u_13]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+{282}      find [unique] u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+             r_9 <-R key;
+             if dec(c_1, ad, r_9) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           else
+             r_8 <-R key;
+             if dec(c_1, ad, r_8) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Remove branch 1 in find at 282
+    - Find at 282 removed (else branch kept if any)
+    - Remove branch 4 in find at 176
+    - Replaced defined condition r_8[ri_4], r_8[ri_4] with r_8[ri_4] in find at 176
+    - Remove branch 2 in find at 176
+    - Remove branch 1 in find at 111
+    - Find at 111 removed (else branch kept if any)
+    - Remove branch 4 in find at 9
+    - Replaced defined condition r_8[ri_7], r_8[ri_7] with r_8[ri_7] in find at 9
+    - Remove branch 2 in find at 9
+yields
+
+Game 18 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- kdf_expand(r_1[u_10], ctr1);
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         return(c0)
+       else
+         r_1 <-R prk;
+         k1: key <- kdf_expand(r_1, ctr1);
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- kdf_expand(r_1[u_7], ctr1);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           if dec(c_1, ad, r_8[u_6]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_8 <-R key;
+           if dec(c_1, ad, r_8) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying equivalence prf(kdf_expand) [probability qEnc * Pkdf(time_2, 1)]
+  - Equivalence prf(kdf_expand) with variables: r_1 -> k_2
+yields
+
+Game 19 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- (x_O_7: ctr <- ctr1; find [unique]  suchthat defined(x_O_6[u_10], r_10[u_10]) && {20}(x_O_7 = x_O_6[u_10]) then r_10[u_10] orfind u_24 = ri_25 <= qEnc suchthat defined(r_11[ri_25], x_O_7[ri_25], u_10[ri_25]) && (u_10[ri_25] = u_10) && (x_O_7 = x_O_7[ri_25]) then r_11[u_24] orfind u_23 = ri_24 <= qDec suchthat defined(r_12[ri_24], x_O_8[ri_24], u_7[ri_24]) && (u_7[ri_24] = u_10) && (x_O_7 = x_O_8[ri_24]) then r_12[u_23] else r_11 <-R key; r_11);
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         return(c0)
+       else
+         r_1: prk <- cst_prk;
+         k1: key <- (x_O_6: ctr <- ctr1; {115}find [unique] u_22 = ri_22 <= qEnc suchthat defined(u_10[ri_22], x_O_7[ri_22], r_11[ri_22]) && {119}((u_10[ri_22] = ienc) && (x_O_6 = x_O_7[ri_22])) then r_11[u_22] orfind u_21 = ri_21 <= qDec suchthat defined(u_7[ri_21], x_O_8[ri_21], r_12[ri_21]) && {135}((u_7[ri_21] = ienc) && (x_O_6 = x_O_8[ri_21])) then r_12[u_21] else r_10 <-R key; r_10);
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- (x_O_8: ctr <- ctr1; find [unique]  suchthat defined(x_O_6[u_7], r_10[u_7]) && {198}(x_O_8 = x_O_6[u_7]) then r_10[u_7] orfind u_20 = ri_19 <= qEnc suchthat defined(r_11[ri_19], x_O_7[ri_19], u_10[ri_19]) && (u_10[ri_19] = u_7) && (x_O_8 = x_O_7[ri_19]) then r_11[u_20] orfind u_19 = ri_18 <= qDec suchthat defined(r_12[ri_18], x_O_8[ri_18], u_7[ri_18]) && (u_7[ri_18] = u_7) && (x_O_8 = x_O_8[ri_18]) then r_12[u_19] else r_12 <-R key; r_12);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           if dec(c_1, ad, r_8[u_6]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_8 <-R key;
+           if dec(c_1, ad, r_8) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Replaced (x_O_7 = x_O_6[u_10]) with true at 20
+    - Replaced ((u_7[ri_21] = ienc) && (x_O_6 = x_O_8[ri_21])) with false at 135
+    - Remove branch 2 in find at 115
+    - Replaced ((u_10[ri_22] = ienc) && (x_O_6 = x_O_7[ri_22])) with false at 119
+    - Remove branch 1 in find at 115
+    - Find at 115 removed (else branch kept if any)
+    - Replaced (x_O_8 = x_O_6[u_7]) with true at 198
+yields
+
+Game 20 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         k1: key <- (x_O_7: ctr <- ctr1; {15}find [unique]  suchthat defined(x_O_6[u_10], r_10[u_10]) then r_10[u_10] orfind u_24 = ri_25 <= qEnc suchthat defined(r_11[ri_25], x_O_7[ri_25], u_10[ri_25]) && (u_10[ri_25] = u_10) && (x_O_7 = x_O_7[ri_25]) then r_11[u_24] orfind u_23 = ri_24 <= qDec suchthat defined(r_12[ri_24], x_O_8[ri_24], u_7[ri_24]) && (u_7[ri_24] = u_10) && (x_O_7 = x_O_8[ri_24]) then r_12[u_23] else r_11 <-R key; r_11);
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         return(c0)
+       else
+         r_1: prk <- cst_prk;
+         k1: key <- (x_O_6: ctr <- ctr1; r_10 <-R key; r_10);
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           k1_1: key <- (x_O_8: ctr <- ctr1; {155}find [unique]  suchthat defined(x_O_6[u_7], r_10[u_7]) then r_10[u_7] orfind u_20 = ri_19 <= qEnc suchthat defined(r_11[ri_19], x_O_7[ri_19], u_10[ri_19]) && (u_10[ri_19] = u_7) && (x_O_8 = x_O_7[ri_19]) then r_11[u_20] orfind u_19 = ri_18 <= qDec suchthat defined(r_12[ri_18], x_O_8[ri_18], u_7[ri_18]) && (u_7[ri_18] = u_7) && (x_O_8 = x_O_8[ri_18]) then r_12[u_19] else r_12 <-R key; r_12);
+           if dec(c_1, ad, k1_1) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           if dec(c_1, ad, r_8[u_6]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_8 <-R key;
+           if dec(c_1, ad, r_8) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Replaced defined condition r_12[ri_18], x_O_8[ri_18], u_7[ri_18] with r_12[ri_18] in find at 155
+    - Replaced defined condition r_11[ri_19], x_O_7[ri_19], u_10[ri_19] with r_11[ri_19] in find at 155
+    - Replaced defined condition x_O_6[u_7], r_10[u_7] with r_10[u_7] in find at 155
+    - Replaced defined condition r_12[ri_24], x_O_8[ri_24], u_7[ri_24] with r_12[ri_24] in find at 15
+    - Replaced defined condition r_11[ri_25], x_O_7[ri_25], u_10[ri_25] with r_11[ri_25] in find at 15
+    - Replaced defined condition x_O_6[u_10], r_10[u_10] with r_10[u_10] in find at 15
+yields
+
+Game 21 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_1[ri_8]) then
+         x_O_7: ctr <- ctr1;
+         find [unique]  suchthat defined(r_10[u_10]) then
+           k1: key <- r_10[u_10];
+           d: bitstring <- ad;
+           r_5 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, k1, r_5);
+           return(c0)
+         orfind u_24 = ri_25 <= qEnc suchthat defined(r_11[ri_25]) then
+           k1: key <- r_11[u_24];
+           d: bitstring <- ad;
+           r_5 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, k1, r_5);
+           return(c0)
+         orfind u_23 = ri_24 <= qDec suchthat defined(r_12[ri_24]) then
+           k1: key <- r_12[u_23];
+           d: bitstring <- ad;
+           r_5 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, k1, r_5);
+           return(c0)
+         else
+           r_11 <-R key;
+           k1: key <- r_11;
+           d: bitstring <- ad;
+           r_5 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, k1, r_5);
+           return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         return(c0)
+       else
+         r_1: prk <- cst_prk;
+         x_O_6: ctr <- ctr1;
+         r_10 <-R key;
+         k1: key <- r_10;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, k1, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_1[ri_5]) then
+           x_O_8: ctr <- ctr1;
+           find [unique]  suchthat defined(r_10[u_7]) then
+             k1_1: key <- r_10[u_7];
+             if dec(c_1, ad, k1_1) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           orfind u_20 = ri_19 <= qEnc suchthat defined(r_11[ri_19]) then
+             k1_1: key <- r_11[u_20];
+             if dec(c_1, ad, k1_1) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           orfind u_19 = ri_18 <= qDec suchthat defined(r_12[ri_18]) then
+             k1_1: key <- r_12[u_19];
+             if dec(c_1, ad, k1_1) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           else
+             r_12 <-R key;
+             k1_1: key <- r_12;
+             if dec(c_1, ad, k1_1) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           if dec(c_1, ad, r_8[u_6]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_8 <-R key;
+           if dec(c_1, ad, r_8) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_8 (definition removed, all usages removed)
+  - Remove assignments on k1_1 (definition removed, all usages removed)
+  - Remove assignments on k1_1 (definition removed, all usages removed)
+  - Remove assignments on k1_1 (definition removed, all usages removed)
+  - Remove assignments on k1_1 (definition removed, all usages removed)
+  - Remove assignments on r_1 (definition removed, all usages removed)
+  - Remove assignments on x_O_6 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on x_O_7 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+yields
+
+Game 22 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+  {9}  find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+ {12}    find [unique]  suchthat defined(r_10[u_10]) then
+           d: bitstring <- ad;
+           r_5 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+           return(c0)
+         orfind u_24 = ri_25 <= qEnc suchthat defined(r_11[ri_25]) then
+           d: bitstring <- ad;
+           r_5 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, r_11[u_24], r_5);
+           return(c0)
+         orfind u_23 = ri_24 <= qDec suchthat defined(r_12[ri_24]) then
+           d: bitstring <- ad;
+           r_5 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, r_12[u_23], r_5);
+           return(c0)
+         else
+           r_11 <-R key;
+           d: bitstring <- ad;
+           r_5 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, r_11, r_5);
+           return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         return(c0)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+{162}    find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+{165}      find [unique]  suchthat defined(r_10[u_7]) then
+             if dec(c_1, ad, r_10[u_7]) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           orfind u_20 = ri_19 <= qEnc suchthat defined(r_11[ri_19]) then
+             if dec(c_1, ad, r_11[u_20]) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           orfind u_19 = ri_18 <= qDec suchthat defined(r_12[ri_18]) then
+             if dec(c_1, ad, r_12[u_19]) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           else
+             r_12 <-R key;
+             if dec(c_1, ad, r_12) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           if dec(c_1, ad, r_8[u_6]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_8 <-R key;
+           if dec(c_1, ad, r_8) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Simplified find at 165 in branch of find at 162
+    - Simplified find at 12 in branch of find at 9
+yields
+
+Game 23 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+  {9}  find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8], r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+         return(c0)
+       orfind u_10 = ri_8 <= qEnc, u_24 = ri_25 <= qEnc suchthat defined(r_10[ri_8], r_11[ri_25]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_11[u_24], r_5);
+         return(c0)
+       orfind u_10 = ri_8 <= qEnc, u_23 = ri_24 <= qDec suchthat defined(r_10[ri_8], r_12[ri_24]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_12[u_23], r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         return(c0)
+       else
+{105}    find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+           r_11 <-R key;
+           d: bitstring <- ad;
+           r_5 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, r_11, r_5);
+           return(c0)
+         else
+           r_10 <-R key;
+           d: bitstring <- ad;
+           r_4 <-R enc_seed;
+           c0: bitstring <- enc_r(m0, d, r_10, r_4);
+           return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+{164}    find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5], r_10[ri_5]) then
+           if dec(c_1, ad, r_10[u_7]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_7 = ri_5 <= qEnc, u_20 = ri_19 <= qEnc suchthat defined(r_10[ri_5], r_11[ri_19]) then
+           if dec(c_1, ad, r_11[u_20]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_7 = ri_5 <= qEnc, u_19 = ri_18 <= qDec suchthat defined(r_10[ri_5], r_12[ri_18]) then
+           if dec(c_1, ad, r_12[u_19]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           if dec(c_1, ad, r_8[u_6]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+{264}      find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+             r_12 <-R key;
+             if dec(c_1, ad, r_12) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+           else
+             r_8 <-R key;
+             if dec(c_1, ad, r_8) <> bottom then
+               event bad;
+               return(true)
+             else
+               return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Remove branch 1 in find at 264
+    - Find at 264 removed (else branch kept if any)
+    - Remove branch 3 in find at 164
+    - Remove branch 2 in find at 164
+    - Replaced defined condition r_10[ri_5], r_10[ri_5] with r_10[ri_5] in find at 164
+    - Remove branch 1 in find at 105
+    - Find at 105 removed (else branch kept if any)
+    - Remove branch 3 in find at 9
+    - Remove branch 2 in find at 9
+    - Replaced defined condition r_10[ri_8], r_10[ri_8] with r_10[ri_8] in find at 9
+yields
+
+Game 24 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         return(c0)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+           if dec(c_1, ad, r_10[u_7]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           if dec(c_1, ad, r_8[u_6]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_8 <-R key;
+           if dec(c_1, ad, r_8) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying equivalence int_ctxt(enc) [probability qDec * Pencctxt(time_3, qEnc, 1 + qDec, maxlength(game 24: m0), maxlength(game 24: c_1), maxlength(game 24: d), length(ad))]
+  - Equivalence int_ctxt(enc) with variables: r_8 -> k, r_6 -> r
+yields
+
+Game 25 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- (x: bitstring <- m0; d_1: bitstring <- d; z: bitstring <- enc_r(x, d_1, r_8[u_9], r_6); z);
+         return(c0)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+           if dec(c_1, ad, r_10[u_7]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           if (y_1: bitstring <- c_1; c_d_1: bitstring <- ad; find u_28 = ri_28 <= qEnc suchthat defined(x[ri_28], d_1[ri_28], z[ri_28], u_9[ri_28]) && (u_9[ri_28] = u_6) && (z[ri_28] = y_1) && (d_1[ri_28] = c_d_1) then injbot(x[u_28]) else bottom) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_8 <-R key;
+           if (y: bitstring <- c_1; c_d: bitstring <- ad; {182}find u_27 = ri_27 <= qEnc suchthat defined(u_9[ri_27], x[ri_27], d_1[ri_27], z[ri_27]) && {187}((u_9[ri_27] = idec) && (z[ri_27] = y) && (d_1[ri_27] = c_d)) then injbot(x[u_27]) else bottom) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Replaced ((u_9[ri_27] = idec) && (z[ri_27] = y) && (d_1[ri_27] = c_d)) with false at 187
+    - Remove branch 1 in find at 182
+    - Find at 182 removed (else branch kept if any)
+yields
+
+Game 26 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         c0: bitstring <- (x: bitstring <- m0; d_1: bitstring <- d; z: bitstring <- enc_r(x, d_1, r_8[u_9], r_6); z);
+         return(c0)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+           if dec(c_1, ad, r_10[u_7]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+{127}      if (y_1: bitstring <- c_1; c_d_1: bitstring <- ad; {134}find u_28 = ri_28 <= qEnc suchthat defined(x[ri_28], d_1[ri_28], z[ri_28], u_9[ri_28]) && (u_9[ri_28] = u_6) && (z[ri_28] = y_1) && (d_1[ri_28] = c_d_1) then injbot(x[u_28]) else bottom) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_8 <-R key;
+{175}      if (y: bitstring <- c_1; c_d: bitstring <- ad; bottom) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Test at 175 always false
+    - Test at 127 always false
+    - Test at 127 always true
+    - Replaced defined condition x[ri_28], d_1[ri_28], z[ri_28], u_9[ri_28] with d_1[ri_28], z[ri_28], u_9[ri_28] in find at 134
+yields
+
+Game 27 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         x: bitstring <- m0;
+         d_1: bitstring <- d;
+         z: bitstring <- enc_r(x, d_1, r_8[u_9], r_6);
+         c0: bitstring <- z;
+         return(c0)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+           if dec(c_1, ad, r_10[u_7]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           y_1: bitstring <- c_1;
+           c_d_1: bitstring <- ad;
+           find u_28 = ri_28 <= qEnc suchthat defined(d_1[ri_28], z[ri_28], u_9[ri_28]) && (u_9[ri_28] = u_6) && (z[ri_28] = y_1) && (d_1[ri_28] = c_d_1) then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_8 <-R key;
+           y: bitstring <- c_1;
+           c_d: bitstring <- ad;
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on y (definition removed, all usages removed)
+  - Remove assignments on c_d (definition removed, all usages removed)
+  - Remove assignments on y_1 (definition removed, all usages removed)
+  - Remove assignments on x (definition removed, all usages removed)
+  - Remove assignments on d_1 (definition removed, all usages removed)
+  - Remove assignments on c0 (definition kept, array references kept)
+yields
+
+Game 28 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         z: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         c0: bitstring <- z;
+         return(z)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+           if dec(c_1, ad, r_10[u_7]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           c_d_1: bitstring <- ad;
+{124}      find u_28 = ri_28 <= qEnc suchthat defined(d[ri_28], r_6[ri_28], z[ri_28], u_9[ri_28]) && {129}((u_9[ri_28] = u_6) && (z[ri_28] = c_1) && (d[ri_28] = c_d_1)) then
+             event bad;
+             return(true)
+           else
+             return(false)
+         else
+           r_8 <-R key;
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced ((u_9[ri_28] = u_6) && (z[ri_28] = c_1) && (d[ri_28] = c_d_1)) with (z[ri_28] = c_1) at 129
+    - Remove branch 1 in find at 124
+    - Find at 124 removed (else branch kept if any)
+yields
+
+Game 29 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         z: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         c0: bitstring <- z;
+         return(z)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+           if dec(c_1, ad, r_10[u_7]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           c_d_1: bitstring <- ad;
+           return(false)
+         else
+           r_8 <-R key;
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on c_d_1 (definition removed, all usages removed)
+yields
+
+Game 30 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         z: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         c0: bitstring <- z;
+         return(z)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- enc_r(m0, d, r_10, r_4);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+           if dec(c_1, ad, r_10[u_7]) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           return(false)
+         else
+           r_8 <-R key;
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying equivalence int_ctxt(enc) [probability qEnc * Pencctxt(time_4, 1 + qEnc, qDec, maxlength(game 30: m0), maxlength(game 30: c_1), maxlength(game 30: d), length(ad))]
+  - Equivalence int_ctxt(enc) with variables: r_5 -> r, r_10 -> k, r_4 -> r
+yields
+
+Game 31 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         c0: bitstring <- (x_2: bitstring <- m0; d_3: bitstring <- d; z_2: bitstring <- enc_r(x_2, d_3, r_10[u_10], r_5); z_2);
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         z: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         c0: bitstring <- z;
+         return(z)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         c0: bitstring <- (x_1: bitstring <- m0; d_2: bitstring <- d; z_1: bitstring <- enc_r(x_1, d_2, r_10, r_4); z_1);
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+{116}      if (y_2: bitstring <- c_1; c_d_2: bitstring <- ad; {123}find  suchthat defined(x_1[u_7], d_2[u_7], z_1[u_7]) && (z_1[u_7] = y_2) && (d_2[u_7] = c_d_2) then injbot(x_1[u_7]) orfind u_29 = ri_29 <= qEnc suchthat defined(x_2[ri_29], d_3[ri_29], z_2[ri_29], u_10[ri_29]) && (u_10[ri_29] = u_7) && (z_2[ri_29] = y_2) && (d_3[ri_29] = c_d_2) then injbot(x_2[u_29]) else bottom) <> bottom then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           return(false)
+         else
+           r_8 <-R key;
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Test at 116 always false
+    - Test at 116 always true
+    - Replaced defined condition x_2[ri_29], d_3[ri_29], z_2[ri_29], u_10[ri_29] with d_3[ri_29], z_2[ri_29], u_10[ri_29] in find at 123
+    - Test at 116 always true
+    - Replaced defined condition x_1[u_7], d_2[u_7], z_1[u_7] with d_2[u_7], z_1[u_7] in find at 123
+yields
+
+Game 32 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         x_2: bitstring <- m0;
+         d_3: bitstring <- d;
+         z_2: bitstring <- enc_r(x_2, d_3, r_10[u_10], r_5);
+         c0: bitstring <- z_2;
+         return(c0)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         z: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         c0: bitstring <- z;
+         return(z)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         x_1: bitstring <- m0;
+         d_2: bitstring <- d;
+         z_1: bitstring <- enc_r(x_1, d_2, r_10, r_4);
+         c0: bitstring <- z_1;
+         return(c0)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+           y_2: bitstring <- c_1;
+           c_d_2: bitstring <- ad;
+           find  suchthat defined(d_2[u_7], z_1[u_7]) && (z_1[u_7] = y_2) && (d_2[u_7] = c_d_2) then
+             event bad;
+             return(true)
+           orfind u_29 = ri_29 <= qEnc suchthat defined(d_3[ri_29], z_2[ri_29], u_10[ri_29]) && (u_10[ri_29] = u_7) && (z_2[ri_29] = y_2) && (d_3[ri_29] = c_d_2) then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           return(false)
+         else
+           r_8 <-R key;
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on y_2 (definition removed, all usages removed)
+  - Remove assignments on x_1 (definition removed, all usages removed)
+  - Remove assignments on d_2 (definition removed, all usages removed)
+  - Remove assignments on c0 (definition kept, array references kept)
+  - Remove assignments on x_2 (definition removed, all usages removed)
+  - Remove assignments on d_3 (definition removed, all usages removed)
+  - Remove assignments on c0 (definition kept, array references kept)
+yields
+
+Game 33 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         z_2: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+         c0: bitstring <- z_2;
+         return(z_2)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         z: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         c0: bitstring <- z;
+         return(z)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         z_1: bitstring <- enc_r(m0, d, r_10, r_4);
+         c0: bitstring <- z_1;
+         return(z_1)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+           c_d_2: bitstring <- ad;
+{108}      find  suchthat defined(d[u_7], r_4[u_7], z_1[u_7]) && {115}((z_1[u_7] = c_1) && (d[u_7] = c_d_2)) then
+             event bad;
+             return(true)
+           orfind u_29 = ri_29 <= qEnc suchthat defined(d[ri_29], r_5[ri_29], z_2[ri_29], u_10[ri_29]) && {140}((u_10[ri_29] = u_7) && (z_2[ri_29] = c_1) && (d[ri_29] = c_d_2)) then
+             event bad;
+             return(true)
+           else
+             return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           return(false)
+         else
+           r_8 <-R key;
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced ((z_1[u_7] = c_1) && (d[u_7] = c_d_2)) with false at 115
+    - Remove branch 1 in find at 108
+    - Replaced ((u_10[ri_29] = u_7) && (z_2[ri_29] = c_1) && (d[ri_29] = c_d_2)) with (z_2[ri_29] = c_1) at 140
+    - Remove branch 1 in find at 108
+    - Find at 108 removed (else branch kept if any)
+yields
+
+Game 34 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         z_2: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+         c0: bitstring <- z_2;
+         return(z_2)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         z: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         c0: bitstring <- z;
+         return(z)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         z_1: bitstring <- enc_r(m0, d, r_10, r_4);
+         c0: bitstring <- z_1;
+         return(z_1)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+           c_d_2: bitstring <- ad;
+           return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           return(false)
+         else
+           r_8 <-R key;
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on c_d_2 (definition removed, all usages removed)
+yields
+
+Game 35 is
+     Ostart() :=
+     return();
+     ((
+       foreach ienc <= qEnc do
+       OEnc(m0: bitstring) :=
+       find [unique] u_10 = ri_8 <= qEnc suchthat defined(r_10[ri_8]) then
+         d: bitstring <- ad;
+         r_5 <-R enc_seed;
+         z_2: bitstring <- enc_r(m0, d, r_10[u_10], r_5);
+         c0: bitstring <- z_2;
+         return(z_2)
+       orfind u_9 = ri_7 <= qDec suchthat defined(r_8[ri_7]) then
+         d: bitstring <- ad;
+         r_6 <-R enc_seed;
+         z: bitstring <- enc_r(m0, d, r_8[u_9], r_6);
+         c0: bitstring <- z;
+         return(z)
+       else
+         r_10 <-R key;
+         d: bitstring <- ad;
+         r_4 <-R enc_seed;
+         z_1: bitstring <- enc_r(m0, d, r_10, r_4);
+         c0: bitstring <- z_1;
+         return(z_1)
+     ) | (
+       foreach idec <= qDec do
+       ODec(c_1: bitstring) :=
+       find u = u_1 <= qEnc suchthat defined(c0[u_1]) && (c0[u_1] = c_1) then
+         return(true)
+       else
+         find [unique] u_7 = ri_5 <= qEnc suchthat defined(r_10[ri_5]) then
+           return(false)
+         orfind u_6 = ri_4 <= qDec suchthat defined(r_8[ri_4]) then
+           return(false)
+         else
+           r_8 <-R key;
+           return(false)
+     ) | (
+       foreach iH <= qKDFextract do
+       OH(x1: transcript) :=
+       find [unique] u_2 = ri <= qKDFextract suchthat defined(r_3[ri], x1[ri]) && (x1 = x1[ri]) then
+         return(r_3[u_2])
+       else
+         r_3 <-R prk;
+         return(r_3)
+     ))
+
+
+Proved event(bad) ==> false in game 35
+Pr[Game 1: bad] <= qEnc * Pencctxt(time_4, 1 + qEnc, qDec, maxlength(game 30: m0), maxlength(game 30: c_1), maxlength(game 30: d), length(ad)) + qDec * Pencctxt(time_3, qEnc, 1 + qDec, maxlength(game 24: m0), maxlength(game 24: c_1), maxlength(game 24: d), length(ad)) + qEnc * Pkdf(time_2, 1) + qDec * Pkdf(time_1, 1) + qKDFextract / |transcript| + Pr[Game 35: bad]
+Pr[Game 35: bad] <= 0
+RESULT Proved event(bad) ==> false up to probability qEnc * Pencctxt(time_4, 1 + qEnc, qDec, maxlength(game 30: m0), maxlength(game 30: c_1), maxlength(game 30: d), length(ad)) + qDec * Pencctxt(time_3, qEnc, 1 + qDec, maxlength(game 24: m0), maxlength(game 24: c_1), maxlength(game 24: d), length(ad)) + qEnc * Pkdf(time_2, 1) + qDec * Pkdf(time_1, 1) + qKDFextract / |transcript|
+RESULT time_1 = (qEnc + 2 * qDec - 1) * time(kdf_expand) + qEnc * time(enc_r, maxlength(game 12: m0), maxlength(game 12: d)) + qDec * qEnc * time(= bitstring, maxlength(game 12: c0), maxlength(game 12: c_1)) + qDec * time(<> bitstringbot, length(dec, maxlength(game 12: c_1), length(ad)), length(bottom)) + qDec * time(dec, maxlength(game 12: c_1), length(ad)) + qDec * time(([1,qDec])) + time
+RESULT time_2 = qEnc * time(enc_r, maxlength(game 18: m0), maxlength(game 18: d)) + qDec * qEnc * time(= bitstring, maxlength(game 18: c0), maxlength(game 18: c_1)) + qDec * time(<> bitstringbot, length(dec, maxlength(game 18: c_1), length(ad)), length(bottom)) + qDec * time(dec, maxlength(game 18: c_1), length(ad)) + qDec * time(([1,qDec])) + time + (qEnc - 1) * time(kdf_expand)
+RESULT time_3 = qDec * qEnc * time(= bitstring, maxlength(game 24: c0), maxlength(game 24: c_1)) + qDec * time(<> bitstringbot, length(dec, maxlength(game 24: c_1), length(ad)), length(bottom)) + qDec * time(([1,qDec])) + time + 2 * qEnc * time(enc_r, maxlength(game 24: m0), maxlength(game 24: d)) + 2 * qDec * time(dec, maxlength(game 24: c_1), length(ad))
+RESULT time_4 = qDec * qEnc * time(= bitstring, maxlength(game 30: c0), maxlength(game 30: c_1)) + qDec * time(<> bitstringbot, length(dec, maxlength(game 30: c_1), length(ad)), length(bottom)) + qDec * time(([1,qDec])) + time + 2 * qEnc * time(enc_r, maxlength(game 30: m0), maxlength(game 30: d)) + qDec * time(dec, maxlength(game 30: c_1), length(ad))
+All queries proved.

@@ -40,7 +40,7 @@ letfun full_enc(m: bitstring, hk: hash_key, t: transcript) =
 
 param qEnc.
 
-query secret b.
+query secret b [cv_bit].
 
 let QencLR(b0: bool, hk: hash_key, t: transcript) = 
     foreach i <= qEnc do

@@ -14,11 +14,17 @@ expand AEAD(key, bitstring, bitstring, bitstring, enc, dec, injbot, Z, Penc, Pen
 type hash_key [fixed].
 type transcript [bounded, large, nonuniform].
 type prk [fixed, large].
+
+expand ROM_hash(hash_key, transcript, prk, kdf_extract, Okdf_extract, qKDFextract).
+
+(* Using SHA-256 to hash a counter is assumed to be a PRF. *)
+
 type ctr [fixed].
 const ctr1: ctr.
 
-expand ROM_hash(hash_key, transcript, prk, kdf_extract, Okdf_extract, qKDFextract).
-expand ROM_hash(prk, ctr, key, kdf_expand, Okdf_expand, qKDFexpand).
+proba Pkdf.
+
+expand PRF(prk, ctr, key, kdf_expand, Pkdf).
 
 (* Construction *)
 

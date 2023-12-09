@@ -4,7 +4,7 @@ Lockstitch provides a single cryptographic service for all symmetric-key operati
 incremental, stateful building block for complex schemes, constructions, and protocols, all built on
 top of SHA-256 and [AEGIS-128L][], an authenticated cipher.
 
-[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-06.html
+[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-09.html
 
 ## Protocol
 

@@ -10,7 +10,7 @@ Game 1 is
        Oenc(m1: bitstring, m2: bitstring) :=
        if Z(m1) = Z(m2) then
        m0: bitstring <- (if b then m1 else m2);
-       return((m: bitstring <- m0; prk1: prk <- kdf_extract(hk_2, t_2); k1: key <- kdf_expand(prk1, ctr1); m_1: bitstring <- m; d: bitstring <- ad; k: key <- k1; r <-R enc_seed; enc_r(m_1, d, k, r)))
+       return((m: bitstring <- m0; prk1: prk <- kdf_extract(hk_2, t_2); k1: key <- kdf_expand(prk1, info1); m_1: bitstring <- m; d: bitstring <- ad; k: key <- k1; r <-R enc_seed; enc_r(m_1, d, k, r)))
      ) | (
        foreach iH <= qKDFextract do
        OH(x1: transcript) :=
@@ -36,7 +36,7 @@ Game 2 is
          m0: bitstring <- m1;
          m: bitstring <- m0;
          prk1: prk <- kdf_extract(hk_2, t_2);
-         k1: key <- kdf_expand(prk1, ctr1);
+         k1: key <- kdf_expand(prk1, info1);
          m_1: bitstring <- m;
          d: bitstring <- ad;
          k: key <- k1;
@@ -46,7 +46,7 @@ Game 2 is
          m0: bitstring <- m2;
          m: bitstring <- m0;
          prk1: prk <- kdf_extract(hk_2, t_2);
-         k1: key <- kdf_expand(prk1, ctr1);
+         k1: key <- kdf_expand(prk1, info1);
          m_1: bitstring <- m;
          d: bitstring <- ad;
          k: key <- k1;
@@ -82,13 +82,13 @@ Game 3 is
        if Z(m1) = Z(m2) then
        if b then
          prk1: prk <- kdf_extract(hk_2, t_2);
-         k1: key <- kdf_expand(prk1, ctr1);
+         k1: key <- kdf_expand(prk1, info1);
          d: bitstring <- ad;
          r <-R enc_seed;
          return(enc_r(m1, d, k1, r))
        else
          prk1: prk <- kdf_extract(hk_2, t_2);
-         k1: key <- kdf_expand(prk1, ctr1);
+         k1: key <- kdf_expand(prk1, info1);
          d: bitstring <- ad;
          r <-R enc_seed;
          return(enc_r(m2, d, k1, r))
@@ -115,13 +115,13 @@ Game 4 is
        if Z(m1) = Z(m2) then
        if b then
          prk1: prk <- kdf_extract(hk_2, t_2);
-         k1: key <- kdf_expand(prk1, ctr1);
+         k1: key <- kdf_expand(prk1, info1);
          d: bitstring <- ad;
          r_2 <-R enc_seed;
          return(enc_r(m1, d, k1, r_2))
        else
          prk1: prk <- kdf_extract(hk_2, t_2);
-         k1: key <- kdf_expand(prk1, ctr1);
+         k1: key <- kdf_expand(prk1, info1);
          d: bitstring <- ad;
          r_1 <-R enc_seed;
          return(enc_r(m2, d, k1, r_1))
@@ -147,13 +147,13 @@ Game 5 is
        if Z(m1) = Z(m2) then
        if b then
          prk1: prk <- (x_O: transcript <- t_2; {23}find [unique] u_8 = ri_8 <= qEnc suchthat defined(x_O[ri_8], r_3[ri_8]) && {26}(x_O = x_O[ri_8]) then r_3[u_8] orfind u_7 = ri_7 <= qEnc suchthat defined(x_O_1[ri_7], r_4[ri_7]) && {36}(x_O = x_O_1[ri_7]) then r_4[u_7] orfind u_6 = ri_6 <= qKDFextract suchthat defined(x_O_2[ri_6], r_5[ri_6]) && (x_O = x_O_2[ri_6]) then r_5[u_6] else r_3 <-R prk; r_3);
-         k1: key <- kdf_expand(prk1, ctr1);
+         k1: key <- kdf_expand(prk1, info1);
          d: bitstring <- ad;
          r_2 <-R enc_seed;
          return(enc_r(m1, d, k1, r_2))
        else
          prk1: prk <- (x_O_1: transcript <- t_2; {83}find [unique] u_5 = ri_5 <= qEnc suchthat defined(x_O[ri_5], r_3[ri_5]) && {86}(x_O_1 = x_O[ri_5]) then r_3[u_5] orfind u_4 = ri_4 <= qEnc suchthat defined(x_O_1[ri_4], r_4[ri_4]) && {96}(x_O_1 = x_O_1[ri_4]) then r_4[u_4] orfind u_3 = ri_3 <= qKDFextract suchthat defined(x_O_2[ri_3], r_5[ri_3]) && (x_O_1 = x_O_2[ri_3]) then r_5[u_3] else r_4 <-R prk; r_4);
-         k1: key <- kdf_expand(prk1, ctr1);
+         k1: key <- kdf_expand(prk1, info1);
          d: bitstring <- ad;
          r_1 <-R enc_seed;
          return(enc_r(m2, d, k1, r_1))
@@ -185,13 +185,13 @@ Game 6 is
        if Z(m1) = Z(m2) then
        if b then
          prk1: prk <- (x_O: transcript <- t_2; {23}find [unique] u_8 = ri_8 <= qEnc suchthat defined(x_O[ri_8], r_3[ri_8]) then r_3[u_8] orfind u_6 = ri_6 <= qKDFextract suchthat defined(x_O_2[ri_6], r_5[ri_6]) && (x_O = x_O_2[ri_6]) then r_5[u_6] else r_3 <-R prk; r_3);
-         k1: key <- kdf_expand(prk1, ctr1);
+         k1: key <- kdf_expand(prk1, info1);
          d: bitstring <- ad;
          r_2 <-R enc_seed;
          return(enc_r(m1, d, k1, r_2))
        else
          prk1: prk <- (x_O_1: transcript <- t_2; {69}find [unique] u_4 = ri_4 <= qEnc suchthat defined(x_O_1[ri_4], r_4[ri_4]) then r_4[u_4] orfind u_3 = ri_3 <= qKDFextract suchthat defined(x_O_2[ri_3], r_5[ri_3]) && (x_O_1 = x_O_2[ri_3]) then r_5[u_3] else r_4 <-R prk; r_4);
-         k1: key <- kdf_expand(prk1, ctr1);
+         k1: key <- kdf_expand(prk1, info1);
          d: bitstring <- ad;
          r_1 <-R enc_seed;
          return(enc_r(m2, d, k1, r_1))
@@ -221,20 +221,20 @@ Game 7 is
          x_O: transcript <- t_2;
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
            prk1: prk <- r_3[u_8];
-           k1: key <- kdf_expand(prk1, ctr1);
+           k1: key <- kdf_expand(prk1, info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
          orfind u_6 = ri_6 <= qKDFextract suchthat defined(x_O_2[ri_6], r_5[ri_6]) && (x_O = x_O_2[ri_6]) then
            prk1: prk <- r_5[u_6];
-           k1: key <- kdf_expand(prk1, ctr1);
+           k1: key <- kdf_expand(prk1, info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
          else
            r_3 <-R prk;
            prk1: prk <- r_3;
-           k1: key <- kdf_expand(prk1, ctr1);
+           k1: key <- kdf_expand(prk1, info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
@@ -242,20 +242,20 @@ Game 7 is
          x_O_1: transcript <- t_2;
          find [unique] u_4 = ri_4 <= qEnc suchthat defined(r_4[ri_4]) then
            prk1: prk <- r_4[u_4];
-           k1: key <- kdf_expand(prk1, ctr1);
+           k1: key <- kdf_expand(prk1, info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
          orfind u_3 = ri_3 <= qKDFextract suchthat defined(x_O_2[ri_3], r_5[ri_3]) && (x_O_1 = x_O_2[ri_3]) then
            prk1: prk <- r_5[u_3];
-           k1: key <- kdf_expand(prk1, ctr1);
+           k1: key <- kdf_expand(prk1, info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
          else
            r_4 <-R prk;
            prk1: prk <- r_4;
-           k1: key <- kdf_expand(prk1, ctr1);
+           k1: key <- kdf_expand(prk1, info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
@@ -299,36 +299,36 @@ Game 8 is
        if b then
          x_O: transcript <- cst_transcript;
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- kdf_expand(r_3[u_8], ctr1);
+           k1: key <- kdf_expand(r_3[u_8], info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
          orfind u_6 = ri_6 <= qKDFextract suchthat defined(x1[ri_6], x_O_2[ri_6], r_5[ri_6]) && (t_2 = x1[ri_6]) then
-           k1: key <- kdf_expand(r_5[u_6], ctr1);
+           k1: key <- kdf_expand(r_5[u_6], info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
          else
            r_3 <-R prk;
-           k1: key <- kdf_expand(r_3, ctr1);
+           k1: key <- kdf_expand(r_3, info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
        else
          x_O_1: transcript <- cst_transcript;
          find [unique] u_4 = ri_4 <= qEnc suchthat defined(r_4[ri_4]) then
-           k1: key <- kdf_expand(r_4[u_4], ctr1);
+           k1: key <- kdf_expand(r_4[u_4], info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
          orfind u_3 = ri_3 <= qKDFextract suchthat defined(x1[ri_3], x_O_2[ri_3], r_5[ri_3]) && (t_2 = x1[ri_3]) then
-           k1: key <- kdf_expand(r_5[u_3], ctr1);
+           k1: key <- kdf_expand(r_5[u_3], info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
          else
            r_4 <-R prk;
-           k1: key <- kdf_expand(r_4, ctr1);
+           k1: key <- kdf_expand(r_4, info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
@@ -364,26 +364,26 @@ Game 9 is
        if b then
          x_O: transcript <- cst_transcript;
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- kdf_expand(r_3[u_8], ctr1);
+           k1: key <- kdf_expand(r_3[u_8], info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
          else
            r_3 <-R prk;
-           k1: key <- kdf_expand(r_3, ctr1);
+           k1: key <- kdf_expand(r_3, info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
        else
          x_O_1: transcript <- cst_transcript;
          find [unique] u_4 = ri_4 <= qEnc suchthat defined(r_4[ri_4]) then
-           k1: key <- kdf_expand(r_4[u_4], ctr1);
+           k1: key <- kdf_expand(r_4[u_4], info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
          else
            r_4 <-R prk;
-           k1: key <- kdf_expand(r_4, ctr1);
+           k1: key <- kdf_expand(r_4, info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
@@ -416,26 +416,26 @@ Game 10 is
        if b then
          x_O: transcript <- cst_transcript;
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- kdf_expand(r_3[u_8], ctr1);
+           k1: key <- kdf_expand(r_3[u_8], info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
          else
            r_3 <-R prk;
-           k1: key <- kdf_expand(r_3, ctr1);
+           k1: key <- kdf_expand(r_3, info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
        else
          x_O_1: transcript <- cst_transcript;
          find [unique] u_4 = ri_4 <= qEnc suchthat defined(r_4[ri_4]) then
-           k1: key <- kdf_expand(r_4[u_4], ctr1);
+           k1: key <- kdf_expand(r_4[u_4], info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
          else
            r_4 <-R prk;
-           k1: key <- kdf_expand(r_4, ctr1);
+           k1: key <- kdf_expand(r_4, info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
@@ -467,25 +467,25 @@ Game 11 is
        if Z(m1) = Z(m2) then
        if b then
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- kdf_expand(r_3[u_8], ctr1);
+           k1: key <- kdf_expand(r_3[u_8], info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
          else
            r_3 <-R prk;
-           k1: key <- kdf_expand(r_3, ctr1);
+           k1: key <- kdf_expand(r_3, info1);
            d: bitstring <- ad;
            r_2 <-R enc_seed;
            return(enc_r(m1, d, k1, r_2))
        else
          find [unique] u_4 = ri_4 <= qEnc suchthat defined(r_4[ri_4]) then
-           k1: key <- kdf_expand(r_4[u_4], ctr1);
+           k1: key <- kdf_expand(r_4[u_4], info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
          else
            r_4 <-R prk;
-           k1: key <- kdf_expand(r_4, ctr1);
+           k1: key <- kdf_expand(r_4, info1);
            d: bitstring <- ad;
            r_1 <-R enc_seed;
            return(enc_r(m2, d, k1, r_1))
@@ -515,25 +515,25 @@ Game 12 is
        if Z(m1) = Z(m2) then
        if b then
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- kdf_expand(r_3[u_8], ctr1);
+           k1: key <- kdf_expand(r_3[u_8], info1);
            d: bitstring <- ad;
            r_9 <-R enc_seed;
            return(enc_r(m1, d, k1, r_9))
          else
            r_3 <-R prk;
-           k1: key <- kdf_expand(r_3, ctr1);
+           k1: key <- kdf_expand(r_3, info1);
            d: bitstring <- ad;
            r_8 <-R enc_seed;
            return(enc_r(m1, d, k1, r_8))
        else
          find [unique] u_4 = ri_4 <= qEnc suchthat defined(r_4[ri_4]) then
-           k1: key <- kdf_expand(r_4[u_4], ctr1);
+           k1: key <- kdf_expand(r_4[u_4], info1);
            d: bitstring <- ad;
            r_7 <-R enc_seed;
            return(enc_r(m2, d, k1, r_7))
          else
            r_4 <-R prk;
-           k1: key <- kdf_expand(r_4, ctr1);
+           k1: key <- kdf_expand(r_4, info1);
            d: bitstring <- ad;
            r_6 <-R enc_seed;
            return(enc_r(m2, d, k1, r_6))
@@ -562,25 +562,25 @@ Game 13 is
        if Z(m1) = Z(m2) then
        if b then
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- kdf_expand(r_3[u_8], ctr1);
+           k1: key <- kdf_expand(r_3[u_8], info1);
            d: bitstring <- ad;
            r_9 <-R enc_seed;
            return(enc_r(m1, d, k1, r_9))
          else
            r_3 <-R prk;
-           k1: key <- kdf_expand(r_3, ctr1);
+           k1: key <- kdf_expand(r_3, info1);
            d: bitstring <- ad;
            r_8 <-R enc_seed;
            return(enc_r(m1, d, k1, r_8))
        else
          find [unique] u_4 = ri_4 <= qEnc suchthat defined(r_4[ri_4]) then
-           k1: key <- (x_O_4: ctr <- ctr1; find [unique]  suchthat defined(x_O_3[u_4], r_10[u_4]) && {79}(x_O_4 = x_O_3[u_4]) then r_10[u_4] orfind u_10 = ri_11 <= qEnc suchthat defined(r_11[ri_11], x_O_4[ri_11], u_4[ri_11]) && (u_4[ri_11] = u_4) && (x_O_4 = x_O_4[ri_11]) then r_11[u_10] else r_11 <-R key; r_11);
+           k1: key <- (x_O_4: info <- info1; find [unique]  suchthat defined(x_O_3[u_4], r_10[u_4]) && {79}(x_O_4 = x_O_3[u_4]) then r_10[u_4] orfind u_10 = ri_11 <= qEnc suchthat defined(r_11[ri_11], x_O_4[ri_11], u_4[ri_11]) && (u_4[ri_11] = u_4) && (x_O_4 = x_O_4[ri_11]) then r_11[u_10] else r_11 <-R key; r_11);
            d: bitstring <- ad;
            r_7 <-R enc_seed;
            return(enc_r(m2, d, k1, r_7))
          else
            r_4: prk <- cst_prk;
-           k1: key <- (x_O_3: ctr <- ctr1; {130}find [unique] u_9 = ri_9 <= qEnc suchthat defined(u_4[ri_9], x_O_4[ri_9], r_11[ri_9]) && {134}((u_4[ri_9] = i) && (x_O_3 = x_O_4[ri_9])) then r_11[u_9] else r_10 <-R key; r_10);
+           k1: key <- (x_O_3: info <- info1; {130}find [unique] u_9 = ri_9 <= qEnc suchthat defined(u_4[ri_9], x_O_4[ri_9], r_11[ri_9]) && {134}((u_4[ri_9] = i) && (x_O_3 = x_O_4[ri_9])) then r_11[u_9] else r_10 <-R key; r_10);
            d: bitstring <- ad;
            r_6 <-R enc_seed;
            return(enc_r(m2, d, k1, r_6))
@@ -613,25 +613,25 @@ Game 14 is
        if Z(m1) = Z(m2) then
        if b then
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- kdf_expand(r_3[u_8], ctr1);
+           k1: key <- kdf_expand(r_3[u_8], info1);
            d: bitstring <- ad;
            r_9 <-R enc_seed;
            return(enc_r(m1, d, k1, r_9))
          else
            r_3 <-R prk;
-           k1: key <- kdf_expand(r_3, ctr1);
+           k1: key <- kdf_expand(r_3, info1);
            d: bitstring <- ad;
            r_8 <-R enc_seed;
            return(enc_r(m1, d, k1, r_8))
        else
          find [unique] u_4 = ri_4 <= qEnc suchthat defined(r_4[ri_4]) then
-           k1: key <- (x_O_4: ctr <- ctr1; {74}find [unique]  suchthat defined(x_O_3[u_4], r_10[u_4]) then r_10[u_4] orfind u_10 = ri_11 <= qEnc suchthat defined(r_11[ri_11], x_O_4[ri_11], u_4[ri_11]) && (u_4[ri_11] = u_4) && (x_O_4 = x_O_4[ri_11]) then r_11[u_10] else r_11 <-R key; r_11);
+           k1: key <- (x_O_4: info <- info1; {74}find [unique]  suchthat defined(x_O_3[u_4], r_10[u_4]) then r_10[u_4] orfind u_10 = ri_11 <= qEnc suchthat defined(r_11[ri_11], x_O_4[ri_11], u_4[ri_11]) && (u_4[ri_11] = u_4) && (x_O_4 = x_O_4[ri_11]) then r_11[u_10] else r_11 <-R key; r_11);
            d: bitstring <- ad;
            r_7 <-R enc_seed;
            return(enc_r(m2, d, k1, r_7))
          else
            r_4: prk <- cst_prk;
-           k1: key <- (x_O_3: ctr <- ctr1; r_10 <-R key; r_10);
+           k1: key <- (x_O_3: info <- info1; r_10 <-R key; r_10);
            d: bitstring <- ad;
            r_6 <-R enc_seed;
            return(enc_r(m2, d, k1, r_6))
@@ -662,19 +662,19 @@ Game 15 is
        if Z(m1) = Z(m2) then
        if b then
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- kdf_expand(r_3[u_8], ctr1);
+           k1: key <- kdf_expand(r_3[u_8], info1);
            d: bitstring <- ad;
            r_9 <-R enc_seed;
            return(enc_r(m1, d, k1, r_9))
          else
            r_3 <-R prk;
-           k1: key <- kdf_expand(r_3, ctr1);
+           k1: key <- kdf_expand(r_3, info1);
            d: bitstring <- ad;
            r_8 <-R enc_seed;
            return(enc_r(m1, d, k1, r_8))
        else
          find [unique] u_4 = ri_4 <= qEnc suchthat defined(r_4[ri_4]) then
-           x_O_4: ctr <- ctr1;
+           x_O_4: info <- info1;
            find [unique]  suchthat defined(r_10[u_4]) then
              k1: key <- r_10[u_4];
              d: bitstring <- ad;
@@ -693,7 +693,7 @@ Game 15 is
              return(enc_r(m2, d, k1, r_7))
          else
            r_4: prk <- cst_prk;
-           x_O_3: ctr <- ctr1;
+           x_O_3: info <- info1;
            r_10 <-R key;
            k1: key <- r_10;
            d: bitstring <- ad;
@@ -730,13 +730,13 @@ Game 16 is
        if Z(m1) = Z(m2) then
        if b then
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- kdf_expand(r_3[u_8], ctr1);
+           k1: key <- kdf_expand(r_3[u_8], info1);
            d: bitstring <- ad;
            r_9 <-R enc_seed;
            return(enc_r(m1, d, k1, r_9))
          else
            r_3 <-R prk;
-           k1: key <- kdf_expand(r_3, ctr1);
+           k1: key <- kdf_expand(r_3, info1);
            d: bitstring <- ad;
            r_8 <-R enc_seed;
            return(enc_r(m1, d, k1, r_8))
@@ -786,13 +786,13 @@ Game 17 is
        if Z(m1) = Z(m2) then
        if b then
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- kdf_expand(r_3[u_8], ctr1);
+           k1: key <- kdf_expand(r_3[u_8], info1);
            d: bitstring <- ad;
            r_9 <-R enc_seed;
            return(enc_r(m1, d, k1, r_9))
          else
            r_3 <-R prk;
-           k1: key <- kdf_expand(r_3, ctr1);
+           k1: key <- kdf_expand(r_3, info1);
            d: bitstring <- ad;
            r_8 <-R enc_seed;
            return(enc_r(m1, d, k1, r_8))
@@ -845,13 +845,13 @@ Game 18 is
        if Z(m1) = Z(m2) then
        if b then
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- kdf_expand(r_3[u_8], ctr1);
+           k1: key <- kdf_expand(r_3[u_8], info1);
            d: bitstring <- ad;
            r_9 <-R enc_seed;
            return(enc_r(m1, d, k1, r_9))
          else
            r_3 <-R prk;
-           k1: key <- kdf_expand(r_3, ctr1);
+           k1: key <- kdf_expand(r_3, info1);
            d: bitstring <- ad;
            r_8 <-R enc_seed;
            return(enc_r(m1, d, k1, r_8))
@@ -890,13 +890,13 @@ Game 19 is
        if Z(m1) = Z(m2) then
        if b then
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- (x_O_6: ctr <- ctr1; find [unique]  suchthat defined(x_O_5[u_8], r_12[u_8]) && {30}(x_O_6 = x_O_5[u_8]) then r_12[u_8] orfind u_13 = ri_15 <= qEnc suchthat defined(r_13[ri_15], x_O_6[ri_15], u_8[ri_15]) && (u_8[ri_15] = u_8) && (x_O_6 = x_O_6[ri_15]) then r_13[u_13] else r_13 <-R key; r_13);
+           k1: key <- (x_O_6: info <- info1; find [unique]  suchthat defined(x_O_5[u_8], r_12[u_8]) && {30}(x_O_6 = x_O_5[u_8]) then r_12[u_8] orfind u_13 = ri_15 <= qEnc suchthat defined(r_13[ri_15], x_O_6[ri_15], u_8[ri_15]) && (u_8[ri_15] = u_8) && (x_O_6 = x_O_6[ri_15]) then r_13[u_13] else r_13 <-R key; r_13);
            d: bitstring <- ad;
            r_9 <-R enc_seed;
            return(enc_r(m1, d, k1, r_9))
          else
            r_3: prk <- cst_prk;
-           k1: key <- (x_O_5: ctr <- ctr1; {81}find [unique] u_12 = ri_13 <= qEnc suchthat defined(u_8[ri_13], x_O_6[ri_13], r_13[ri_13]) && {85}((u_8[ri_13] = i) && (x_O_5 = x_O_6[ri_13])) then r_13[u_12] else r_12 <-R key; r_12);
+           k1: key <- (x_O_5: info <- info1; {81}find [unique] u_12 = ri_13 <= qEnc suchthat defined(u_8[ri_13], x_O_6[ri_13], r_13[ri_13]) && {85}((u_8[ri_13] = i) && (x_O_5 = x_O_6[ri_13])) then r_13[u_12] else r_12 <-R key; r_12);
            d: bitstring <- ad;
            r_8 <-R enc_seed;
            return(enc_r(m1, d, k1, r_8))
@@ -939,13 +939,13 @@ Game 20 is
        if Z(m1) = Z(m2) then
        if b then
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           k1: key <- (x_O_6: ctr <- ctr1; {25}find [unique]  suchthat defined(x_O_5[u_8], r_12[u_8]) then r_12[u_8] orfind u_13 = ri_15 <= qEnc suchthat defined(r_13[ri_15], x_O_6[ri_15], u_8[ri_15]) && (u_8[ri_15] = u_8) && (x_O_6 = x_O_6[ri_15]) then r_13[u_13] else r_13 <-R key; r_13);
+           k1: key <- (x_O_6: info <- info1; {25}find [unique]  suchthat defined(x_O_5[u_8], r_12[u_8]) then r_12[u_8] orfind u_13 = ri_15 <= qEnc suchthat defined(r_13[ri_15], x_O_6[ri_15], u_8[ri_15]) && (u_8[ri_15] = u_8) && (x_O_6 = x_O_6[ri_15]) then r_13[u_13] else r_13 <-R key; r_13);
            d: bitstring <- ad;
            r_9 <-R enc_seed;
            return(enc_r(m1, d, k1, r_9))
          else
            r_3: prk <- cst_prk;
-           k1: key <- (x_O_5: ctr <- ctr1; r_12 <-R key; r_12);
+           k1: key <- (x_O_5: info <- info1; r_12 <-R key; r_12);
            d: bitstring <- ad;
            r_8 <-R enc_seed;
            return(enc_r(m1, d, k1, r_8))
@@ -986,7 +986,7 @@ Game 21 is
        if Z(m1) = Z(m2) then
        if b then
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           x_O_6: ctr <- ctr1;
+           x_O_6: info <- info1;
            find [unique]  suchthat defined(r_12[u_8]) then
              k1: key <- r_12[u_8];
              d: bitstring <- ad;
@@ -1005,7 +1005,7 @@ Game 21 is
              return(enc_r(m1, d, k1, r_9))
          else
            r_3: prk <- cst_prk;
-           x_O_5: ctr <- ctr1;
+           x_O_5: info <- info1;
            r_12 <-R key;
            k1: key <- r_12;
            d: bitstring <- ad;

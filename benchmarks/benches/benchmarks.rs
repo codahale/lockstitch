@@ -7,10 +7,6 @@ use lockstitch::{Protocol, TAG_LEN};
 
 const LENS: &[usize] = &[16, 256, 1024, 16 * 1024, 1024 * 1024];
 
-fn main() {
-    divan::main();
-}
-
 #[divan::bench(consts = LENS)]
 fn hash<const LEN: usize>(bencher: divan::Bencher) {
     bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_refs(|message| {
@@ -32,19 +28,6 @@ fn hash_writer<const LEN: usize>(bencher: divan::Bencher) {
             let (mut protocol, _) = writer.into_inner();
             protocol.derive_array::<32>(b"digest")
         });
-}
-
-#[divan::bench(consts = LENS)]
-fn prf<const LEN: usize>(bencher: divan::Bencher) {
-    let key = [0u8; 32];
-    bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_values(
-        |mut block| {
-            let mut protocol = Protocol::new("prf");
-            protocol.mix(b"key", &key);
-            protocol.derive(b"message", &mut block);
-            block
-        },
-    );
 }
 
 #[divan::bench(consts = LENS)]
@@ -77,4 +60,8 @@ fn aead<const LEN: usize>(bencher: divan::Bencher) {
             block
         },
     );
+}
+
+fn main() {
+    divan::main();
 }

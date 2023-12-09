@@ -8,7 +8,7 @@ type key [fixed].
 
 expand IND_CPA_sym_enc(key, bitstring, bitstring, enc, dec, injbot, Z, Penc).
 
-(* Using SHA-256 to hash the transcript is assumed to be a random oracle. *)
+(* HKDF-SHA-256-Extract is assumed to be a random oracle. *)
 
 type hash_key [fixed].
 type transcript [bounded, large, nonuniform].
@@ -16,20 +16,20 @@ type prk [fixed, large].
 
 expand ROM_hash(hash_key, transcript, prk, kdf_extract, Okdf_extract, qKDFextract).
 
-(* Using SHA-256 to hash a counter is assumed to be a PRF. *)
+(* HKDF-SHA-256-Expand is assumed to be a PRF. *)
 
-type ctr [fixed].
-const ctr1: ctr.
+type info [fixed].
+const info1: info.
 
 proba Pkdf.
 
-expand PRF(prk, ctr, key, kdf_expand, Pkdf).
+expand PRF(prk, info, key, kdf_expand, Pkdf).
 
 (* Construction *)
 
 letfun full_enc(m: bitstring, hk: hash_key, t: transcript) =
     prk1 <- kdf_extract(hk, t);
-    k1 <- kdf_expand(prk1, ctr1);
+    k1 <- kdf_expand(prk1, info1);
     enc(m, k1).
 
 (* Queries *)

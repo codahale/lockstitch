@@ -7,6 +7,7 @@ use core::fmt::Debug;
 use crate::aegis_128l::Aegis128L;
 
 use cmov::CmovEq;
+use hkdf::Hkdf;
 use sha2::digest::Digest;
 use sha2::Sha256;
 
@@ -84,11 +85,15 @@ impl Protocol {
         self.op_header(OpCode::Derive, label);
 
         // Calculate the hash of the transcript and replace it with an empty transcript.
-        let prk = self.transcript.finalize_reset();
+        let ikm = self.transcript.finalize_reset();
 
-        // Use Concat-KDF to derive a new KDF key and any additional output.
+        // Use the hash as initial keying material for HKDF-SHA-256.
+        let hkdf = Hkdf::<Sha256>::new(None, &ikm);
+
+        // Use HKDF to derive a new KDF key and the output.
         let mut kdf_key = [0u8; 32];
-        concat_kdf(&prk.into(), &mut kdf_key, out);
+        hkdf.expand(b"kdf-key", &mut kdf_key).expect("should expand a KDF key");
+        hkdf.expand(b"output", out).expect("should expand derived output");
 
         // Perform a Mix operation with the KDF key.
         self.mix(b"kdf-key", &kdf_key);
@@ -289,42 +294,6 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     res != 0
 }
 
-/// Derives a KDF key and additional output with [NIST SP 800-56C Rev. 2][]'s  _One-Step Key
-/// Derivation_ with SHA-256.
-///
-/// [NIST SP 800-56C Rev. 2]: https://csrc.nist.gov/pubs/sp/800/56/c/r2/final
-fn concat_kdf(prk: &[u8; 32], kdf_key: &mut [u8; 32], out: &mut [u8]) {
-    let mut counter = 0u32;
-    let mut kdf = Sha256::new();
-    let mut input = [0u8; 4 + 32 + 10];
-    input[4..4 + 32].copy_from_slice(prk);
-    input[4 + 32..].copy_from_slice(b"lockstitch");
-
-    macro_rules! expand {
-        {$out:expr} => {{
-            counter += 1;
-            input[..4].copy_from_slice(&counter.to_be_bytes());
-            kdf.update(&input);
-            $out;
-        }};
-    }
-
-    // Use the first block of KDF output as the KDF key.
-    expand! { kdf.finalize_into_reset(kdf_key.into()) };
-
-    // Process the output slice in full blocks.
-    let mut chunks = out.chunks_exact_mut(32);
-    for block in chunks.by_ref() {
-        expand! { kdf.finalize_into_reset(block.into()) };
-    }
-
-    // Handle any partial block if needed.
-    let remainder = chunks.into_remainder();
-    if !remainder.is_empty() {
-        expand! { remainder.copy_from_slice(&kdf.finalize()[..remainder.len()]) };
-    }
-}
-
 /// All Lockstitch operation types.
 #[derive(Debug, Clone, Copy)]
 enum OpCode {
@@ -412,21 +381,21 @@ mod tests {
         protocol.mix(b"first", b"one");
         protocol.mix(b"second", b"two");
 
-        expect!["75d890340e76facd"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
+        expect!["fcba31494476469f"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(b"fourth", &mut plaintext);
-        expect!["98c34aba949134ead021cbc12596e7c29827"].assert_eq(&hex::encode(plaintext));
+        expect!["81e0157f51af3b420e32e68b9f9a15e5a57a"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(b"fifth", &mut sealed);
 
-        expect!["ad35e4cbb9649e5fddaa1ab103f793e7c9b8a0e60040d8c9f3ce957b996ddc73e353"]
+        expect!["bc5832e55a74c9f87270b6d4e9f76c37c76155c1990dbc5a9dddfad72bb676c65f94"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["6192e4961e3c0280"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+        expect!["b6e7876a7d26e404"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
     }
 
     #[test]

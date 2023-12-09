@@ -90,28 +90,26 @@ output.
 function derive(transcript, label, n):
   transcript ← transcript ǁ 0x03                          // Append a Derive op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
-  prk ← sha256(transcript)                                // Hash the transcript in its entirety.
-  kdf_out ← concat_kdf(prk, "lockstitch", 32+n)           // Derive 32+n bytes of KDF output from the hash.
-  kdf_key ǁ output ← kdf_out                              // Split the KDF output into a 32-byte KDF key and returned output.
+  prk ← hkdf_extract("", sha256(transcript))              // Use the hash of the transcript as HKDF keying material.
+  kdf_key ← hkdf_expand(prk, "kdf-key", 32)               // Use HKDF to expand a new 32-byte KDF key.
+  output ← hkdf_expand(prk, "output", n)                  // Use HKDF to expand the derived output.
   transcript ← mix(ɛ, "kdf-key", kdf_key)                 // Replace the transcript with a single Mix operation with the KDF key.
   transcript ← mix(transcript, "len", left_encode(n))     // Append a Mix operation with the output length.
   (transcript, output)                                    // Return the new transcript along with the output.
 ```
 
 `Derive` appends an operation code to the protocol's transcript, hashes the entire transcript with
-SHA-256 and passes the result to the _One-Step Key Derivation_ key derivation function (KDF) from
-Sec. 4 of [NIST SP 800-56C Rev. 2][] (also known as Concat-KDF), using SHA-256 as the `H` function
-and the string `lockstitch` as the `FixedInfo` parameter. The transcript is replaced with two `Mix`
-operations: one containing the first 32 bytes of KDF output, the other containing the length of the
-output.  Finally, the remainder of the KDF output is returned.
+SHA-256 and uses the hash as initial keying material for [HKDF][]'s `Extract` function. The resulting
+PRK is used once to generate a new 32-byte KDF key and again to generate the requested output.
 
-[NIST SP 800-56C Rev. 2]: https://csrc.nist.gov/pubs/sp/800/56/c/r2/final
+[HKDF]: https://tools.ietf.org/html/rfc5869
 
-`Derive` supports streaming output, thus a shorter `Derive` operation will return a prefix of a
-longer one (e.g.  `Derive("a", 16)` and `Derive("a", 32)` will share the same initial 16 bytes).
-Once the operation is complete, however, the protocols' transcripts will be different. If a use case
-requires `Derive` output to be dependent on its length, include the length in a `Mix` operation
-beforehand.
+A shorter `Derive` operation will return a prefix of a longer one (e.g. `Derive("a", 16)` and
+`Derive("a", 32)` will share the same initial 16 bytes).  Once the operation is complete, however,
+the protocols' transcripts will be different. If a use case requires `Derive` output to be dependent
+on its length, include the length in a `Mix` operation beforehand.
+
+**N.B.**: Each `Derive` operation is limited to 8160 bytes of output.
 
 #### KDF Chains
 
@@ -129,8 +127,6 @@ properties:
 * **Break-in Recovery**: A protocol's future outputs will appear random to an adversary in
   possession of the protocol's transcript as long as one of the future inputs to the protocol is
   secret.
-
-**N.B.**: Each operation is limited to 2^40-32 bytes of output.
 
 ### `Encrypt`/`Decrypt`
 
@@ -274,8 +270,8 @@ function stream_decrypt(key, nonce, ciphertext):
 This construction is IND-CPA-secure under the following assumptions:
 
 1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
-2. SHA-256 is indistinguishable from a random oracle when hashing the transcript.
-3. SHA-256 is PRF-secure when hashing a counter.
+2. HKDF-SHA-256-Extract is indistinguishable from a random oracle.
+3. HKDF-SHA-256-Expand is PRF-secure.
 
 ### Authenticated Encryption And Data (AEAD)
 
@@ -295,7 +291,7 @@ The introduction of a nonce makes the scheme probabilistic (which is required fo
 
 Unlike many standard AEADs (e.g. AES-GCM and ChaCha20Poly1305), it is fully context-committing: the
 tag is a strong cryptographic commitment to all the inputs. AEGIS-128L is key-committing and both
-the key and the nonce are derived from the transcript using Concat-KDF.
+the key and the nonce are derived from the transcript using HKDF.
 
 Also unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces
 of associated data without risk of ambiguous inputs.
@@ -314,14 +310,14 @@ This construction is IND-CCA2-secure (i.e. both IND-CPA and INT-CTXT) under the 
 assumptions:
 
 1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
-2. SHA-256 is indistinguishable from a random oracle when hashing the transcript.
-3. SHA-256 is PRF-secure when hashing a counter.
+2. HKDF-SHA-256-Extract is indistinguishable from a random oracle.
+3. HKDF-SHA-256-Expand is PRF-secure.
 
 #### Expanded Transcript
 
 To make it clear what Lockstitch is doing behind the scenes, the Lockstich API can be converted into
-a series of SHA-256 and AEGIS-128L operations. For example, consider the following concrete use of
-the `aead_seal` function:
+a sequence of primitive operations. For example, consider the following concrete use of the
+`aead_seal` function:
 
 ```text
 key ← 0x06c47a03da9a2e6cdebdcafdfd62b57d
@@ -331,7 +327,7 @@ ad ← "this is public"
 (ciphertext, tag) ← aead_seal(key, nonce, ad, plaintext)
 ```
 
-First, we expand the `init` and `mix` operations:
+That expands to the following sequence of primitive operations:
 
 ```text
 t0 ← 0x01 || 0x01, 0x80 || "com.example.aead"
@@ -340,9 +336,9 @@ t2 ← t1 || 0x02 || 0x01, 0x05 || "nonce" || 0x3f4ac18bfa54206f5c6de81517618d43
 t3 ← t2 || 0x02 || 0x01, 0x02 || "ad" || "this is public" || 0x0e, 0x01 
 t4 ← t3 || 0x05 || 0x01, 0x07 || "message"
 t5 ← t4 || 0x03 || 0x01, 0x03 || "key"
-prk0 ← sha256(t6)
-kdf_key0 ← sha256(u32_be(1) || prk0 || "lockstitch")
-aegis_key ← sha256(u32_be(2) || prk0 || "lockstitch")
+prk0 ← hkdf_extract("", sha256(t6))
+kdf_key0 ← hkdf_expand(prk0, "kdf-key", 32) 
+aegis_key ← hkdf_expand(prk0, "output", 32) 
 t6 ← 0x03 || 0x01, 0x07 || "kdf-key" || kdf_key0 || 0x20, 0x01
 t7 ← t6 || 0x03 || 0x01, 0x03 || "len" || 0x01, 0x20 || 0x02, 0x01
 (ciphertext, tag16, tag32) ← aegis128l::encrypt(aegis_key, "this is a secret")

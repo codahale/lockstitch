@@ -84,11 +84,11 @@ impl Protocol {
         self.op_header(OpCode::Derive, label);
 
         // Calculate the hash of the transcript and replace it with an empty transcript.
-        let ikm = self.transcript.finalize_reset();
+        let prk = self.transcript.finalize_reset();
 
         // Use Concat-KDF to derive a new KDF key and any additional output.
         let mut kdf_key = [0u8; 32];
-        concat_kdf(&ikm.into(), &mut kdf_key, out);
+        concat_kdf(&prk.into(), &mut kdf_key, out);
 
         // Perform a Mix operation with the KDF key.
         self.mix(b"kdf-key", &kdf_key);
@@ -289,15 +289,15 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     res != 0
 }
 
-/// Derives a KDF key and additional output from [NIST SP 800-56C Rev. 2][]'s  _One-Step Key
+/// Derives a KDF key and additional output with [NIST SP 800-56C Rev. 2][]'s  _One-Step Key
 /// Derivation_ with SHA-256.
 ///
 /// [NIST SP 800-56C Rev. 2]: https://csrc.nist.gov/pubs/sp/800/56/c/r2/final
-fn concat_kdf(ikm: &[u8; 32], kdf_key: &mut [u8; 32], out: &mut [u8]) {
+fn concat_kdf(prk: &[u8; 32], kdf_key: &mut [u8; 32], out: &mut [u8]) {
     let mut counter = 0u32;
     let mut kdf = Sha256::new();
     let mut input = [0u8; 4 + 32 + 10];
-    input[4..4 + 32].copy_from_slice(ikm);
+    input[4..4 + 32].copy_from_slice(prk);
     input[4 + 32..].copy_from_slice(b"lockstitch");
 
     macro_rules! expand {

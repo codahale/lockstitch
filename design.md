@@ -90,8 +90,8 @@ output.
 function derive(transcript, label, n):
   transcript ← transcript ǁ 0x03                          // Append a Derive op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
-  ikm ← sha256(transcript)                                // Hash the transcript in its entirety.
-  kdf_out ← concat_kdf(ikm, "lockstitch", 32+n)           // Derive 32+n bytes of KDF output from the hash.
+  prk ← sha256(transcript)                                // Hash the transcript in its entirety.
+  kdf_out ← concat_kdf(prk, "lockstitch", 32+n)           // Derive 32+n bytes of KDF output from the hash.
   kdf_key ǁ output ← kdf_out                              // Split the KDF output into a 32-byte KDF key and returned output.
   transcript ← mix(ɛ, "kdf-key", kdf_key)                 // Replace the transcript with a single Mix operation with the KDF key.
   transcript ← mix(transcript, "len", left_encode(n))     // Append a Mix operation with the output length.
@@ -340,9 +340,9 @@ t2 ← t1 || 0x02 || 0x01, 0x05 || "nonce" || 0x3f4ac18bfa54206f5c6de81517618d43
 t3 ← t2 || 0x02 || 0x01, 0x02 || "ad" || "this is public" || 0x0e, 0x01 
 t4 ← t3 || 0x05 || 0x01, 0x07 || "message"
 t5 ← t4 || 0x03 || 0x01, 0x03 || "key"
-ikm0 ← sha256(t6)
-kdf_key0 ← sha256(u32_be(1) || ikm0 || "lockstitch")
-aegis_key ← sha256(u32_be(2) || ikm0 || "lockstitch")
+prk0 ← sha256(t6)
+kdf_key0 ← sha256(u32_be(1) || prk0 || "lockstitch")
+aegis_key ← sha256(u32_be(2) || prk0 || "lockstitch")
 t6 ← 0x03 || 0x01, 0x07 || "kdf-key" || kdf_key0 || 0x20, 0x01
 t7 ← t6 || 0x03 || 0x01, 0x03 || "len" || 0x01, 0x20 || 0x02, 0x01
 (ciphertext, tag16, tag32) ← aegis128l::encrypt(aegis_key, "this is a secret")

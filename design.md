@@ -273,6 +273,7 @@ This construction is IND-CPA-secure under the following assumptions:
 1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
 2. HKDF-SHA-256-Extract is indistinguishable from a random oracle.
 3. HKDF-SHA-256-Expand is PRF-secure.
+4. At least one of the inputs to the transcript is a nonce (i.e., not used for multiple messages).
 
 ### Authenticated Encryption And Data (AEAD)
 
@@ -313,6 +314,7 @@ assumptions:
 1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
 2. HKDF-SHA-256-Extract is indistinguishable from a random oracle.
 3. HKDF-SHA-256-Expand is PRF-secure.
+4. At least one of the inputs to the transcript is a nonce (i.e., not used for multiple messages).
 
 #### Expanded Transcript
 

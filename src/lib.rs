@@ -2,10 +2,12 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
+use core::{fmt, mem};
+
 use crate::aegis_128l::Aegis128L;
 
 use cmov::CmovEq;
-use sha2::digest::Digest;
+use hkdf::HkdfExtract;
 use sha2::Sha256;
 
 mod aegis_128l;
@@ -24,9 +26,15 @@ pub const TAG_LEN: usize = 16;
 
 /// A stateful object providing fine-grained symmetric-key cryptographic services like hashing,
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Protocol {
-    transcript: Sha256,
+    transcript: HkdfExtract<Sha256>,
+}
+
+impl fmt::Debug for Protocol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Protocol").field("transcript", b"***").finish()
+    }
 }
 
 impl Protocol {
@@ -34,10 +42,7 @@ impl Protocol {
     #[inline]
     pub fn new(domain: &str) -> Protocol {
         // Initialize a protocol with an empty transcript.
-        let mut protocol = Protocol { transcript: Sha256::new() };
-
-        // Prepare the transcript for HKDF-Extract.
-        protocol.hkdf_extract_init();
+        let mut protocol = Protocol { transcript: HkdfExtract::new(None) };
 
         // Append the Init op header to the transcript with the domain as the label.
         //
@@ -58,8 +63,8 @@ impl Protocol {
         // Append the input to the transcript with right-encoded length.
         //
         //   input || right_encode(|input|)
-        self.transcript.update(input);
-        self.transcript.update(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
+        self.transcript.input_ikm(input);
+        self.transcript.input_ikm(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
     }
 
     /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
@@ -84,16 +89,15 @@ impl Protocol {
         //   0x03 || left_encode(|label|) || label
         self.op_header(OpCode::Derive, label);
 
-        // Calculate HKDF-Extract("", transcript).
-        let (hk_i, hk_o) = self.hkdf_extract_finalize();
+        // Calculate HKDF-Extract("", transcript) and clear the transcript.
+        let mut transcript = HkdfExtract::new(None);
+        mem::swap(&mut transcript, &mut self.transcript);
+        let (_, hkdf) = transcript.finalize();
 
         // Use HKDF-Expand to derive a new KDF key and the requested output.
         let mut kdf_key = [0u8; 32];
-        self.hkdf_expand(&hk_i, &hk_o, b"kdf-key", &mut kdf_key);
-        self.hkdf_expand(&hk_i, &hk_o, b"output", out);
-
-        // Prepare the transcript for the next HKDF-Extract.
-        self.hkdf_extract_init();
+        hkdf.expand(b"kdf-key", &mut kdf_key).expect("should expand KDF key");
+        hkdf.expand(b"output", out).expect("should expand output");
 
         // Perform a Mix operation with the KDF key.
         self.mix(b"kdf-key", &kdf_key);
@@ -280,65 +284,9 @@ impl Protocol {
         // Append the operation code and label to the transcript:
         //
         //   op_code || left_encode(|label|) || label
-        self.transcript.update([op_code as u8]);
-        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        self.transcript.update(label);
-    }
-
-    /// Initializes the transcript for a streaming calculation of `HKDF-Extract` on the transcript.
-    #[inline]
-    fn hkdf_extract_init(&mut self) {
-        // Add the inner HMAC key to the hasher to reset it for the next transcript.
-        self.transcript.update(HMAC_INNER_KEY);
-    }
-
-    /// Performs `HKDF-Extract` on the transcript contents, returning the inner and outer HMAC keys
-    /// for the HKDF PRK.
-    #[inline]
-    fn hkdf_extract_finalize(&mut self) -> ([u8; 64], [u8; 64]) {
-        // Finalize the transcript hash into the inner HMAC value.
-        let inner = self.transcript.finalize_reset();
-
-        // Hash the outer HMAC key and the inner HMAC hash to create the HKDF-Extract PRK.
-        self.transcript.update(HMAC_OUTER_KEY);
-        self.transcript.update(inner);
-
-        // Finalize the hash and return the PRK.
-        hmac_keys(self.transcript.finalize_reset().into())
-    }
-
-    /// Performs `HKDF-Expand` with the given HMAC keys and label.
-    #[inline]
-    fn hkdf_expand(&mut self, hk_i: &[u8; 64], hk_o: &[u8; 64], label: &[u8], out: &mut [u8]) {
-        const MAX_LEN: usize = 255 * 32;
-        assert!(out.len() < MAX_LEN, "cannot derive more than {MAX_LEN} bytes of output");
-
-        let hmac = &mut self.transcript;
-        let mut block = [0u8; 32];
-        for (n, out) in out.chunks_mut(32).enumerate() {
-            // Hash the inner HMAC key.
-            hmac.update(hk_i);
-
-            // Hash the previous block, if any.
-            if n > 0 {
-                hmac.update(block);
-            };
-
-            // Hash the label and counter.
-            hmac.update(label);
-            hmac.update([n as u8 + 1]);
-
-            // Finalize the inner HMAC hash.
-            let inner = hmac.finalize_reset();
-
-            // Calculate the outer HMAC hash.
-            hmac.update(hk_o);
-            hmac.update(inner);
-            hmac.finalize_into_reset((&mut block).into());
-
-            // Use the block as output.
-            out.copy_from_slice(&block[..out.len()]);
-        }
+        self.transcript.input_ikm(&[op_code as u8]);
+        self.transcript.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        self.transcript.input_ikm(label);
     }
 }
 
@@ -376,7 +324,7 @@ impl<W: std::io::Write> MixWriter<W> {
     #[inline]
     pub fn into_inner(mut self) -> (Protocol, W) {
         // Append the right-encoded length to the transcript.
-        self.protocol.transcript.update(right_encode(&mut [0u8; 9], self.len * 8));
+        self.protocol.transcript.input_ikm(right_encode(&mut [0u8; 9], self.len * 8));
         (self.protocol, self.inner)
     }
 }
@@ -388,7 +336,7 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
         // Track the written length.
         self.len += buf.len() as u64;
         // Append the written slice to the protocol transcript.
-        self.protocol.transcript.update(buf);
+        self.protocol.transcript.input_ikm(buf);
         // Pass the slice to the inner writer and return the result.
         self.inner.write(buf)
     }
@@ -422,22 +370,6 @@ fn right_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
     buf[len - 1] = n as u8;
     &buf[len - n - 1..]
 }
-
-fn hmac_keys(prk: [u8; 32]) -> ([u8; 64], [u8; 64]) {
-    let mut inner = HMAC_INNER_KEY;
-    let mut outer = HMAC_OUTER_KEY;
-    for ((k, i), o) in prk.iter().zip(inner.iter_mut()).zip(outer.iter_mut()) {
-        *o ^= k;
-        *i ^= k;
-    }
-    (inner, outer)
-}
-
-/// The inner key for `HMAC("", x)` (i.e. HKDF-Extract with no salt).
-const HMAC_INNER_KEY: [u8; 64] = [0x36; 64];
-
-/// The outer key for `HMAC("", x)` (i.e. HKDF-Extract with no salt).
-const HMAC_OUTER_KEY: [u8; 64] = [0x5c; 64];
 
 #[cfg(all(test, feature = "std"))]
 mod tests {

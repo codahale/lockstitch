@@ -90,18 +90,18 @@ output.
 function derive(transcript, label, n):
   transcript ← transcript ǁ 0x03                          // Append a Derive op code to the transcript.
   transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
-  prk ← hkdf_extract("", sha256(transcript))              // Use the hash of the transcript as HKDF keying material.
-  kdf_key ← hkdf_expand(prk, "kdf-key", 32)               // Use HKDF to expand a new 32-byte KDF key.
-  output ← hkdf_expand(prk, "output", n)                  // Use HKDF to expand the derived output.
+  prk ← hkdf_extract("", transcript))                     // Use HKDF-Extract to derive a PRK from the transcript.
+  kdf_key ← hkdf_expand(prk, "kdf-key", 32)               // Use HKDF-Expand to derive a new 32-byte KDF key.
+  output ← hkdf_expand(prk, "output", n)                  // Use HKDF-Expand to derive the requested output.
   transcript ← mix(ɛ, "kdf-key", kdf_key)                 // Replace the transcript with a single Mix operation with the KDF key.
   transcript ← mix(transcript, "len", left_encode(n))     // Append a Mix operation with the output length.
   (transcript, output)                                    // Return the new transcript along with the output.
 ```
 
-`Derive` appends an operation code to the protocol's transcript, hashes the entire transcript with
-SHA-256 and uses the hash as initial keying material for [HKDF][]'s `Extract` function with an empty
-string as the salt value. The resulting PRK is used once to generate a new 32-byte KDF key and again
-to generate the requested output.
+`Derive` appends an operation code to the protocol's transcript and uses the transcript as initial
+keying material for [HKDF][]'s `Extract` function with an empty string as the salt value. The
+resulting PRK is used with [HKDF][]'s 'Expand' function to generate a new 32-byte KDF key and to
+generate the requested output.
 
 [HKDF]: https://tools.ietf.org/html/rfc5869
 

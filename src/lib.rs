@@ -2,12 +2,9 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
-use core::fmt::Debug;
-
 use crate::aegis_128l::Aegis128L;
 
 use cmov::CmovEq;
-use hkdf::Hkdf;
 use sha2::digest::Digest;
 use sha2::Sha256;
 
@@ -38,6 +35,9 @@ impl Protocol {
     pub fn new(domain: &str) -> Protocol {
         // Initialize a protocol with an empty transcript.
         let mut protocol = Protocol { transcript: Sha256::new() };
+
+        // Prepare the transcript for HKDF-Extract.
+        protocol.hkdf_extract_init();
 
         // Append the Init op header to the transcript with the domain as the label.
         //
@@ -84,16 +84,16 @@ impl Protocol {
         //   0x03 || left_encode(|label|) || label
         self.op_header(OpCode::Derive, label);
 
-        // Calculate the hash of the transcript and replace it with an empty transcript.
-        let ikm = self.transcript.finalize_reset();
+        // Calculate HKDF-Extract("", transcript).
+        let (hk_i, hk_o) = self.hkdf_extract_finalize();
 
-        // Use the hash as initial keying material for HKDF-SHA-256.
-        let hkdf = Hkdf::<Sha256>::new(None, &ikm);
-
-        // Use HKDF to derive a new KDF key and the output.
+        // Use HKDF-Expand to derive a new KDF key and the requested output.
         let mut kdf_key = [0u8; 32];
-        hkdf.expand(b"kdf-key", &mut kdf_key).expect("should expand a KDF key");
-        hkdf.expand(b"output", out).expect("should expand derived output");
+        self.hkdf_expand(&hk_i, &hk_o, b"kdf-key", &mut kdf_key);
+        self.hkdf_expand(&hk_i, &hk_o, b"output", out);
+
+        // Prepare the transcript for the next HKDF-Extract.
+        self.hkdf_extract_init();
 
         // Perform a Mix operation with the KDF key.
         self.mix(b"kdf-key", &kdf_key);
@@ -284,6 +284,62 @@ impl Protocol {
         self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         self.transcript.update(label);
     }
+
+    /// Initializes the transcript for a streaming calculation of `HKDF-Extract` on the transcript.
+    #[inline]
+    fn hkdf_extract_init(&mut self) {
+        // Add the inner HMAC key to the hasher to reset it for the next transcript.
+        self.transcript.update(HMAC_INNER_KEY);
+    }
+
+    /// Performs `HKDF-Extract` on the transcript contents, returning the inner and outer HMAC keys
+    /// for the HKDF PRK.
+    #[inline]
+    fn hkdf_extract_finalize(&mut self) -> ([u8; 64], [u8; 64]) {
+        // Finalize the transcript hash into the inner HMAC value.
+        let inner = self.transcript.finalize_reset();
+
+        // Hash the outer HMAC key and the inner HMAC hash to create the HKDF-Extract PRK.
+        self.transcript.update(HMAC_OUTER_KEY);
+        self.transcript.update(inner);
+
+        // Finalize the hash and return the PRK.
+        hmac_keys(self.transcript.finalize_reset().into())
+    }
+
+    /// Performs `HKDF-Expand` with the given HMAC keys and label.
+    #[inline]
+    fn hkdf_expand(&mut self, hk_i: &[u8; 64], hk_o: &[u8; 64], label: &[u8], out: &mut [u8]) {
+        const MAX_LEN: usize = 255 * 32;
+        assert!(out.len() < MAX_LEN, "cannot derive more than {MAX_LEN} bytes of output");
+
+        let hmac = &mut self.transcript;
+        let mut block = [0u8; 32];
+        for (n, out) in out.chunks_mut(32).enumerate() {
+            // Hash the inner HMAC key.
+            hmac.update(hk_i);
+
+            // Hash the previous block, if any.
+            if n > 0 {
+                hmac.update(block);
+            };
+
+            // Hash the label and counter.
+            hmac.update(label);
+            hmac.update([n as u8 + 1]);
+
+            // Finalize the inner HMAC hash.
+            let inner = hmac.finalize_reset();
+
+            // Calculate the outer HMAC hash.
+            hmac.update(hk_o);
+            hmac.update(inner);
+            hmac.finalize_into_reset((&mut block).into());
+
+            // Use the block as output.
+            out.copy_from_slice(&block[..out.len()]);
+        }
+    }
 }
 
 /// Compares two slices for equality in constant time.
@@ -367,6 +423,22 @@ fn right_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
     &buf[len - n - 1..]
 }
 
+fn hmac_keys(prk: [u8; 32]) -> ([u8; 64], [u8; 64]) {
+    let mut inner = HMAC_INNER_KEY;
+    let mut outer = HMAC_OUTER_KEY;
+    for ((k, i), o) in prk.iter().zip(inner.iter_mut()).zip(outer.iter_mut()) {
+        *o ^= k;
+        *i ^= k;
+    }
+    (inner, outer)
+}
+
+/// The inner key for `HMAC("", x)` (i.e. HKDF-Extract with no salt).
+const HMAC_INNER_KEY: [u8; 64] = [0x36; 64];
+
+/// The outer key for `HMAC("", x)` (i.e. HKDF-Extract with no salt).
+const HMAC_OUTER_KEY: [u8; 64] = [0x5c; 64];
+
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use std::io::{self, Cursor};
@@ -381,21 +453,21 @@ mod tests {
         protocol.mix(b"first", b"one");
         protocol.mix(b"second", b"two");
 
-        expect!["fcba31494476469f"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
+        expect!["72945937a2f07b64"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(b"fourth", &mut plaintext);
-        expect!["81e0157f51af3b420e32e68b9f9a15e5a57a"].assert_eq(&hex::encode(plaintext));
+        expect!["99cda09579c3fbf1988124f7f512be820ce5"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(b"fifth", &mut sealed);
 
-        expect!["bc5832e55a74c9f87270b6d4e9f76c37c76155c1990dbc5a9dddfad72bb676c65f94"]
+        expect!["724e350de32958a5619860f58138792d3ced5803d1045bf482f895cdc8584bada18e"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["b6e7876a7d26e404"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+        expect!["2a94744f72373589"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
     }
 
     #[test]

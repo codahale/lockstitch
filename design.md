@@ -99,8 +99,9 @@ function derive(transcript, label, n):
 ```
 
 `Derive` appends an operation code to the protocol's transcript, hashes the entire transcript with
-SHA-256 and uses the hash as initial keying material for [HKDF][]'s `Extract` function. The resulting
-PRK is used once to generate a new 32-byte KDF key and again to generate the requested output.
+SHA-256 and uses the hash as initial keying material for [HKDF][]'s `Extract` function with an empty
+string as the salt value. The resulting PRK is used once to generate a new 32-byte KDF key and again
+to generate the requested output.
 
 [HKDF]: https://tools.ietf.org/html/rfc5869
 

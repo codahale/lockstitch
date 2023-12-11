@@ -6,9 +6,10 @@ use core::{fmt, mem};
 
 use crate::aegis_128l::Aegis128L;
 
-use cmov::CmovEq;
 use hkdf::HkdfExtract;
 use sha2::Sha256;
+pub use subtle;
+use subtle::ConstantTimeEq;
 
 mod aegis_128l;
 mod intrinsics;
@@ -231,7 +232,7 @@ impl Protocol {
         self.mix(b"tag", &long_tag);
 
         // Check the tag against the counterfactual tag in constant time.
-        if ct_eq(tag, &short_tag) {
+        if tag.ct_eq(&short_tag).into() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -288,14 +289,6 @@ impl Protocol {
         self.transcript.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         self.transcript.input_ikm(label);
     }
-}
-
-/// Compares two slices for equality in constant time.
-#[inline]
-pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
-    let mut res = 1;
-    a.cmovne(b, 0, &mut res);
-    res != 0
 }
 
 /// All Lockstitch operation types.

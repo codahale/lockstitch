@@ -2,15 +2,12 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
-use core::{fmt, mem};
-
 use crate::aegis_128l::Aegis128L;
 
 use cmov::CmovEq;
-use hkdf::HkdfExtract;
-use sha2::Sha256;
 
 mod aegis_128l;
+mod hkdf;
 mod intrinsics;
 
 #[cfg(feature = "docs")]
@@ -26,15 +23,9 @@ pub const TAG_LEN: usize = 16;
 
 /// A stateful object providing fine-grained symmetric-key cryptographic services like hashing,
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Protocol {
-    transcript: HkdfExtract<Sha256>,
-}
-
-impl fmt::Debug for Protocol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Protocol").field("transcript", b"***").finish()
-    }
+    transcript: hkdf::Extract,
 }
 
 impl Protocol {
@@ -42,7 +33,7 @@ impl Protocol {
     #[inline]
     pub fn new(domain: &str) -> Protocol {
         // Initialize a protocol with an empty transcript.
-        let mut protocol = Protocol { transcript: HkdfExtract::new(None) };
+        let mut protocol = Protocol { transcript: hkdf::Extract::new(None) };
 
         // Append the Init op header to the transcript with the domain as the label.
         //
@@ -63,8 +54,8 @@ impl Protocol {
         // Append the input to the transcript with right-encoded length.
         //
         //   input || right_encode(|input|)
-        self.transcript.input_ikm(input);
-        self.transcript.input_ikm(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
+        self.transcript.update(input);
+        self.transcript.update(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
     }
 
     /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
@@ -90,14 +81,12 @@ impl Protocol {
         self.op_header(OpCode::Derive, label);
 
         // Calculate HKDF-Extract("", transcript) and clear the transcript.
-        let mut transcript = HkdfExtract::new(None);
-        mem::swap(&mut transcript, &mut self.transcript);
-        let (_, hkdf) = transcript.finalize();
+        let prk = self.transcript.finalize_reset();
 
         // Use HKDF-Expand to derive a new KDF key and the requested output.
         let mut kdf_key = [0u8; 32];
-        hkdf.expand(b"kdf-key", &mut kdf_key).expect("should expand KDF key");
-        hkdf.expand(b"output", out).expect("should expand output");
+        prk.expand(b"kdf-key", &mut kdf_key);
+        prk.expand(b"output", out);
 
         // Perform a Mix operation with the KDF key.
         self.mix(b"kdf-key", &kdf_key);
@@ -284,9 +273,9 @@ impl Protocol {
         // Append the operation code and label to the transcript:
         //
         //   op_code || left_encode(|label|) || label
-        self.transcript.input_ikm(&[op_code as u8]);
-        self.transcript.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        self.transcript.input_ikm(label);
+        self.transcript.update(&[op_code as u8]);
+        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        self.transcript.update(label);
     }
 }
 
@@ -324,7 +313,7 @@ impl<W: std::io::Write> MixWriter<W> {
     #[inline]
     pub fn into_inner(mut self) -> (Protocol, W) {
         // Append the right-encoded length to the transcript.
-        self.protocol.transcript.input_ikm(right_encode(&mut [0u8; 9], self.len * 8));
+        self.protocol.transcript.update(right_encode(&mut [0u8; 9], self.len * 8));
         (self.protocol, self.inner)
     }
 }
@@ -336,7 +325,7 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
         // Track the written length.
         self.len += buf.len() as u64;
         // Append the written slice to the protocol transcript.
-        self.protocol.transcript.input_ikm(buf);
+        self.protocol.transcript.update(buf);
         // Pass the slice to the inner writer and return the result.
         self.inner.write(buf)
     }

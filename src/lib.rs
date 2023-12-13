@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
-use core::{fmt, mem};
+use core::mem;
 
 use crate::aegis_128l::Aegis128L;
 
@@ -27,15 +27,9 @@ pub const TAG_LEN: usize = 16;
 
 /// A stateful object providing fine-grained symmetric-key cryptographic services like hashing,
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Protocol {
     transcript: HkdfExtract<Sha256>,
-}
-
-impl fmt::Debug for Protocol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Protocol").field("transcript", b"***").finish()
-    }
 }
 
 impl Protocol {

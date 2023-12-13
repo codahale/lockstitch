@@ -62,6 +62,9 @@ fn aead<const LEN: usize>(bencher: divan::Bencher) {
     );
 }
 
+#[global_allocator]
+static ALLOC: divan::AllocProfiler = divan::AllocProfiler::system();
+
 fn main() {
     divan::main();
 }

@@ -103,6 +103,7 @@ fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
         .env("DIVAN_BYTES_FORMAT", "binary")
         .env("DIVAN_TIMER", "tsc")
         .env("DIVAN_MIN_TIME", "1")
+        .env("DIVAN_SKIP_EXT_TIME", "true")
         .run()?;
 
     Ok(())

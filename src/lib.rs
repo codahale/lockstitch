@@ -135,10 +135,10 @@ impl Protocol {
         aegis.encrypt(in_out);
 
         // Finalize the long AEGIS-128L tag.
-        let (_, long_tag) = aegis.finalize();
+        let (_, tag32) = aegis.finalize();
 
         // Perform a Mix operation with the long AEGIS-128L tag.
-        self.mix(b"tag", &long_tag);
+        self.mix(b"tag", &tag32);
     }
 
     /// Decrypts the given slice in place.
@@ -161,10 +161,10 @@ impl Protocol {
         aegis.decrypt(in_out);
 
         // Finalize the long AEGIS-128L tag.
-        let (_, long_tag) = aegis.finalize();
+        let (_, tag32) = aegis.finalize();
 
         // Perform a Mix operation with the long AEGIS-128L tag.
-        self.mix(b"tag", &long_tag);
+        self.mix(b"tag", &tag32);
     }
 
     /// Seals the given mutable slice in place.
@@ -192,13 +192,13 @@ impl Protocol {
         aegis.encrypt(in_out);
 
         // Finalize the AEGIS-128L tags.
-        let (short_tag, long_tag) = aegis.finalize();
+        let (tag16, tag32) = aegis.finalize();
 
         // Append the short AEGIS-128L tag to the ciphertext.
-        tag.copy_from_slice(&short_tag);
+        tag.copy_from_slice(&tag16);
 
         // Perform a Mix operation with the long AEGIS-128L tag.
-        self.mix(b"tag", &long_tag);
+        self.mix(b"tag", &tag32);
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -226,13 +226,13 @@ impl Protocol {
         aegis.decrypt(in_out);
 
         // Finalize the AEGIS-128L tags.
-        let (short_tag, long_tag) = aegis.finalize();
+        let (tag16, tag32) = aegis.finalize();
 
         // Perform a Mix operation with the long AEGIS-128L tag.
-        self.mix(b"tag", &long_tag);
+        self.mix(b"tag", &tag32);
 
         // Check the tag against the counterfactual tag in constant time.
-        if tag.ct_eq(&short_tag).into() {
+        if tag.ct_eq(&tag16).into() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)

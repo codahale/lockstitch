@@ -339,7 +339,7 @@ t2 ← t1 || 0x02 || 0x01, 0x05 || "nonce" || 0x3f4ac18bfa54206f5c6de81517618d43
 t3 ← t2 || 0x02 || 0x01, 0x02 || "ad" || "this is public" || 0x0e, 0x01 
 t4 ← t3 || 0x05 || 0x01, 0x07 || "message"
 t5 ← t4 || 0x03 || 0x01, 0x03 || "key"
-prk0 ← hkdf_extract("", sha256(t6))
+prk0 ← hkdf_extract("", t5)
 kdf_key0 ← hkdf_expand(prk0, "kdf-key", 32) 
 aegis_key ← hkdf_expand(prk0, "output", 32) 
 t6 ← 0x03 || 0x01, 0x07 || "kdf-key" || kdf_key0 || 0x20, 0x01

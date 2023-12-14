@@ -85,14 +85,12 @@ impl Protocol {
         self.op_header(OpCode::Derive, label);
 
         // Calculate HKDF-Extract("", transcript) and clear the transcript.
-        let mut transcript = HkdfExtract::new(None);
-        mem::swap(&mut transcript, &mut self.transcript);
-        let (_, hkdf) = transcript.finalize();
+        let (_, prk) = mem::replace(&mut self.transcript, HkdfExtract::new(None)).finalize();
 
         // Use HKDF-Expand to derive a new KDF key and the requested output.
         let mut kdf_key = [0u8; 32];
-        hkdf.expand(b"kdf-key", &mut kdf_key).expect("should expand KDF key");
-        hkdf.expand(b"output", out).expect("should expand output");
+        prk.expand(b"kdf-key", &mut kdf_key).expect("should expand KDF key");
+        prk.expand(b"output", out).expect("should expand output");
 
         // Perform a Mix operation with the KDF key.
         self.mix(b"kdf-key", &kdf_key);

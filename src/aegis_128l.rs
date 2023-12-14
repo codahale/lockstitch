@@ -228,8 +228,10 @@ mod tests {
 
     use expect_test::expect;
     use hex_literal::hex;
-    use wycheproof::aead::{TestName, TestSet};
-    use wycheproof::TestResult;
+    use wycheproof::{
+        aead::{TestName, TestSet},
+        TestResult,
+    };
 
     fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> ([u8; 16], [u8; 32]) {
         let mut state = Aegis128L::new(key, nonce);

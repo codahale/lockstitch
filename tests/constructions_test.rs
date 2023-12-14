@@ -1,6 +1,5 @@
 use bolero::TypeGenerator;
-use lockstitch::subtle::ConstantTimeEq;
-use lockstitch::{Protocol, TAG_LEN};
+use lockstitch::{subtle::ConstantTimeEq, Protocol, TAG_LEN};
 
 #[test]
 fn hash() {

@@ -286,10 +286,15 @@ impl Protocol {
 /// All Lockstitch operation types.
 #[derive(Debug, Clone, Copy)]
 enum OpCode {
+    /// Initialize a protocol with a domain separation string.
     Init = 0x01,
+    /// Mix a labeled input into the protocol transcript.
     Mix = 0x02,
+    /// Derive a labeled output from the protocol transcript.
     Derive = 0x03,
+    /// Encrypt or decrypt a labeled input using the protocol transcript as a key.
     Crypt = 0x04,
+    /// Seal or open a labeled input using the protocol transcript as a key.
     AuthCrypt = 0x05,
 }
 

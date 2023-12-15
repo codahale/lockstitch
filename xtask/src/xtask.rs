@@ -24,7 +24,7 @@ enum Command {
     // Run benchmarks.
     Bench {
         /// Additional arguments.
-        #[clap(action(ArgAction::Append), allow_hyphen_values = true)]
+        #[arg(action(ArgAction::Append), allow_hyphen_values = true)]
         args: Vec<String>,
     },
 

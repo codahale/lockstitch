@@ -36,14 +36,14 @@ transcript with a constant operation code and then performing a `Mix` operation 
 
 ```text
 function init(domain):
-  transcript ← 0x01                                        // Begin the transcript with an Init op code.
-  transcript ← transcript ǁ left_encode(|domain|) ǁ domain // Append the encoded domain.
+  transcript ← 0x01                                         // Begin the transcript with an Init op code.
+  transcript ← transcript ǁ domain ǁ right_encode(|domain|) // Append the encoded domain.
   transcript
 ```
 
 **N.B.:** The `Init` operation is only performed once, when a protocol is initialized.
 
-`Init` encodes the length of the domain in bits using [NIST SP 800-185][]'s `left_encode`.  This
+`Init` encodes the length of the domain in bits using [NIST SP 800-185][]'s `right_encode`. This
 ensures an unambiguous encoding for any combination of domain and second operation in the
 transcript.
 
@@ -66,15 +66,15 @@ transcript along with a constant operation code:
 ```text
 function mix(transcript, label, input):
   transcript ← transcript ǁ 0x02                          // Append a Mix op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
+  transcript ← transcript ǁ label ǁ right_encode(|label|) // Append the encoded label.
   transcript ← transcript ǁ input ǁ right_encode(|input|) // Append the encoded input.
   transcript
 ```
 
 `Mix` encodes the length of the label in bits and the length of the input in bits using [NIST SP
-800-185][]'s `left_encode` and `right_encode`, respectively. This ensures an unambiguous encoding
-for any combination of label and input, regardless of length. `right_encode` is used for the length
-of the input to support incremental processing of data streams whose sizes are not known in advance.
+800-185][]'s `right_encode`. This ensures an unambiguous encoding for any combination of label and
+input, regardless of length.  The use of `right_encode` the length of the input supports incremental
+processing of data streams whose sizes are not known in advance.
 
 **N.B.**: Processing more than 2^61 bytes of input without [deriving output](#derive) will result in
 undefined behavior.
@@ -89,12 +89,12 @@ output.
 ```text
 function derive(transcript, label, n):
   transcript ← transcript ǁ 0x03                          // Append a Derive op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label  // Append the encoded label.
+  transcript ← transcript ǁ label ǁ right_encode(|label|) // Append the encoded label.
   prk ← hkdf_extract("", transcript))                     // Use HKDF-Extract to derive a PRK from the transcript.
   kdf_key ← hkdf_expand(prk, "kdf-key", 32)               // Use HKDF-Expand to derive a new 32-byte KDF key.
   output ← hkdf_expand(prk, "output", n)                  // Use HKDF-Expand to derive the requested output.
   transcript ← mix(ɛ, "kdf-key", kdf_key)                 // Replace the transcript with a single Mix operation with the KDF key.
-  transcript ← mix(transcript, "len", left_encode(n))     // Append a Mix operation with the output length.
+  transcript ← mix(transcript, "len", right_encode(n))    // Append a Mix operation with the output length.
   (transcript, output)                                    // Return the new transcript along with the output.
 ```
 
@@ -138,7 +138,7 @@ with the 32-byte AEGIS-128L tag to the transcript.
 ```text
 function encrypt(transcript, label, plaintext):
   transcript ← transcript ǁ 0x04                                  // Append a Crypt op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label          // Append the encoded label.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)         // Append the encoded label.
   (transcript, key ǁ nonce) ← derive(transcript, "key", 32)       // Derive an AEGIS-128L key and nonce.
   (ciphertext, tag32) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
   transcript ← mix(transcript, "tag", tag32)                      // Append a Mix operation with the tag.
@@ -146,7 +146,7 @@ function encrypt(transcript, label, plaintext):
 
 function decrypt(transcript, label, ciphertext):
   transcript ← transcript ǁ 0x04                                  // Append a Crypt op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label          // Append the encoded label.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)         // Append the encoded label.
   (transcript, key ǁ nonce) ← derive(transcript, "key", 32)       // Derive an AEGIS-128L key and nonce.
   (plaintext, tag32) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
   transcript ← mix(transcript, "tag", tag32)                      // Append a Mix operation with the tag.
@@ -194,7 +194,7 @@ ciphertext.
 ```text
 function seal(transcript, label, plaintext):
   transcript ← transcript ǁ 0x05                                         // Append an AuthCrypt op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label                 // Append the encoded label.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)                // Append the encoded label.
   (transcript, key ǁ nonce) ← derive(transcript, "key", 32)              // Derive an AEGIS-128L key and nonce.
   (ciphertext, tag16, tag32) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
   transcript ← mix(transcript, "tag", tag32)                             // Append a Mix operation with the long tag.
@@ -202,7 +202,7 @@ function seal(transcript, label, plaintext):
 
 function open(transcript, label, ciphertext, tag):
   transcript ← transcript ǁ 0x05                                         // Append an AuthCrypt op code to the transcript.
-  transcript ← transcript ǁ left_encode(|label|) ǁ label                 // Append the encoded label.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)                // Append the encoded label.
   (transcript, key ǁ nonce) ← derive(transcript, "key", 32)              // Derive an AEGIS-128L key and nonce.
   (plaintext, tag16, tag32) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
   transcript ← mix(transcript, "tag", tag32)                             // Append a Mix operation with the long tag.

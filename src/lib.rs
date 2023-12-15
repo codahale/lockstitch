@@ -41,7 +41,7 @@ impl Protocol {
 
         // Append the Init op header to the transcript with the domain as the label.
         //
-        //   0x01 || left_encode(|domain|) || domain
+        //   0x01 || domain || right_encode(|domain|)
         protocol.op_header(OpCode::Init, domain.as_bytes());
 
         protocol
@@ -52,7 +52,7 @@ impl Protocol {
     pub fn mix(&mut self, label: &[u8], input: &[u8]) {
         // Append a Mix op header with the label to the transcript.
         //
-        //   0x02 || left_encode(|label|) || label
+        //   0x02 || label || right_encode(|label|)
         self.op_header(OpCode::Mix, label);
 
         // Append the input to the transcript with right-encoded length.
@@ -81,7 +81,7 @@ impl Protocol {
     pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
         // Append a Derive op header with the label to the transcript.
         //
-        //   0x03 || left_encode(|label|) || label
+        //   0x03 || label || right_encode(|label|)
         self.op_header(OpCode::Derive, label);
 
         // Calculate HKDF-Extract("", transcript) and clear the transcript.
@@ -96,7 +96,7 @@ impl Protocol {
         self.mix(b"kdf-key", &kdf_key);
 
         // Perform a Mix operation with the output length.
-        self.mix(b"len", left_encode(&mut [0u8; 9], out.len() as u64 * 8));
+        self.mix(b"len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
     }
 
     /// Derives output from the protocol's current state and returns it as an `N`-byte array.
@@ -112,7 +112,7 @@ impl Protocol {
     pub fn encrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
         // Append a Crypt op header with the label to the transcript.
         //
-        //   0x04 || left_encode(|label|) || label
+        //   0x04 || label || right_encode(|label|)
         self.op_header(OpCode::Crypt, label);
 
         // Derive an AEGIS-128L key and nonce.
@@ -138,7 +138,7 @@ impl Protocol {
     pub fn decrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
         // Append a Crypt op header with the label to the transcript.
         //
-        //   0x04 || left_encode(|label|) || label
+        //   0x04 || label || right_encode(|label|)
         self.op_header(OpCode::Crypt, label);
 
         // Derive an AEGIS-128L key and nonce.
@@ -169,7 +169,7 @@ impl Protocol {
 
         // Append an AuthCrypt op header with the label to the transcript.
         //
-        //   0x05 || left_encode(|label|) || label
+        //   0x05 || label || right_encode(|label|)
         self.op_header(OpCode::AuthCrypt, label);
 
         // Derive an AEGIS-128L key and nonce.
@@ -203,7 +203,7 @@ impl Protocol {
 
         // Append an AuthCrypt op header with the label to the transcript.
         //
-        //   0x05 || left_encode(|label|) || label
+        //   0x05 || label || right_encode(|label|)
         self.op_header(OpCode::AuthCrypt, label);
 
         // Derive an AEGIS-128L key and nonce.
@@ -276,10 +276,10 @@ impl Protocol {
     fn op_header(&mut self, op_code: OpCode, label: &[u8]) {
         // Append the operation code and label to the transcript:
         //
-        //   op_code || left_encode(|label|) || label
+        //   op_code || label || right_encode(|label|)
         self.transcript.input_ikm(&[op_code as u8]);
-        self.transcript.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         self.transcript.input_ikm(label);
+        self.transcript.input_ikm(right_encode(&mut [0u8; 9], label.len() as u64 * 8));
     }
 }
 
@@ -337,18 +337,6 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     }
 }
 
-/// Encodes a value using [NIST SP 800-185][]'s `left_encode`.
-///
-/// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
-#[inline]
-fn left_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
-    let len = buf.len();
-    buf[1..].copy_from_slice(&value.to_be_bytes());
-    let n = (len - 1 - value.leading_zeros() as usize / 8).max(1);
-    buf[len - n - 1] = n as u8;
-    &buf[len - n - 1..]
-}
-
 /// Encodes a value using [NIST SP 800-185][]'s `right_encode`.
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
@@ -375,21 +363,21 @@ mod tests {
         protocol.mix(b"first", b"one");
         protocol.mix(b"second", b"two");
 
-        expect!["72945937a2f07b64"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
+        expect!["4d8a58dbd43b1870"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt(b"fourth", &mut plaintext);
-        expect!["99cda09579c3fbf1988124f7f512be820ce5"].assert_eq(&hex::encode(plaintext));
+        expect!["3d382e329a9c99992d7be4092b4ec1624bd1"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal(b"fifth", &mut sealed);
 
-        expect!["724e350de32958a5619860f58138792d3ced5803d1045bf482f895cdc8584bada18e"]
+        expect!["f200ec2bc1189c94f41235b5d86d58c83250670bc7a1ef052fca9ca3662a7ba735b7"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["2a94744f72373589"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+        expect!["57b0bf5b2934356d"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
     }
 
     #[test]
@@ -443,23 +431,6 @@ mod tests {
     }
 
     #[test]
-    fn left_encode_injective() {
-        bolero::check!().with_type::<(u64, u64)>().cloned().for_each(|(a, b)| {
-            let mut buf_a = [0u8; 9];
-            let mut buf_b = [0u8; 9];
-
-            let a_e = left_encode(&mut buf_a, a);
-            let b_e = left_encode(&mut buf_b, b);
-
-            if a == b {
-                assert_eq!(a_e, b_e);
-            } else {
-                assert_ne!(a_e, b_e);
-            }
-        });
-    }
-
-    #[test]
     fn right_encode_injective() {
         bolero::check!().with_type::<(u64, u64)>().cloned().for_each(|(a, b)| {
             let mut buf_a = [0u8; 9];
@@ -474,26 +445,6 @@ mod tests {
                 assert_ne!(a_e, b_e);
             }
         });
-    }
-
-    #[test]
-    fn left_encode_test_vectors() {
-        let mut buf = [0; 9];
-
-        assert_eq!(left_encode(&mut buf, 0), [1, 0]);
-
-        assert_eq!(left_encode(&mut buf, 128), [1, 128]);
-
-        assert_eq!(left_encode(&mut buf, 65536), [3, 1, 0, 0]);
-
-        assert_eq!(left_encode(&mut buf, 4096), [2, 16, 0]);
-
-        assert_eq!(
-            left_encode(&mut buf, 18446744073709551615),
-            [8, 255, 255, 255, 255, 255, 255, 255, 255]
-        );
-
-        assert_eq!(left_encode(&mut buf, 12345), [2, 48, 57]);
     }
 
     #[test]

@@ -132,6 +132,11 @@ properties:
   possession of the protocol's transcript as long as one of the future inputs to the protocol is
   secret.
 
+> [!NOTE]
+> HKDF-Extract uses HMAC to derive a pseudo-random key from the transcript, which is not vulnerable
+> to length-extension attacks. Given this, the use of `right_encode` to encode labels and inputs is
+> securely injective.
+
 ### `Encrypt`/`Decrypt`
 
 `Encrypt` and `Decrypt` operations append an operation code and a label to the transcript, derive an

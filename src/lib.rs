@@ -448,6 +448,23 @@ mod tests {
     }
 
     #[test]
+    fn encoded_label_injective() {
+        bolero::check!().with_type::<(Vec<u8>, Vec<u8>)>().cloned().for_each(|(a, b)| {
+            let mut a_e = a.clone();
+            a_e.extend_from_slice(right_encode(&mut [0u8; 9], a.len() as u64 * 8));
+
+            let mut b_e = b.clone();
+            b_e.extend_from_slice(right_encode(&mut [0u8; 9], b.len() as u64 * 8));
+
+            if a == b {
+                assert_eq!(a_e, b_e, "equal labels must have equal encoded forms");
+            } else {
+                assert_ne!(a_e, b_e, "non-equal labels must have non-equal encoded forms");
+            }
+        });
+    }
+
+    #[test]
     fn right_encode_test_vectors() {
         let mut buf = [0; 9];
 

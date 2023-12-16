@@ -298,8 +298,8 @@ enum OpCode {
     AuthCrypt = 0x05,
 }
 
-/// A [`Write`] implementation which combines all written data into a single `Mix` operation and
-/// passes all writes to an inner writer.
+/// A [`std::io::Write`] implementation which combines all written data into a single `Mix`
+/// operation and passes all writes to an inner writer.
 #[cfg(feature = "std")]
 #[derive(Debug)]
 pub struct MixWriter<W> {

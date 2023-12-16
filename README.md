@@ -10,6 +10,7 @@ SHA-256 to provide 100+ Gb/sec performance on modern processors at a 128-bit sec
 
 > [!CAUTION]
 > ⚠️ You should not use this. ⚠️
+>
 > Neither the design nor the implementation of this library have been independently evaluated. The
 > design is documented in [`design.md`](design.md); read it and see if the arguments therein are
 > convincing. CryptoVerif proofs can be found in the `proofs` directory; read them and see if the

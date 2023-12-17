@@ -12,6 +12,7 @@ pub use subtle;
 use subtle::ConstantTimeEq;
 
 mod aegis_128l;
+mod aegis_256;
 mod intrinsics;
 
 #[cfg(feature = "docs")]

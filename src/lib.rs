@@ -165,7 +165,7 @@ impl Protocol {
     #[inline]
     pub fn seal(&mut self, label: &[u8], in_out: &mut [u8]) {
         // Split the buffer into plaintext and tag.
-        let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
+        let (in_out, tag128_out) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Append an AuthCrypt op header with the label to the transcript.
         //
@@ -187,7 +187,7 @@ impl Protocol {
         let (tag128, tag256) = aegis.finalize();
 
         // Append the 128-bit AEGIS-128L tag to the ciphertext.
-        tag.copy_from_slice(&tag128);
+        tag128_out.copy_from_slice(&tag128);
 
         // Perform a Mix operation with the 256-bit AEGIS-128L tag.
         self.mix(b"tag", &tag256);
@@ -199,7 +199,7 @@ impl Protocol {
     #[must_use]
     pub fn open<'ct>(&mut self, label: &[u8], in_out: &'ct mut [u8]) -> Option<&'ct [u8]> {
         // Split the buffer into ciphertext and tag.
-        let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
+        let (in_out, tag128_in) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Append an AuthCrypt op header with the label to the transcript.
         //
@@ -224,7 +224,7 @@ impl Protocol {
         self.mix(b"tag", &tag256);
 
         // Check the tag against the counterfactual tag in constant time.
-        if tag.ct_eq(&tag128).into() {
+        if tag128_in.ct_eq(&tag128).into() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)

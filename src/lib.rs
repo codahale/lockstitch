@@ -126,11 +126,11 @@ impl Protocol {
         // Encrypt the plaintext.
         aegis.encrypt(in_out);
 
-        // Finalize the long AEGIS-128L tag.
-        let (_, tag32) = aegis.finalize();
+        // Finalize the AEGIS-128L tags.
+        let (_, tag256) = aegis.finalize();
 
-        // Perform a Mix operation with the long AEGIS-128L tag.
-        self.mix(b"tag", &tag32);
+        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
+        self.mix(b"tag", &tag256);
     }
 
     /// Decrypts the given slice in place.
@@ -152,11 +152,11 @@ impl Protocol {
         // Decrypt the ciphertext.
         aegis.decrypt(in_out);
 
-        // Finalize the long AEGIS-128L tag.
-        let (_, tag32) = aegis.finalize();
+        // Finalize the AEGIS-128L tags.
+        let (_, tag256) = aegis.finalize();
 
-        // Perform a Mix operation with the long AEGIS-128L tag.
-        self.mix(b"tag", &tag32);
+        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
+        self.mix(b"tag", &tag256);
     }
 
     /// Seals the given mutable slice in place.
@@ -184,13 +184,13 @@ impl Protocol {
         aegis.encrypt(in_out);
 
         // Finalize the AEGIS-128L tags.
-        let (tag16, tag32) = aegis.finalize();
+        let (tag128, tag256) = aegis.finalize();
 
-        // Append the short AEGIS-128L tag to the ciphertext.
-        tag.copy_from_slice(&tag16);
+        // Append the 128-bit AEGIS-128L tag to the ciphertext.
+        tag.copy_from_slice(&tag128);
 
-        // Perform a Mix operation with the long AEGIS-128L tag.
-        self.mix(b"tag", &tag32);
+        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
+        self.mix(b"tag", &tag256);
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -218,13 +218,13 @@ impl Protocol {
         aegis.decrypt(in_out);
 
         // Finalize the AEGIS-128L tags.
-        let (tag16, tag32) = aegis.finalize();
+        let (tag128, tag256) = aegis.finalize();
 
-        // Perform a Mix operation with the long AEGIS-128L tag.
-        self.mix(b"tag", &tag32);
+        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
+        self.mix(b"tag", &tag256);
 
         // Check the tag against the counterfactual tag in constant time.
-        if tag.ct_eq(&tag16).into() {
+        if tag.ct_eq(&tag128).into() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)

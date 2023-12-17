@@ -119,15 +119,15 @@ impl Aegis128L {
             self.update(t, t);
         }
 
-        // Generate both short and long tags, re-using values where possible.
-        let mut short_tag = [0u8; AES_BLOCK_LEN];
-        let mut long_tag = [0u8; BLOCK_LEN];
+        // Generate both 128-bit and 256-bit tags, re-using values where possible.
+        let mut tag128 = [0u8; AES_BLOCK_LEN];
+        let mut tag256 = [0u8; BLOCK_LEN];
         let a = xor(xor3(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3]);
         let b = xor3(self.blocks[4], self.blocks[5], self.blocks[6]);
-        store(&mut short_tag, xor(a, b));
-        store_2x(&mut long_tag, a, xor(b, self.blocks[7]));
+        store(&mut tag128, xor(a, b));
+        store_2x(&mut tag256, a, xor(b, self.blocks[7]));
 
-        (short_tag, long_tag)
+        (tag128, tag256)
     }
 
     #[cfg(all(test, feature = "std"))]
@@ -342,16 +342,16 @@ mod tests {
         let key = hex!("10010000000000000000000000000000");
         let nonce = hex!("10000200000000000000000000000000");
         let ad = hex!("");
-        let (ct, (short_tag, long_tag)) = {
+        let (ct, (tag128, tag256)) = {
             let mut msg = hex!("00000000000000000000000000000000");
             let tags = encrypt(&key, &nonce, &mut msg, &ad);
             (msg, tags)
         };
 
         expect!["c1c0e58bd913006feba00f4b3cc3594e"].assert_eq(&hex::encode(ct));
-        expect!["abe0ece80c24868a226a35d16bdae37a"].assert_eq(&hex::encode(short_tag));
+        expect!["abe0ece80c24868a226a35d16bdae37a"].assert_eq(&hex::encode(tag128));
         expect!["25835bfbb21632176cf03840687cb968cace4617af1bd0f7d064c639a5c79ee4"]
-            .assert_eq(&hex::encode(long_tag));
+            .assert_eq(&hex::encode(tag256));
     }
 
     #[test]
@@ -359,16 +359,16 @@ mod tests {
         let key = hex!("10010000000000000000000000000000");
         let nonce = hex!("10000200000000000000000000000000");
         let ad = hex!("");
-        let (ct, (short_tag, long_tag)) = {
+        let (ct, (tag128, tag256)) = {
             let mut msg = [0u8; 0];
             let tags = encrypt(&key, &nonce, &mut msg, &ad);
             (msg, tags)
         };
 
         assert_eq!([0u8; 0], ct);
-        expect!["c2b879a67def9d74e6c14f708bbcc9b4"].assert_eq(&hex::encode(short_tag));
+        expect!["c2b879a67def9d74e6c14f708bbcc9b4"].assert_eq(&hex::encode(tag128));
         expect!["1360dc9db8ae42455f6e5b6a9d488ea4f2184c4e12120249335c4ee84bafe25d"]
-            .assert_eq(&hex::encode(long_tag));
+            .assert_eq(&hex::encode(tag256));
     }
 
     #[test]
@@ -376,7 +376,7 @@ mod tests {
         let key = hex!("10010000000000000000000000000000");
         let nonce = hex!("10000200000000000000000000000000");
         let ad = hex!("0001020304050607");
-        let (ct, (short_tag, long_tag)) = {
+        let (ct, (tag128, tag256)) = {
             let mut msg = hex!(
                 "000102030405060708090a0b0c0d0e0f"
                 "101112131415161718191a1b1c1d1e1f"
@@ -392,9 +392,9 @@ mod tests {
             ),
             ct
         );
-        expect!["cc6f3372f6aa1bb82388d695c3962d9a"].assert_eq(&hex::encode(short_tag));
+        expect!["cc6f3372f6aa1bb82388d695c3962d9a"].assert_eq(&hex::encode(tag128));
         expect!["022cb796fe7e0ae1197525ff67e309484cfbab6528ddef89f17d74ef8ecd82b3"]
-            .assert_eq(&hex::encode(long_tag));
+            .assert_eq(&hex::encode(tag256));
     }
 
     #[test]
@@ -402,16 +402,16 @@ mod tests {
         let key = hex!("10010000000000000000000000000000");
         let nonce = hex!("10000200000000000000000000000000");
         let ad = hex!("0001020304050607");
-        let (ct, (short_tag, long_tag)) = {
+        let (ct, (tag128, tag256)) = {
             let mut msg = hex!("000102030405060708090a0b0c0d");
             let tags = encrypt(&key, &nonce, &mut msg, &ad);
             (msg, tags)
         };
 
         expect!["79d94593d8c2119d7e8fd9b8fc77"].assert_eq(&hex::encode(ct));
-        expect!["5c04b3dba849b2701effbe32c7f0fab7"].assert_eq(&hex::encode(short_tag));
+        expect!["5c04b3dba849b2701effbe32c7f0fab7"].assert_eq(&hex::encode(tag128));
         expect!["86f1b80bfb463aba711d15405d094baf4a55a15dbfec81a76f35ed0b9c8b04ac"]
-            .assert_eq(&hex::encode(long_tag));
+            .assert_eq(&hex::encode(tag256));
     }
 
     #[test]
@@ -423,7 +423,7 @@ mod tests {
             "101112131415161718191a1b1c1d1e1f"
             "20212223242526272829"
         );
-        let (ct, (short_tag, long_tag)) = {
+        let (ct, (tag128, tag256)) = {
             let mut msg = hex!(
                 "101112131415161718191a1b1c1d1e1f"
                 "202122232425262728292a2b2c2d2e2f"
@@ -441,9 +441,9 @@ mod tests {
             ),
             ct
         );
-        expect!["7542a745733014f9474417b337399507"].assert_eq(&hex::encode(short_tag));
+        expect!["7542a745733014f9474417b337399507"].assert_eq(&hex::encode(tag128));
         expect!["b91e2947a33da8bee89b6794e647baf0fc835ff574aca3fc27c33be0db2aff98"]
-            .assert_eq(&hex::encode(long_tag));
+            .assert_eq(&hex::encode(tag256));
     }
 
     #[test]
@@ -452,12 +452,12 @@ mod tests {
         let nonce = hex!("10010000000000000000000000000000");
         let ad = hex!("0001020304050607");
         let mut ct = hex!("79d94593d8c2119d7e8fd9b8fc77");
-        let (short_tag, long_tag) = decrypt(&key, &nonce, &mut ct, &ad);
+        let (tag128, tag256) = decrypt(&key, &nonce, &mut ct, &ad);
 
-        assert_ne!("5c04b3dba849b2701effbe32c7f0fab7", hex::encode(short_tag));
+        assert_ne!("5c04b3dba849b2701effbe32c7f0fab7", hex::encode(tag128));
         assert_ne!(
             "86f1b80bfb463aba711d15405d094baf4a55a15dbfec81a76f35ed0b9c8b04ac",
-            hex::encode(long_tag)
+            hex::encode(tag256)
         );
     }
 
@@ -467,12 +467,12 @@ mod tests {
         let nonce = hex!("10000200000000000000000000000000");
         let ad = hex!("0001020304050607");
         let mut ct = hex!("79d94593d8c2119d7e8fd9b8fc78");
-        let (short_tag, long_tag) = decrypt(&key, &nonce, &mut ct, &ad);
+        let (tag128, tag256) = decrypt(&key, &nonce, &mut ct, &ad);
 
-        assert_ne!("5c04b3dba849b2701effbe32c7f0fab7", hex::encode(short_tag));
+        assert_ne!("5c04b3dba849b2701effbe32c7f0fab7", hex::encode(tag128));
         assert_ne!(
             "86f1b80bfb463aba711d15405d094baf4a55a15dbfec81a76f35ed0b9c8b04ac",
-            hex::encode(long_tag)
+            hex::encode(tag256)
         );
     }
 
@@ -482,12 +482,12 @@ mod tests {
         let nonce = hex!("10000200000000000000000000000000");
         let ad = hex!("0001020304050608");
         let mut ct = hex!("79d94593d8c2119d7e8fd9b8fc77");
-        let (short_tag, long_tag) = decrypt(&key, &nonce, &mut ct, &ad);
+        let (tag128, tag256) = decrypt(&key, &nonce, &mut ct, &ad);
 
-        assert_ne!("5c04b3dba849b2701effbe32c7f0fab7", hex::encode(short_tag));
+        assert_ne!("5c04b3dba849b2701effbe32c7f0fab7", hex::encode(tag128));
         assert_ne!(
             "86f1b80bfb463aba711d15405d094baf4a55a15dbfec81a76f35ed0b9c8b04ac",
-            hex::encode(long_tag)
+            hex::encode(tag256)
         );
     }
 
@@ -497,12 +497,12 @@ mod tests {
         let nonce = hex!("10000200000000000000000000000000");
         let ad = hex!("0001020304050607");
         let mut ct = hex!("79d94593d8c2119d7e8fd9b8fc77");
-        let (short_tag, long_tag) = decrypt(&key, &nonce, &mut ct, &ad);
+        let (tag128, tag256) = decrypt(&key, &nonce, &mut ct, &ad);
 
-        assert_ne!("6c04b3dba849b2701effbe32c7f0fab8", hex::encode(short_tag));
+        assert_ne!("6c04b3dba849b2701effbe32c7f0fab8", hex::encode(tag128));
         assert_ne!(
             "86f1b80bfb463aba711d15405d094baf4a55a15dbfec81a76f35ed0b9c8b04ad",
-            hex::encode(long_tag)
+            hex::encode(tag256)
         );
     }
 
@@ -525,13 +525,13 @@ mod tests {
         bolero::check!().with_type::<([u8; 16], [u8; 16], Vec<u8>, Vec<u8>)>().for_each(
             |(k, n, ad, msg)| {
                 let mut ct = msg.clone();
-                let (short_tag, long_tag) = encrypt(k, n, &mut ct, ad);
+                let (tag128, tag256) = encrypt(k, n, &mut ct, ad);
 
                 let aegis16 = aegis::aegis128l::Aegis128L::<16>::new(k, n);
                 let aegis32 = aegis::aegis128l::Aegis128L::<32>::new(k, n);
 
-                assert_eq!(Ok(msg.to_vec()), aegis16.decrypt(&ct, &short_tag, ad));
-                assert_eq!(Ok(msg.to_vec()), aegis32.decrypt(&ct, &long_tag, ad));
+                assert_eq!(Ok(msg.to_vec()), aegis16.decrypt(&ct, &tag128, ad));
+                assert_eq!(Ok(msg.to_vec()), aegis32.decrypt(&ct, &tag256, ad));
             },
         );
     }
@@ -542,7 +542,7 @@ mod tests {
         for group in set.test_groups {
             for test in group.tests {
                 let mut ct = test.pt.to_vec();
-                let (short_tag, _long_tag) = encrypt(
+                let (tag128, _tag256) = encrypt(
                     &test.key.as_ref().try_into().expect("should be 16 bytes"),
                     &test.nonce.as_ref().try_into().expect("should be 16 bytes"),
                     &mut ct,
@@ -551,9 +551,9 @@ mod tests {
 
                 if test.result == TestResult::Valid {
                     assert_eq!(test.ct.as_ref(), &ct);
-                    assert_eq!(test.tag.as_ref(), &short_tag);
+                    assert_eq!(test.tag.as_ref(), &tag128);
                 } else {
-                    assert_ne!(test.tag.as_ref(), &short_tag);
+                    assert_ne!(test.tag.as_ref(), &tag128);
                 }
             }
         }

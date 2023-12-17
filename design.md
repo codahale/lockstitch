@@ -145,19 +145,19 @@ with the 32-byte AEGIS-128L tag to the transcript.
 
 ```text
 function encrypt(transcript, label, plaintext):
-  transcript ← transcript ǁ 0x04                                  // Append a Crypt op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|)         // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)       // Derive an AEGIS-128L key and nonce.
-  (ciphertext, tag32) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
-  transcript ← mix(transcript, "tag", tag32)                      // Append a Mix operation with the tag.
+  transcript ← transcript ǁ 0x04                                      // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)             // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)           // Derive an AEGIS-128L key and nonce.
+  (ciphertext, _, tag256) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
+  transcript ← mix(transcript, "tag", tag256)                         // Append a Mix operation with the 256-bit tag.
   (transcript, ciphertext)
 
 function decrypt(transcript, label, ciphertext):
-  transcript ← transcript ǁ 0x04                                  // Append a Crypt op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|)         // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)       // Derive an AEGIS-128L key and nonce.
-  (plaintext, tag32) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
-  transcript ← mix(transcript, "tag", tag32)                      // Append a Mix operation with the tag.
+  transcript ← transcript ǁ 0x04                                      // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)             // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)           // Derive an AEGIS-128L key and nonce.
+  (plaintext, _, tag256) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
+  transcript ← mix(transcript, "tag", tag256)                         // Append a Mix operation with the 256-bit tag.
   (transcript, plaintext)
 ```
 
@@ -167,9 +167,9 @@ First, both `Encrypt` and `Decrypt` use the same operation code to ensure protoc
 transcript after both encrypting and decrypting data.
 
 Second, despite not updating the protocol transcript with either the plaintext or ciphertext, the
-inclusion of the long tag ensures the protocol's transcript is dependent on both because AEGIS-128L
-is key committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
-which produces the same authentication tag is negligible).
+inclusion of the 256-bit tag ensures the protocol's transcript is dependent on both because
+AEGIS-128L is key committing (i.e. the probability of an attacker finding a different key, nonce, or
+plaintext which produces the same authentication tag is negligible).
 
 > [!NOTE]
 > [AEGIS-128L by itself is not fully committing][Iso23], as tag collisions can be found if
@@ -202,20 +202,20 @@ ciphertext.
 
 ```text
 function seal(transcript, label, plaintext):
-  transcript ← transcript ǁ 0x05                                         // Append an AuthCrypt op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|)                // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)              // Derive an AEGIS-128L key and nonce.
-  (ciphertext, tag16, tag32) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
-  transcript ← mix(transcript, "tag", tag32)                             // Append a Mix operation with the long tag.
-  (transcript, ciphertext, tag16)                                        // Return the ciphertext and the short tag.
+  transcript ← transcript ǁ 0x05                                           // Append an AuthCrypt op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)                  // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)                // Derive an AEGIS-128L key and nonce.
+  (ciphertext, tag128, tag256) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
+  transcript ← mix(transcript, "tag", tag256)                              // Append a Mix operation with the 256-bit tag.
+  (transcript, ciphertext, tag128)                                         // Return the ciphertext and the 128-bit tag.
 
-function open(transcript, label, ciphertext, tag):
-  transcript ← transcript ǁ 0x05                                         // Append an AuthCrypt op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|)                // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)              // Derive an AEGIS-128L key and nonce.
-  (plaintext, tag16, tag32) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
-  transcript ← mix(transcript, "tag", tag32)                             // Append a Mix operation with the long tag.
-  if tag = tag16′:                                                       // Compare the short tags in constant time.
+function open(transcript, label, ciphertext, tag128):
+  transcript ← transcript ǁ 0x05                                           // Append an AuthCrypt op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)                  // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)                // Derive an AEGIS-128L key and nonce.
+  (plaintext, tag128, tag256) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
+  transcript ← mix(transcript, "tag", tag128)                              // Append a Mix operation with the 256-bit tag.
+  if tag128 = tag128′:                                                     // Compare the 128-bit tags in constant time.
     (transcript, plaintext)
   else:
     (transcript, ⊥)
@@ -353,9 +353,9 @@ kdf_key0 ← hkdf_expand(prk0, "kdf-key", 32)
 aegis_key ← hkdf_expand(prk0, "output", 32) 
 t6 ← 0x03 || "kdf-key" || 0x07, 0x01 || kdf_key0 || 0x20, 0x01
 t7 ← t6 || 0x03 || "len" || 0x03, 0x01 || 0x20, 0x01 || 0x02, 0x01
-(ciphertext, tag16, tag32) ← aegis128l::encrypt(aegis_key, "this is a secret")
-t8 ← t7 || 0x03 || "tag" || 0x03, 0x01 || tag32 || 0x20, 0x01
-(ciphertext, tag16)
+(ciphertext, tag128, tag256) ← aegis128l::encrypt(aegis_key, "this is a secret")
+t8 ← t7 || 0x03 || "tag" || 0x03, 0x01 || tag256 || 0x20, 0x01
+(ciphertext, tag128)
 ```
 
 ## Complex Protocols

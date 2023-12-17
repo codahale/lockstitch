@@ -133,10 +133,10 @@ impl Aegis128L {
     #[cfg(all(test, feature = "std"))]
     fn absorb(&mut self, ai: &[u8]) {
         // Load the input blocks.
-        let (ai0, xi1) = load_2x(ai);
+        let (ai0, ai1) = load_2x(ai);
 
         // Update the cipher state with the two blocks.
-        self.update(ai0, xi1);
+        self.update(ai0, ai1);
     }
 
     fn enc(&mut self, in_out: &mut [u8]) {

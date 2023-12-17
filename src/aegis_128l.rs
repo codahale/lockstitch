@@ -1,7 +1,7 @@
 use crate::intrinsics::*;
 
 /// The length of an AEGIS-128L block.
-pub const BLOCK_LEN: usize = 32;
+const BLOCK_LEN: usize = 32;
 
 /// An AEGIS-128L instance.
 #[derive(Debug, Clone)]

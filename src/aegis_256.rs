@@ -426,6 +426,20 @@ mod tests {
     }
 
     #[test]
+    fn round_trip() {
+        bolero::check!().with_type::<([u8; 32], [u8; 32], Vec<u8>, Vec<u8>)>().for_each(
+            |(k, n, ad, msg)| {
+                let mut ct = msg.clone();
+                let tag_e = encrypt(k, n, &mut ct, ad);
+                let tag_d = decrypt(k, n, &mut ct, ad);
+
+                assert_eq!(msg, &ct);
+                assert_eq!(tag_e, tag_d);
+            },
+        );
+    }
+
+    #[test]
     fn interop() {
         bolero::check!().with_type::<([u8; 32], [u8; 32], Vec<u8>, Vec<u8>)>().for_each(
             |(k, n, ad, msg)| {

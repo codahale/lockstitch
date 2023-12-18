@@ -426,6 +426,22 @@ mod tests {
     }
 
     #[test]
+    fn interop() {
+        bolero::check!().with_type::<([u8; 32], [u8; 32], Vec<u8>, Vec<u8>)>().for_each(
+            |(k, n, ad, msg)| {
+                let mut ct = msg.clone();
+                let (tag128, tag256) = encrypt(k, n, &mut ct, ad);
+
+                let aegis16 = aegis::aegis256::Aegis256::<16>::new(k, n);
+                let aegis32 = aegis::aegis256::Aegis256::<32>::new(k, n);
+
+                assert_eq!(Ok(msg.to_vec()), aegis16.decrypt(&ct, &tag128, ad));
+                assert_eq!(Ok(msg.to_vec()), aegis32.decrypt(&ct, &tag256, ad));
+            },
+        );
+    }
+
+    #[test]
     fn wycheproof() {
         let set = TestSet::load(TestName::Aegis256).expect("should have AEGIS-256 test vectors");
         for group in set.test_groups {

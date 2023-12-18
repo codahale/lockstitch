@@ -2,9 +2,9 @@
 
 Lockstitch provides a single cryptographic service for all symmetric-key operations and an
 incremental, stateful building block for complex schemes, constructions, and protocols, all built on
-top of SHA-256 and [AEGIS-128L][], an authenticated cipher.
+either HKDF-SHA-256/[AEGIS-128L][AEGIS] or HKDF-SHA-512/[AEGIS-256][AEGIS].
 
-[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-09.html
+[AEGIS]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-09.html
 
 ## Protocol
 
@@ -93,7 +93,7 @@ function derive(transcript, label, n):
   transcript ← transcript ǁ 0x03                          // Append a Derive op code to the transcript.
   transcript ← transcript ǁ label ǁ right_encode(|label|) // Append the encoded label.
   prk ← hkdf_extract("", transcript))                     // Use HKDF-Extract to derive a PRK from the transcript.
-  kdf_key ← hkdf_expand(prk, "kdf-key", 32)               // Use HKDF-Expand to derive a new 32-byte KDF key.
+  kdf_key ← hkdf_expand(prk, "kdf-key", KDF_KEY_LEN)      // Use HKDF-Expand to derive a new KDF key.
   output ← hkdf_expand(prk, "output", n)                  // Use HKDF-Expand to derive the requested output.
   transcript ← mix(ɛ, "kdf-key", kdf_key)                 // Replace the transcript with a single Mix operation with the KDF key.
   transcript ← mix(transcript, "len", right_encode(n))    // Append a Mix operation with the output length.
@@ -102,8 +102,8 @@ function derive(transcript, label, n):
 
 `Derive` appends an operation code to the protocol's transcript and uses the transcript as initial
 keying material for [HKDF][]'s `Extract` function with an empty string as the salt value. The
-resulting PRK is used with [HKDF][]'s 'Expand' function to generate a new 32-byte KDF key and to
-generate the requested output.
+resulting PRK is used with [HKDF][]'s `Expand` function to generate a new KDF key and to generate
+the requested output.
 
 [HKDF]: https://tools.ietf.org/html/rfc5869
 
@@ -140,24 +140,24 @@ properties:
 ### `Encrypt`/`Decrypt`
 
 `Encrypt` and `Decrypt` operations append an operation code and a label to the transcript, derive an
-AEGIS-128L key and nonce, encrypt or decrypt an input with AEGIS-128L, and append a `Mix` operation
-with the 32-byte AEGIS-128L tag to the transcript.
+AEGIS key and nonce, encrypt or decrypt an input with AEGIS, and append a `Mix` operation with the
+32-byte AEGIS tag to the transcript.
 
 ```text
 function encrypt(transcript, label, plaintext):
-  transcript ← transcript ǁ 0x04                                      // Append a Crypt op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|)             // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)           // Derive an AEGIS-128L key and nonce.
-  (ciphertext, _, tag256) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
-  transcript ← mix(transcript, "tag", tag256)                         // Append a Mix operation with the 256-bit tag.
+  transcript ← transcript ǁ 0x04                                   // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)          // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", AEGIS_LEN) // Derive an AEGIS key and nonce.
+  (ciphertext, _, tag256) ← aegis::encrypt(key, nonce, plaintext)  // Encrypt the plaintext.
+  transcript ← mix(transcript, "tag", tag256)                      // Append a Mix operation with the 256-bit tag.
   (transcript, ciphertext)
 
 function decrypt(transcript, label, ciphertext):
-  transcript ← transcript ǁ 0x04                                      // Append a Crypt op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|)             // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)           // Derive an AEGIS-128L key and nonce.
-  (plaintext, _, tag256) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
-  transcript ← mix(transcript, "tag", tag256)                         // Append a Mix operation with the 256-bit tag.
+  transcript ← transcript ǁ 0x04                                   // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)          // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", AEGIS_LEN) // Derive an AEGIS key and nonce.
+  (plaintext, _, tag256) ← aegis::decrypt(key, nonce, ciphertext)  // Decrypt the ciphertext.
+  transcript ← mix(transcript, "tag", tag256)                      // Append a Mix operation with the 256-bit tag.
   (transcript, plaintext)
 ```
 
@@ -167,14 +167,14 @@ First, both `Encrypt` and `Decrypt` use the same operation code to ensure protoc
 transcript after both encrypting and decrypting data.
 
 Second, despite not updating the protocol transcript with either the plaintext or ciphertext, the
-inclusion of the 256-bit tag ensures the protocol's transcript is dependent on both because
-AEGIS-128L is key committing (i.e. the probability of an attacker finding a different key, nonce, or
-plaintext which produces the same authentication tag is negligible).
+inclusion of the 256-bit tag ensures the protocol's transcript is dependent on both because AEGIS is
+key committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
+which produces the same authentication tag is negligible).
 
 > [!NOTE]
-> [AEGIS-128L by itself is not fully committing][Iso23], as tag collisions can be found if
-> authenticated data is attacker-controlled. Lockstitch does not pass authenticated data to
-> AEGIS-128L, however, mooting this type of attack.
+> [AEGIS by itself is not fully committing][Iso23], as tag collisions can be found if
+> authenticated data is attacker-controlled. Lockstitch does not pass authenticated data to AEGIS,
+> however, mooting this type of attack.
 
 [Iso23]: https://eprint.iacr.org/2023/1495
 
@@ -195,27 +195,26 @@ beforehand.
 
 ### `Seal`/`Open`
 
-`Seal` and `Open` operations append an operation code and a label to the transcript, derive an
-AEGIS-128L key and nonce, encrypt or decrypt an input with AEGIS-128L, append a `Mix` operation with
-the 32-byte AEGIS-128L tag to the transcript, and append the 16-byte AEGIS-128L tag to the
-ciphertext.
+`Seal` and `Open` operations append an operation code and a label to the transcript, derive an AEGIS
+key and nonce, encrypt or decrypt an input with AEGIS, append a `Mix` operation with the 32-byte
+AEGIS tag to the transcript, and append the 16-byte AEGIS tag to the ciphertext.
 
 ```text
 function seal(transcript, label, plaintext):
-  transcript ← transcript ǁ 0x05                                           // Append an AuthCrypt op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|)                  // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)                // Derive an AEGIS-128L key and nonce.
-  (ciphertext, tag128, tag256) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
-  transcript ← mix(transcript, "tag", tag256)                              // Append a Mix operation with the 256-bit tag.
-  (transcript, ciphertext, tag128)                                         // Return the ciphertext and the 128-bit tag.
+  transcript ← transcript ǁ 0x05                                       // Append an AuthCrypt op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)              // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", AEGIS_LEN)     // Derive an AEGIS key and nonce.
+  (ciphertext, tag128, tag256) ← aegis::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
+  transcript ← mix(transcript, "tag", tag256)                          // Append a Mix operation with the 256-bit tag.
+  (transcript, ciphertext, tag128)                                     // Return the ciphertext and the 128-bit tag.
 
 function open(transcript, label, ciphertext, tag128):
-  transcript ← transcript ǁ 0x05                                           // Append an AuthCrypt op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|)                  // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)                // Derive an AEGIS-128L key and nonce.
-  (plaintext, tag128, tag256) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
-  transcript ← mix(transcript, "tag", tag128)                              // Append a Mix operation with the 256-bit tag.
-  if tag128 = tag128′:                                                     // Compare the 128-bit tags in constant time.
+  transcript ← transcript ǁ 0x05                                       // Append an AuthCrypt op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)              // Append the encoded label.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", AEGIS_LEN)     // Derive an AEGIS key and nonce.
+  (plaintext, tag128, tag256) ← aegis::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
+  transcript ← mix(transcript, "tag", tag128)                          // Append a Mix operation with the 256-bit tag.
+  if tag128 = tag128′:                                                 // Compare the 128-bit tags in constant time.
     (transcript, plaintext)
   else:
     (transcript, ⊥)
@@ -279,9 +278,9 @@ function stream_decrypt(key, nonce, ciphertext):
 
 This construction is IND-CPA-secure under the following assumptions:
 
-1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
-2. HKDF-SHA-256-Extract is indistinguishable from a random oracle.
-3. HKDF-SHA-256-Expand is PRF-secure.
+1. AEGIS is IND-CPA-secure when used with a unique nonce.
+2. HKDF-Extract is indistinguishable from a random oracle.
+3. HKDF-Expand is PRF-secure.
 4. At least one of the inputs to the transcript is a nonce (i.e., not used for multiple messages).
 
 ### Authenticated Encryption And Data (AEAD)
@@ -301,8 +300,8 @@ function aead_seal(key, nonce, ad, plaintext):
 The introduction of a nonce makes the scheme probabilistic (which is required for IND-CCA security).
 
 Unlike many standard AEADs (e.g. AES-GCM and ChaCha20Poly1305), it is fully context-committing: the
-tag is a strong cryptographic commitment to all the inputs. AEGIS-128L is key-committing and both
-the key and the nonce are derived from the transcript using HKDF.
+tag is a strong cryptographic commitment to all the inputs. AEGIS is key-committing and both the key
+and the nonce are derived from the transcript using HKDF.
 
 Also unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces
 of associated data without risk of ambiguous inputs.
@@ -320,9 +319,9 @@ function aead_open(key, nonce, ad, ciphertext, tag):
 This construction is IND-CCA2-secure (i.e. both IND-CPA and INT-CTXT) under the following
 assumptions:
 
-1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
-2. HKDF-SHA-256-Extract is indistinguishable from a random oracle.
-3. HKDF-SHA-256-Expand is PRF-secure.
+1. AEGIS is IND-CPA-secure when used with a unique nonce.
+2. HKDF-Extract is indistinguishable from a random oracle.
+3. HKDF-Expand is PRF-secure.
 4. At least one of the inputs to the transcript is a nonce (i.e., not used for multiple messages).
 
 #### Expanded Transcript

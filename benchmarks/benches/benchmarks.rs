@@ -3,11 +3,11 @@
 use std::io::{self, Read};
 
 use divan::counter::BytesCount;
-use lockstitch::{Protocol, SecurityLevel, B128, B256, TAG_LEN};
+use lockstitch::{HkdfSha256Aegis128L, HkdfSha512Aegis256, Protocol, SecurityLevel, TAG_LEN};
 
 const LENS: &[usize] = &[16, 256, 1024, 16 * 1024, 1024 * 1024];
 
-#[divan::bench(types = [B128, B256], consts = LENS)]
+#[divan::bench(types = [HkdfSha256Aegis128L, HkdfSha512Aegis256], consts = LENS)]
 fn hash<const LEN: usize, S: SecurityLevel>(bencher: divan::Bencher) {
     bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_refs(|message| {
         let mut protocol = Protocol::<S>::new("hash");
@@ -16,7 +16,7 @@ fn hash<const LEN: usize, S: SecurityLevel>(bencher: divan::Bencher) {
     });
 }
 
-#[divan::bench(types = [B128, B256], consts = LENS)]
+#[divan::bench(types = [HkdfSha256Aegis128L, HkdfSha512Aegis256], consts = LENS)]
 fn hash_writer<const LEN: usize, S: SecurityLevel>(bencher: divan::Bencher) {
     bencher
         .with_inputs(|| io::repeat(0).take(LEN as u64))
@@ -30,7 +30,7 @@ fn hash_writer<const LEN: usize, S: SecurityLevel>(bencher: divan::Bencher) {
         });
 }
 
-#[divan::bench(types = [B128, B256], consts = LENS)]
+#[divan::bench(types = [HkdfSha256Aegis128L, HkdfSha512Aegis256], consts = LENS)]
 fn stream<const LEN: usize, S: SecurityLevel>(bencher: divan::Bencher) {
     let key = [0u8; 32];
     let nonce = [0u8; 16];
@@ -45,7 +45,7 @@ fn stream<const LEN: usize, S: SecurityLevel>(bencher: divan::Bencher) {
     );
 }
 
-#[divan::bench(types = [B128, B256], consts = LENS)]
+#[divan::bench(types = [HkdfSha256Aegis128L, HkdfSha512Aegis256], consts = LENS)]
 fn aead<const LEN: usize, S: SecurityLevel>(bencher: divan::Bencher) {
     let key = [0u8; 32];
     let nonce = [0u8; 16];
@@ -64,7 +64,7 @@ fn aead<const LEN: usize, S: SecurityLevel>(bencher: divan::Bencher) {
 
 const PRF_LENS: &[usize] = &[16, 256, 1024, 2 * 1024, 4 * 1024];
 
-#[divan::bench(types = [B128, B256], consts = PRF_LENS)]
+#[divan::bench(types = [HkdfSha256Aegis128L, HkdfSha512Aegis256], consts = PRF_LENS)]
 fn prf<const LEN: usize, S: SecurityLevel>(bencher: divan::Bencher) {
     let key = [0u8; 32];
     bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_values(

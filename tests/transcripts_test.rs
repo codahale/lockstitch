@@ -1,7 +1,7 @@
 use std::ops::Bound;
 
 use bolero::TypeGenerator;
-use lockstitch::{Protocol, SecurityLevel, B128, B256, TAG_LEN};
+use lockstitch::{HkdfSha256Aegis128L, HkdfSha512Aegis256, Protocol, SecurityLevel, TAG_LEN};
 
 #[derive(Clone, Debug, PartialEq)]
 enum Input {
@@ -142,8 +142,8 @@ fn invert_transcript<S: SecurityLevel>(t: &Transcript) -> (Transcript, Vec<Vec<u
 #[test]
 fn determinism_128() {
     bolero::check!().with_type::<Transcript>().for_each(|t| {
-        let a = apply_transcript::<B128>(t);
-        let b = apply_transcript::<B128>(t);
+        let a = apply_transcript::<HkdfSha256Aegis128L>(t);
+        let b = apply_transcript::<HkdfSha256Aegis128L>(t);
 
         assert_eq!(a, b);
     });
@@ -152,8 +152,8 @@ fn determinism_128() {
 #[test]
 fn determinism_256() {
     bolero::check!().with_type::<Transcript>().for_each(|t| {
-        let a = apply_transcript::<B256>(t);
-        let b = apply_transcript::<B256>(t);
+        let a = apply_transcript::<HkdfSha512Aegis256>(t);
+        let b = apply_transcript::<HkdfSha512Aegis256>(t);
 
         assert_eq!(a, b);
     });
@@ -164,8 +164,8 @@ fn determinism_256() {
 #[test]
 fn divergence_128() {
     bolero::check!().with_type::<(Transcript, Transcript)>().for_each(|(t0, t1)| {
-        let a = apply_transcript::<B128>(t0);
-        let b = apply_transcript::<B128>(t1);
+        let a = apply_transcript::<HkdfSha256Aegis128L>(t0);
+        let b = apply_transcript::<HkdfSha256Aegis128L>(t1);
 
         if t0 == t1 {
             assert_eq!(a, b);
@@ -178,8 +178,8 @@ fn divergence_128() {
 #[test]
 fn divergence_256() {
     bolero::check!().with_type::<(Transcript, Transcript)>().for_each(|(t0, t1)| {
-        let a = apply_transcript::<B256>(t0);
-        let b = apply_transcript::<B256>(t1);
+        let a = apply_transcript::<HkdfSha512Aegis256>(t0);
+        let b = apply_transcript::<HkdfSha512Aegis256>(t1);
 
         if t0 == t1 {
             assert_eq!(a, b);
@@ -195,8 +195,8 @@ fn divergence_256() {
 #[test]
 fn invertible_128() {
     bolero::check!().with_type::<Transcript>().for_each(|t| {
-        let (t_inv, a_d) = invert_transcript::<B128>(t);
-        let (t_p, b_d) = invert_transcript::<B128>(&t_inv);
+        let (t_inv, a_d) = invert_transcript::<HkdfSha256Aegis128L>(t);
+        let (t_p, b_d) = invert_transcript::<HkdfSha256Aegis128L>(&t_inv);
 
         assert_eq!(t, &t_p);
         assert_eq!(a_d, b_d);
@@ -206,8 +206,8 @@ fn invertible_128() {
 #[test]
 fn invertible_256() {
     bolero::check!().with_type::<Transcript>().for_each(|t| {
-        let (t_inv, a_d) = invert_transcript::<B256>(t);
-        let (t_p, b_d) = invert_transcript::<B256>(&t_inv);
+        let (t_inv, a_d) = invert_transcript::<HkdfSha512Aegis256>(t);
+        let (t_p, b_d) = invert_transcript::<HkdfSha512Aegis256>(&t_inv);
 
         assert_eq!(t, &t_p);
         assert_eq!(a_d, b_d);

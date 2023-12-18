@@ -43,8 +43,9 @@ pub trait Cipher {
 }
 
 /// A typeclass trait for the two different security levels provided. The two available
-/// implementations are [`B128`], which combines HKDF-SHA-256 and AEGIS-128L to offer 128-bit
-/// security, and [`B256`], which combines HKDF-SHA-512 and AEGIS-256 to offer 256-bit security.
+/// implementations are [`HkdfSha256Aegis128L`], which combines HKDF-SHA-256 and AEGIS-128L to offer
+/// 128-bit security, and [`HkdfSha512Aegis256`], which combines HKDF-SHA-512 and AEGIS-256 to offer
+/// 256-bit security.
 pub trait SecurityLevel: private::Sealed + Clone + Copy {
     /// The type of the transcript used.
     type Transcript: Debug + Clone;
@@ -73,11 +74,11 @@ pub trait SecurityLevel: private::Sealed + Clone + Copy {
 
 /// The 128-bit security level, combining HKDF-SHA-256 and AEGIS-128L for very high performance.
 #[derive(Debug, Clone, Copy)]
-pub struct B128;
+pub struct HkdfSha256Aegis128L;
 
-impl private::Sealed for B128 {}
+impl private::Sealed for HkdfSha256Aegis128L {}
 
-impl SecurityLevel for B128 {
+impl SecurityLevel for HkdfSha256Aegis128L {
     type Transcript = HkdfExtract<Sha256>;
 
     type Prk = Hkdf<Sha256>;
@@ -118,11 +119,11 @@ impl SecurityLevel for B128 {
 
 /// The 256-bit security level, combining HKDF-SHA-512 and AEGIS-256 for high performance.
 #[derive(Debug, Clone, Copy)]
-pub struct B256;
+pub struct HkdfSha512Aegis256;
 
-impl private::Sealed for B256 {}
+impl private::Sealed for HkdfSha512Aegis256 {}
 
-impl SecurityLevel for B256 {
+impl SecurityLevel for HkdfSha512Aegis256 {
     type Transcript = HkdfExtract<Sha512>;
 
     type Prk = Hkdf<Sha512>;
@@ -479,7 +480,7 @@ mod tests {
 
     #[test]
     fn known_answers_128() {
-        let mut protocol = Protocol::<B128>::new("com.example.kat");
+        let mut protocol = Protocol::<HkdfSha256Aegis128L>::new("com.example.kat");
         protocol.mix(b"first", b"one");
         protocol.mix(b"second", b"two");
 
@@ -502,7 +503,7 @@ mod tests {
 
     #[test]
     fn known_answers_256() {
-        let mut protocol = Protocol::<B256>::new("com.example.kat");
+        let mut protocol = Protocol::<HkdfSha512Aegis256>::new("com.example.kat");
         protocol.mix(b"first", b"one");
         protocol.mix(b"second", b"two");
 
@@ -525,11 +526,11 @@ mod tests {
 
     #[test]
     fn readers() {
-        let mut slices = Protocol::<B128>::new("com.example.streams");
+        let mut slices = Protocol::<HkdfSha256Aegis128L>::new("com.example.streams");
         slices.mix(b"first", b"one");
         slices.mix(b"second", b"two");
 
-        let streams = Protocol::<B128>::new("com.example.streams");
+        let streams = Protocol::<HkdfSha256Aegis128L>::new("com.example.streams");
         let mut streams_write = streams.mix_writer(b"first", io::sink());
         io::copy(&mut Cursor::new(b"one"), &mut streams_write)
             .expect("cursor reads and sink writes should be infallible");
@@ -548,7 +549,7 @@ mod tests {
     #[test]
     #[cfg(feature = "hedge")]
     fn hedging() {
-        let mut hedger = Protocol::<B128>::new("com.example.hedge");
+        let mut hedger = Protocol::<HkdfSha256Aegis128L>::new("com.example.hedge");
         hedger.mix(b"first", b"one");
         let tag = hedger.hedge(rand::thread_rng(), &[b"two"], 10_000, |clone| {
             let tag = clone.derive_array::<16>(b"tag");
@@ -560,12 +561,12 @@ mod tests {
 
     #[test]
     fn edge_case() {
-        let mut sender = Protocol::<B128>::new("");
+        let mut sender = Protocol::<HkdfSha256Aegis128L>::new("");
         let mut message = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
         sender.encrypt(b"message", &mut message);
         let tag_s = sender.derive_array::<TAG_LEN>(b"tag");
 
-        let mut receiver = Protocol::<B128>::new("");
+        let mut receiver = Protocol::<HkdfSha256Aegis128L>::new("");
         receiver.decrypt(b"message", &mut message);
         let tag_r = receiver.derive_array::<TAG_LEN>(b"tag");
 

@@ -10,6 +10,8 @@ jobs:
         target:
             - aegis_128l::tests::round_trip
             - aegis_128l::tests::interop
+            - aegis_256::tests::round_trip
+            - aegis_256::tests::interop
             - tests::encoded_label_injective 
             - tests::right_encode_injective 
             - aead

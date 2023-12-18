@@ -64,12 +64,12 @@ fn aead<const LEN: usize, S: SecurityLevel>(bencher: divan::Bencher) {
 
 const PRF_LENS: &[usize] = &[16, 256, 1024, 2 * 1024, 4 * 1024];
 
-#[divan::bench(consts = PRF_LENS)]
-fn prf<const LEN: usize>(bencher: divan::Bencher) {
+#[divan::bench(types = [B128, B256], consts = PRF_LENS)]
+fn prf<const LEN: usize, S: SecurityLevel>(bencher: divan::Bencher) {
     let key = [0u8; 32];
     bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_values(
         |mut block| {
-            let mut protocol = Protocol::<B128>::new("prf");
+            let mut protocol = Protocol::<S>::new("prf");
             protocol.mix(b"key", &key);
             protocol.derive(b"output", &mut block);
             block

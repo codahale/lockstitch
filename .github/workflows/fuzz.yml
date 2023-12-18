@@ -20,9 +20,12 @@ jobs:
             - stream_cipher
             - hash
             - mac
-            - determinism
-            - divergence
-            - invertible
+            - determinism_256
+            - determinism_128
+            - divergence_256
+            - divergence_128
+            - invertible_256
+            - invertible_128
     runs-on: ubuntu-latest
     env:
       RUSTFLAGS: "-C target-feature=+aes,+ssse3"

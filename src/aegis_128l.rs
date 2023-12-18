@@ -1,4 +1,4 @@
-use crate::intrinsics::*;
+use crate::{intrinsics::*, Aegis};
 
 /// The length of an AEGIS-128L block.
 const BLOCK_LEN: usize = 32;
@@ -71,63 +71,6 @@ impl Aegis128L {
         }
 
         self.ad_len += ad.len() as u64;
-    }
-
-    /// Encrypts the given slice in place.
-    pub fn encrypt(&mut self, in_out: &mut [u8]) {
-        // Process whole blocks of plaintext.
-        let mut chunks = in_out.chunks_exact_mut(BLOCK_LEN);
-        for chunk in chunks.by_ref() {
-            self.enc(chunk);
-        }
-
-        // Process the remainder of the plaintext, if any.
-        let chunk = chunks.into_remainder();
-        if !chunk.is_empty() {
-            let mut tmp = [0u8; BLOCK_LEN];
-            tmp[..chunk.len()].copy_from_slice(chunk);
-            self.enc(&mut tmp);
-            chunk.copy_from_slice(&tmp[..chunk.len()]);
-        }
-
-        self.mc_len += in_out.len() as u64;
-    }
-
-    /// Decrypts the given slice in place.
-    pub fn decrypt(&mut self, in_out: &mut [u8]) {
-        // Process whole blocks of ciphertext.
-        let mut chunks = in_out.chunks_exact_mut(BLOCK_LEN);
-        for chunk in chunks.by_ref() {
-            self.dec(chunk);
-        }
-
-        // Process the remainder of the ciphertext, if any.
-        let cn = chunks.into_remainder();
-        if !cn.is_empty() {
-            self.dec_partial(cn);
-        }
-
-        self.mc_len += in_out.len() as u64;
-    }
-
-    /// Finalizes the cipher state into a pair of 128-bit and 256-bit authentication tags.
-    pub fn finalize(mut self) -> ([u8; 16], [u8; 32]) {
-        // Create a block from the associated data and message lengths, in bits, XOR it with the 3rd
-        // state block and update the state with that value.
-        let t = xor(load_64x2(self.ad_len * 8, self.mc_len * 8), self.blocks[2]);
-        for _ in 0..7 {
-            self.update(t, t);
-        }
-
-        // Generate both 128-bit and 256-bit tags, re-using values where possible.
-        let mut tag128 = [0u8; 16];
-        let mut tag256 = [0u8; 32];
-        let a = xor(xor3(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3]);
-        let b = xor3(self.blocks[4], self.blocks[5], self.blocks[6]);
-        store(&mut tag128, xor(a, b));
-        store_2x(&mut tag256, a, xor(b, self.blocks[7]));
-
-        (tag128, tag256)
     }
 
     #[cfg(all(test, feature = "std"))]
@@ -219,6 +162,62 @@ impl Aegis128L {
         // XOR blocks 0 and 4 with the two message blocks.
         self.blocks[0] = xor(self.blocks[0], m0);
         self.blocks[4] = xor(self.blocks[4], m1);
+    }
+}
+
+impl Aegis for Aegis128L {
+    fn encrypt(&mut self, in_out: &mut [u8]) {
+        // Process whole blocks of plaintext.
+        let mut chunks = in_out.chunks_exact_mut(BLOCK_LEN);
+        for chunk in chunks.by_ref() {
+            self.enc(chunk);
+        }
+
+        // Process the remainder of the plaintext, if any.
+        let chunk = chunks.into_remainder();
+        if !chunk.is_empty() {
+            let mut tmp = [0u8; BLOCK_LEN];
+            tmp[..chunk.len()].copy_from_slice(chunk);
+            self.enc(&mut tmp);
+            chunk.copy_from_slice(&tmp[..chunk.len()]);
+        }
+
+        self.mc_len += in_out.len() as u64;
+    }
+
+    fn decrypt(&mut self, in_out: &mut [u8]) {
+        // Process whole blocks of ciphertext.
+        let mut chunks = in_out.chunks_exact_mut(BLOCK_LEN);
+        for chunk in chunks.by_ref() {
+            self.dec(chunk);
+        }
+
+        // Process the remainder of the ciphertext, if any.
+        let cn = chunks.into_remainder();
+        if !cn.is_empty() {
+            self.dec_partial(cn);
+        }
+
+        self.mc_len += in_out.len() as u64;
+    }
+
+    fn finalize(mut self) -> ([u8; 16], [u8; 32]) {
+        // Create a block from the associated data and message lengths, in bits, XOR it with the 3rd
+        // state block and update the state with that value.
+        let t = xor(load_64x2(self.ad_len * 8, self.mc_len * 8), self.blocks[2]);
+        for _ in 0..7 {
+            self.update(t, t);
+        }
+
+        // Generate both 128-bit and 256-bit tags, re-using values where possible.
+        let mut tag128 = [0u8; 16];
+        let mut tag256 = [0u8; 32];
+        let a = xor(xor3(self.blocks[0], self.blocks[1], self.blocks[2]), self.blocks[3]);
+        let b = xor3(self.blocks[4], self.blocks[5], self.blocks[6]);
+        store(&mut tag128, xor(a, b));
+        store_2x(&mut tag256, a, xor(b, self.blocks[7]));
+
+        (tag128, tag256)
     }
 }
 

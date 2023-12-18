@@ -2,12 +2,13 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
-use core::mem;
+use core::{fmt::Debug, mem};
 
 use crate::aegis_128l::Aegis128L;
 
-use hkdf::HkdfExtract;
-use sha2::Sha256;
+use aegis_256::Aegis256;
+use hkdf::{Hkdf, HkdfExtract};
+use sha2::{Sha256, Sha512};
 pub use subtle;
 use subtle::ConstantTimeEq;
 
@@ -26,19 +27,158 @@ pub mod perf {}
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
 
+mod private {
+    /// A trait whose implementations are limited to this crate.
+    pub trait Sealed {}
+}
+
+/// A wrapper trait for the AEGIS-128L and AEGIS-256 implementations.
+pub trait Aegis {
+    /// Encrypts the given slice in place.
+    fn encrypt(&mut self, in_out: &mut [u8]);
+
+    /// Decrypts the given slice in place.
+    fn decrypt(&mut self, in_out: &mut [u8]);
+
+    /// Finalizes the cipher state into a pair of 128-bit and 256-bit authentication tags.
+    fn finalize(self) -> ([u8; 16], [u8; 32]);
+}
+
+/// A typeclass trait for the two different security levels provided. The two available
+/// implementations are [`B128`], which combines HKDF-SHA-256 and AEGIS-128L to offer 128-bit
+/// security, and [`B256`], which combines HKDF-SHA-512 and AEGIS-256 to offer 256-bit security.
+pub trait SecurityLevel: private::Sealed + Clone + Copy {
+    /// The type of the transcript used.
+    type Transcript: Debug + Clone;
+
+    /// The type of the pseudo-random key extracted from the transcript.
+    type Prk;
+
+    /// The type of AEGIS cipher used.
+    type Cipher: Aegis;
+
+    /// Creates a new, empty transcript.
+    fn new_transcript() -> Self::Transcript;
+
+    /// Appends the data to the transcript.
+    fn append(t: &mut Self::Transcript, data: &[u8]);
+
+    /// Extracts a PRK from the transcript.
+    fn extract_prk(t: Self::Transcript) -> Self::Prk;
+
+    /// Derives a value from the PRK given an info string.
+    fn derive(prk: &Self::Prk, info: &[u8], out: &mut [u8]);
+
+    /// Initializes a new cipher using the given key generation callback.
+    fn new_cipher(key_gen: impl FnOnce(&mut [u8])) -> Self::Cipher;
+}
+
+/// The 128-bit security level, combining HKDF-SHA-256 and AEGIS-128L for very high performance.
+#[derive(Debug, Clone, Copy)]
+pub struct B128;
+
+impl private::Sealed for B128 {}
+
+impl SecurityLevel for B128 {
+    type Transcript = HkdfExtract<Sha256>;
+
+    type Prk = Hkdf<Sha256>;
+
+    type Cipher = Aegis128L;
+
+    #[inline]
+    fn new_transcript() -> Self::Transcript {
+        HkdfExtract::new(None)
+    }
+
+    #[inline]
+    fn append(t: &mut Self::Transcript, data: &[u8]) {
+        t.input_ikm(data);
+    }
+
+    #[inline]
+    fn extract_prk(t: Self::Transcript) -> Self::Prk {
+        let (_, prk) = t.finalize();
+        prk
+    }
+
+    #[inline]
+    fn new_cipher(key_gen: impl FnOnce(&mut [u8])) -> Self::Cipher {
+        let mut kn = [0u8; 32];
+        key_gen(&mut kn);
+        Aegis128L::new(
+            kn[..16].try_into().expect("should be 16 bytes"),
+            kn[16..].try_into().expect("should be 16 bytes"),
+        )
+    }
+
+    #[inline]
+    fn derive(prk: &Self::Prk, info: &[u8], out: &mut [u8]) {
+        prk.expand(info, out).expect("should derive output");
+    }
+}
+
+/// The 256-bit security level, combining HKDF-SHA-512 and AEGIS-256 for high performance.
+#[derive(Debug, Clone, Copy)]
+pub struct B256;
+
+impl private::Sealed for B256 {}
+
+impl SecurityLevel for B256 {
+    type Transcript = HkdfExtract<Sha512>;
+
+    type Prk = Hkdf<Sha512>;
+
+    type Cipher = Aegis256;
+
+    #[inline]
+    fn new_transcript() -> Self::Transcript {
+        HkdfExtract::new(None)
+    }
+
+    #[inline]
+    fn append(t: &mut Self::Transcript, data: &[u8]) {
+        t.input_ikm(data);
+    }
+
+    #[inline]
+    fn extract_prk(t: Self::Transcript) -> Self::Prk {
+        let (_, prk) = t.finalize();
+        prk
+    }
+
+    #[inline]
+    fn new_cipher(key_gen: impl FnOnce(&mut [u8])) -> Self::Cipher {
+        let mut kn = [0u8; 64];
+        key_gen(&mut kn);
+        Aegis256::new(
+            kn[..32].try_into().expect("should be 32 bytes"),
+            kn[32..].try_into().expect("should be 32 bytes"),
+        )
+    }
+
+    #[inline]
+    fn derive(prk: &Self::Prk, info: &[u8], out: &mut [u8]) {
+        prk.expand(info, out).expect("should derive output");
+    }
+}
+
 /// A stateful object providing fine-grained symmetric-key cryptographic services like hashing,
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
 #[derive(Debug, Clone)]
-pub struct Protocol {
-    transcript: HkdfExtract<Sha256>,
+pub struct Protocol<S: SecurityLevel> {
+    transcript: S::Transcript,
 }
 
-impl Protocol {
+impl<S> Protocol<S>
+where
+    S: SecurityLevel,
+{
     /// Creates a new protocol with the given domain.
     #[inline]
-    pub fn new(domain: &str) -> Protocol {
+    pub fn new(domain: &str) -> Protocol<S> {
         // Initialize a protocol with an empty transcript.
-        let mut protocol = Protocol { transcript: HkdfExtract::new(None) };
+        let mut protocol = Protocol { transcript: S::new_transcript() };
 
         // Append the Init op header to the transcript with the domain as the label.
         //
@@ -59,8 +199,8 @@ impl Protocol {
         // Append the input to the transcript with right-encoded length.
         //
         //   input || right_encode(|input|)
-        self.transcript.input_ikm(input);
-        self.transcript.input_ikm(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
+        S::append(&mut self.transcript, input);
+        S::append(&mut self.transcript, right_encode(&mut [0u8; 9], input.len() as u64 * 8));
     }
 
     /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
@@ -69,7 +209,7 @@ impl Protocol {
     /// Use [`MixWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
     #[inline]
     #[cfg(feature = "std")]
-    pub fn mix_writer<W: std::io::Write>(mut self, label: &[u8], inner: W) -> MixWriter<W> {
+    pub fn mix_writer<W: std::io::Write>(mut self, label: &[u8], inner: W) -> MixWriter<S, W> {
         // Append a Mix op header with the label to the transcript.
         self.op_header(OpCode::Mix, label);
 
@@ -86,12 +226,13 @@ impl Protocol {
         self.op_header(OpCode::Derive, label);
 
         // Calculate HKDF-Extract("", transcript) and clear the transcript.
-        let (_, prk) = mem::replace(&mut self.transcript, HkdfExtract::new(None)).finalize();
+        let transcript = mem::replace(&mut self.transcript, S::new_transcript());
+        let prk = S::extract_prk(transcript);
 
         // Use HKDF-Expand to derive a new KDF key and the requested output.
         let mut kdf_key = [0u8; 32];
-        prk.expand(b"kdf-key", &mut kdf_key).expect("should expand KDF key");
-        prk.expand(b"output", out).expect("should expand output");
+        S::derive(&prk, b"kdf-key", &mut kdf_key);
+        S::derive(&prk, b"output", out);
 
         // Perform a Mix operation with the KDF key.
         self.mix(b"kdf-key", &kdf_key);
@@ -117,12 +258,7 @@ impl Protocol {
         self.op_header(OpCode::Crypt, label);
 
         // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>(b"key");
-        let (k, n) = kn.split_at(16);
-        let mut aegis = Aegis128L::new(
-            k.try_into().expect("should be 16 bytes"),
-            n.try_into().expect("should be 16 bytes"),
-        );
+        let mut aegis = S::new_cipher(|kn| self.derive(b"key", kn));
 
         // Encrypt the plaintext.
         aegis.encrypt(in_out);
@@ -143,12 +279,7 @@ impl Protocol {
         self.op_header(OpCode::Crypt, label);
 
         // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>(b"key");
-        let (k, n) = kn.split_at(16);
-        let mut aegis = Aegis128L::new(
-            k.try_into().expect("should be 16 bytes"),
-            n.try_into().expect("should be 16 bytes"),
-        );
+        let mut aegis = S::new_cipher(|kn| self.derive(b"key", kn));
 
         // Decrypt the ciphertext.
         aegis.decrypt(in_out);
@@ -174,12 +305,7 @@ impl Protocol {
         self.op_header(OpCode::AuthCrypt, label);
 
         // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>(b"key");
-        let (k, n) = kn.split_at(16);
-        let mut aegis = Aegis128L::new(
-            k.try_into().expect("should be 16 bytes"),
-            n.try_into().expect("should be 16 bytes"),
-        );
+        let mut aegis = S::new_cipher(|kn| self.derive(b"key", kn));
 
         // Encrypt the plaintext.
         aegis.encrypt(in_out);
@@ -208,12 +334,7 @@ impl Protocol {
         self.op_header(OpCode::AuthCrypt, label);
 
         // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>(b"key");
-        let (k, n) = kn.split_at(16);
-        let mut aegis = Aegis128L::new(
-            k.try_into().expect("should be 16 bytes"),
-            n.try_into().expect("should be 16 bytes"),
-        );
+        let mut aegis = S::new_cipher(|kn| self.derive(b"key", kn));
 
         // Decrypt the ciphertext.
         aegis.decrypt(in_out);
@@ -278,9 +399,9 @@ impl Protocol {
         // Append the operation code and label to the transcript:
         //
         //   op_code || label || right_encode(|label|)
-        self.transcript.input_ikm(&[op_code as u8]);
-        self.transcript.input_ikm(label);
-        self.transcript.input_ikm(right_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        S::append(&mut self.transcript, &[op_code as u8]);
+        S::append(&mut self.transcript, label);
+        S::append(&mut self.transcript, right_encode(&mut [0u8; 9], label.len() as u64 * 8));
     }
 }
 
@@ -303,31 +424,31 @@ enum OpCode {
 /// operation and passes all writes to an inner writer.
 #[cfg(feature = "std")]
 #[derive(Debug)]
-pub struct MixWriter<W> {
-    protocol: Protocol,
+pub struct MixWriter<S: SecurityLevel, W> {
+    protocol: Protocol<S>,
     inner: W,
     len: u64,
 }
 
 #[cfg(feature = "std")]
-impl<W: std::io::Write> MixWriter<W> {
+impl<S: SecurityLevel, W: std::io::Write> MixWriter<S, W> {
     /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
     #[inline]
-    pub fn into_inner(mut self) -> (Protocol, W) {
+    pub fn into_inner(mut self) -> (Protocol<S>, W) {
         // Append the right-encoded length to the transcript.
-        self.protocol.transcript.input_ikm(right_encode(&mut [0u8; 9], self.len * 8));
+        S::append(&mut self.protocol.transcript, right_encode(&mut [0u8; 9], self.len * 8));
         (self.protocol, self.inner)
     }
 }
 
 #[cfg(feature = "std")]
-impl<W: std::io::Write> std::io::Write for MixWriter<W> {
+impl<S: SecurityLevel, W: std::io::Write> std::io::Write for MixWriter<S, W> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         // Track the written length.
         self.len += buf.len() as u64;
         // Append the written slice to the protocol transcript.
-        self.protocol.transcript.input_ikm(buf);
+        S::append(&mut self.protocol.transcript, buf);
         // Pass the slice to the inner writer and return the result.
         self.inner.write(buf)
     }
@@ -359,8 +480,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn known_answers() {
-        let mut protocol = Protocol::new("com.example.kat");
+    fn known_answers_128() {
+        let mut protocol = Protocol::<B128>::new("com.example.kat");
         protocol.mix(b"first", b"one");
         protocol.mix(b"second", b"two");
 
@@ -382,12 +503,35 @@ mod tests {
     }
 
     #[test]
+    fn known_answers_256() {
+        let mut protocol = Protocol::<B256>::new("com.example.kat");
+        protocol.mix(b"first", b"one");
+        protocol.mix(b"second", b"two");
+
+        expect!["3815c12afa86b3f0"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
+
+        let mut plaintext = b"this is an example".to_vec();
+        protocol.encrypt(b"fourth", &mut plaintext);
+        expect!["61c4565f968f0b1e94a040bb1f6abc81607a"].assert_eq(&hex::encode(plaintext));
+
+        let plaintext = b"this is an example";
+        let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
+        sealed[..plaintext.len()].copy_from_slice(plaintext);
+        protocol.seal(b"fifth", &mut sealed);
+
+        expect!["6f3ca466b1326974f6b36891b48e09cf08cbacccd12fe959a71e9e41772fbe301608"]
+            .assert_eq(&hex::encode(sealed));
+
+        expect!["71b771900301a2e8"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+    }
+
+    #[test]
     fn readers() {
-        let mut slices = Protocol::new("com.example.streams");
+        let mut slices = Protocol::<B128>::new("com.example.streams");
         slices.mix(b"first", b"one");
         slices.mix(b"second", b"two");
 
-        let streams = Protocol::new("com.example.streams");
+        let streams = Protocol::<B128>::new("com.example.streams");
         let mut streams_write = streams.mix_writer(b"first", io::sink());
         io::copy(&mut Cursor::new(b"one"), &mut streams_write)
             .expect("cursor reads and sink writes should be infallible");
@@ -406,7 +550,7 @@ mod tests {
     #[test]
     #[cfg(feature = "hedge")]
     fn hedging() {
-        let mut hedger = Protocol::new("com.example.hedge");
+        let mut hedger = Protocol::<B128>::new("com.example.hedge");
         hedger.mix(b"first", b"one");
         let tag = hedger.hedge(rand::thread_rng(), &[b"two"], 10_000, |clone| {
             let tag = clone.derive_array::<16>(b"tag");
@@ -418,12 +562,12 @@ mod tests {
 
     #[test]
     fn edge_case() {
-        let mut sender = Protocol::new("");
+        let mut sender = Protocol::<B128>::new("");
         let mut message = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
         sender.encrypt(b"message", &mut message);
         let tag_s = sender.derive_array::<TAG_LEN>(b"tag");
 
-        let mut receiver = Protocol::new("");
+        let mut receiver = Protocol::<B128>::new("");
         receiver.decrypt(b"message", &mut message);
         let tag_r = receiver.derive_array::<TAG_LEN>(b"tag");
 

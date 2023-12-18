@@ -1,7 +1,7 @@
 use std::ops::Bound;
 
 use bolero::TypeGenerator;
-use lockstitch::{Protocol, TAG_LEN};
+use lockstitch::{Protocol, SecurityLevel, B128, B256, TAG_LEN};
 
 #[derive(Clone, Debug, PartialEq)]
 enum Input {
@@ -56,8 +56,8 @@ impl TypeGenerator for Transcript {
     }
 }
 
-fn apply_transcript(t: &Transcript) -> Vec<Output> {
-    let mut protocol = Protocol::new(&t.domain);
+fn apply_transcript<S: SecurityLevel>(t: &Transcript) -> Vec<Output> {
+    let mut protocol = Protocol::<S>::new(&t.domain);
     t.inputs
         .iter()
         .cloned()
@@ -93,8 +93,8 @@ fn apply_transcript(t: &Transcript) -> Vec<Output> {
         .collect()
 }
 
-fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
-    let mut protocol = Protocol::new(&t.domain);
+fn invert_transcript<S: SecurityLevel>(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
+    let mut protocol = Protocol::<S>::new(&t.domain);
     let mut derived = Vec::new();
     let inputs = t
         .inputs
@@ -137,23 +137,35 @@ fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
     (Transcript { domain: t.domain.clone(), inputs }, derived)
 }
 
-/// Multiple applications of the same inputs must always produce the same outputs.
+// Multiple applications of the same inputs must always produce the same outputs.
+
 #[test]
-fn determinism() {
+fn determinism_128() {
     bolero::check!().with_type::<Transcript>().for_each(|t| {
-        let a = apply_transcript(t);
-        let b = apply_transcript(t);
+        let a = apply_transcript::<B128>(t);
+        let b = apply_transcript::<B128>(t);
 
         assert_eq!(a, b);
     });
 }
 
-/// Two different transcripts must produce different outputs.
 #[test]
-fn divergence() {
+fn determinism_256() {
+    bolero::check!().with_type::<Transcript>().for_each(|t| {
+        let a = apply_transcript::<B256>(t);
+        let b = apply_transcript::<B256>(t);
+
+        assert_eq!(a, b);
+    });
+}
+
+// Two different transcripts must produce different outputs.
+
+#[test]
+fn divergence_128() {
     bolero::check!().with_type::<(Transcript, Transcript)>().for_each(|(t0, t1)| {
-        let a = apply_transcript(t0);
-        let b = apply_transcript(t1);
+        let a = apply_transcript::<B128>(t0);
+        let b = apply_transcript::<B128>(t1);
 
         if t0 == t1 {
             assert_eq!(a, b);
@@ -163,13 +175,39 @@ fn divergence() {
     });
 }
 
-/// For any transcript, invertible operations (e.g. encrypt/decrypt, seal/open) must produce
-/// matching outputs to inputs.
 #[test]
-fn invertible() {
+fn divergence_256() {
+    bolero::check!().with_type::<(Transcript, Transcript)>().for_each(|(t0, t1)| {
+        let a = apply_transcript::<B256>(t0);
+        let b = apply_transcript::<B256>(t1);
+
+        if t0 == t1 {
+            assert_eq!(a, b);
+        } else {
+            assert_ne!(a, b);
+        }
+    });
+}
+
+// For any transcript, invertible operations (e.g. encrypt/decrypt, seal/open) must produce matching
+// outputs to inputs.
+
+#[test]
+fn invertible_128() {
     bolero::check!().with_type::<Transcript>().for_each(|t| {
-        let (t_inv, a_d) = invert_transcript(t);
-        let (t_p, b_d) = invert_transcript(&t_inv);
+        let (t_inv, a_d) = invert_transcript::<B128>(t);
+        let (t_p, b_d) = invert_transcript::<B128>(&t_inv);
+
+        assert_eq!(t, &t_p);
+        assert_eq!(a_d, b_d);
+    });
+}
+
+#[test]
+fn invertible_256() {
+    bolero::check!().with_type::<Transcript>().for_each(|t| {
+        let (t_inv, a_d) = invert_transcript::<B256>(t);
+        let (t_p, b_d) = invert_transcript::<B256>(&t_inv);
 
         assert_eq!(t, &t_p);
         assert_eq!(a_d, b_d);

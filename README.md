@@ -39,8 +39,10 @@ Lockstitch is used to compose cryptographic protocols.
 For example, we can create message digests:
 
 ```rust
+use lockstitch::{B128, Protocol};
+
 fn digest(message: &[u8]) -> [u8; 32] {
-  let mut md = lockstitch::Protocol::new("com.example.md");
+  let mut md = Protocol::<B128>::new("com.example.md");
   md.mix(b"message", message);
   md.derive_array(b"digest")
 }
@@ -52,8 +54,10 @@ assert_ne!(digest(b"this is a message"), digest(b"this is another message"));
 We can create message authentication codes:
 
 ```rust
+use lockstitch::{B128, Protocol};
+
 fn mac(key: &[u8], message: &[u8]) -> [u8; 16] {
-  let mut mac = lockstitch::Protocol::new("com.example.mac");
+  let mut mac = Protocol::<B128>::new("com.example.mac");
   mac.mix(b"key", key);
   mac.mix(b"message", message);
   mac.derive_array(b"tag")
@@ -67,11 +71,13 @@ assert_ne!(mac(b"a key", b"a message"), mac(b"a key", b"another message"));
 We can even create authenticated encryption:
 
 ```rust
+use lockstitch::{B128, Protocol};
+
 fn aead_encrypt(key: &[u8], nonce: &[u8], ad: &[u8], plaintext: &[u8]) -> Vec<u8> {
   let mut out = vec![0u8; plaintext.len() + lockstitch::TAG_LEN];
   out[..plaintext.len()].copy_from_slice(plaintext);
 
-  let mut aead = lockstitch::Protocol::new("com.example.aead");
+  let mut aead = Protocol::<B128>::new("com.example.aead");
   aead.mix(b"key", key);
   aead.mix(b"nonce", nonce);
   aead.mix(b"ad", ad);
@@ -83,7 +89,7 @@ fn aead_encrypt(key: &[u8], nonce: &[u8], ad: &[u8], plaintext: &[u8]) -> Vec<u8
 fn aead_decrypt(key: &[u8], nonce: &[u8], ad: &[u8], ciphertext: &[u8]) -> Option<Vec<u8>> {
   let mut ciphertext = ciphertext.to_vec();
 
-  let mut aead = lockstitch::Protocol::new("com.example.aead");
+  let mut aead = Protocol::<B128>::new("com.example.aead");
   aead.mix(b"key", key);
   aead.mix(b"nonce", nonce);
   aead.mix(b"ad", ad);

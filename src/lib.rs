@@ -4,16 +4,14 @@
 
 use core::{fmt::Debug, mem};
 
-use crate::aegis_128l::Aegis128L;
+use crate::aegis::{Aegis, Aegis128L, Aegis256};
 
-use aegis_256::Aegis256;
 use hkdf::{Hkdf, HkdfExtract};
 use sha2::{Sha256, Sha512};
 pub use subtle;
 use subtle::ConstantTimeEq;
 
-mod aegis_128l;
-mod aegis_256;
+mod aegis;
 mod intrinsics;
 
 #[cfg(feature = "docs")]
@@ -30,18 +28,6 @@ pub const TAG_LEN: usize = 16;
 mod private {
     /// A trait whose implementations are limited to this crate.
     pub trait Sealed {}
-}
-
-/// A wrapper trait for the AEGIS-128L and AEGIS-256 implementations.
-pub trait Aegis {
-    /// Encrypts the given slice in place.
-    fn encrypt(&mut self, in_out: &mut [u8]);
-
-    /// Decrypts the given slice in place.
-    fn decrypt(&mut self, in_out: &mut [u8]);
-
-    /// Finalizes the cipher state into a pair of 128-bit and 256-bit authentication tags.
-    fn finalize(self) -> ([u8; 16], [u8; 32]);
 }
 
 /// A typeclass trait for the two different security levels provided. The two available

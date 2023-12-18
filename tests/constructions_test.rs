@@ -1,10 +1,10 @@
 use bolero::TypeGenerator;
-use lockstitch::{subtle::ConstantTimeEq, Protocol, TAG_LEN};
+use lockstitch::{sec128::Protocol128, subtle::ConstantTimeEq, TAG_LEN};
 
 #[test]
 fn hash() {
     fn md(domain: &str, m: &[u8]) -> [u8; 32] {
-        let mut md = Protocol::new(domain);
+        let mut md = Protocol128::new(domain);
         md.mix(b"message", m);
         md.derive_array(b"digest")
     }
@@ -26,7 +26,7 @@ fn hash() {
 #[test]
 fn mac() {
     fn mac(domain: &str, k: &[u8], m: &[u8]) -> [u8; TAG_LEN] {
-        let mut mac = Protocol::new(domain);
+        let mut mac = Protocol128::new(domain);
         mac.mix(b"key", k);
         mac.mix(b"message", m);
         mac.derive_array::<TAG_LEN>(b"tag")
@@ -53,7 +53,7 @@ fn mac() {
 #[test]
 fn stream_cipher() {
     fn enc(domain: &str, k: &[u8], n: &[u8], p: &[u8]) -> Vec<u8> {
-        let mut stream = Protocol::new(domain);
+        let mut stream = Protocol128::new(domain);
         stream.mix(b"key", k);
         stream.mix(b"nonce", n);
 
@@ -63,7 +63,7 @@ fn stream_cipher() {
     }
 
     fn dec(domain: &str, k: &[u8], n: &[u8], c: &[u8]) -> Vec<u8> {
-        let mut stream = Protocol::new(domain);
+        let mut stream = Protocol128::new(domain);
         stream.mix(b"key", k);
         stream.mix(b"nonce", n);
 
@@ -97,7 +97,7 @@ fn stream_cipher() {
 #[test]
 fn aead() {
     fn ae_enc(domain: &str, k: &[u8], n: &[u8], d: &[u8], p: &[u8]) -> Vec<u8> {
-        let mut aead = Protocol::new(domain);
+        let mut aead = Protocol128::new(domain);
         aead.mix(b"key", k);
         aead.mix(b"nonce", n);
         aead.mix(b"ad", d);
@@ -110,7 +110,7 @@ fn aead() {
     }
 
     fn ae_dec(domain: &str, k: &[u8], n: &[u8], d: &[u8], c: &[u8]) -> Option<Vec<u8>> {
-        let mut aead = Protocol::new(domain);
+        let mut aead = Protocol128::new(domain);
         aead.mix(b"key", k);
         aead.mix(b"nonce", n);
         aead.mix(b"ad", d);
@@ -147,7 +147,7 @@ fn daead() {
         ciphertext.copy_from_slice(p);
 
         // Mix in the key and associated data.
-        let mut dae = Protocol::new(domain);
+        let mut dae = Protocol128::new(domain);
         dae.mix(b"key", k);
         dae.mix(b"ad", d);
 
@@ -168,7 +168,7 @@ fn daead() {
         let mut plaintext = ciphertext.to_vec();
 
         // Mix in the key and associated data.
-        let mut dae = Protocol::new(domain);
+        let mut dae = Protocol128::new(domain);
         dae.mix(b"key", k);
         dae.mix(b"ad", d);
 
@@ -210,7 +210,7 @@ fn tuple_hash() {
     type TupleVec = Vec<(Vec<u8>, Vec<u8>)>;
 
     fn tuple_hash(domain: &str, data: &TupleVec) -> [u8; 32] {
-        let mut tuple_hash = Protocol::new(domain);
+        let mut tuple_hash = Protocol128::new(domain);
         for (l, d) in data {
             tuple_hash.mix(l, d);
         }

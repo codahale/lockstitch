@@ -1,7 +1,7 @@
 use std::ops::Bound;
 
 use bolero::TypeGenerator;
-use lockstitch::{Protocol, TAG_LEN};
+use lockstitch::{sec128::Protocol128, TAG_LEN};
 
 #[derive(Clone, Debug, PartialEq)]
 enum Input {
@@ -57,7 +57,7 @@ impl TypeGenerator for Transcript {
 }
 
 fn apply_transcript(t: &Transcript) -> Vec<Output> {
-    let mut protocol = Protocol::new(&t.domain);
+    let mut protocol = Protocol128::new(&t.domain);
     t.inputs
         .iter()
         .cloned()
@@ -94,7 +94,7 @@ fn apply_transcript(t: &Transcript) -> Vec<Output> {
 }
 
 fn invert_transcript(t: &Transcript) -> (Transcript, Vec<Vec<u8>>) {
-    let mut protocol = Protocol::new(&t.domain);
+    let mut protocol = Protocol128::new(&t.domain);
     let mut derived = Vec::new();
     let inputs = t
         .inputs

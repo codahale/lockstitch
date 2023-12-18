@@ -2,7 +2,14 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
+use core::mem;
+
+use crate::aegis_128l::Aegis128L;
+
+use hkdf::HkdfExtract;
+use sha2::Sha256;
 pub use subtle;
+use subtle::ConstantTimeEq;
 
 mod aegis_128l;
 mod aegis_256;
@@ -19,431 +26,267 @@ pub mod perf {}
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
 
-macro_rules! define_protocol {
-    ($name:ident,$hash:ty,$aead:ty,$kdf_key_len:literal,$aead_key_len:literal) => {
-        use core::mem;
-
-        use crate::{right_encode, OpCode, TAG_LEN};
-
-        use hkdf::HkdfExtract;
-        use subtle::ConstantTimeEq;
-
-        /// A stateful object providing fine-grained symmetric-key cryptographic services like hashing,
-        /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
-        #[derive(Debug, Clone)]
-        pub struct $name {
-            transcript: HkdfExtract<$hash>,
-        }
-
-        impl $name {
-            /// Creates a new protocol with the given domain.
-            #[inline]
-            pub fn new(domain: &str) -> $name {
-                // Initialize a protocol with an empty transcript.
-                let mut protocol = $name { transcript: HkdfExtract::new(None) };
-
-                // Append the Init op header to the transcript with the domain as the label.
-                //
-                //   0x01 || domain || right_encode(|domain|)
-                protocol.op_header(OpCode::Init, domain.as_bytes());
-
-                protocol
-            }
-
-            /// Mixes the given label and slice into the protocol state.
-            #[inline]
-            pub fn mix(&mut self, label: &[u8], input: &[u8]) {
-                // Append a Mix op header with the label to the transcript.
-                //
-                //   0x02 || label || right_encode(|label|)
-                self.op_header(OpCode::Mix, label);
-
-                // Append the input to the transcript with right-encoded length.
-                //
-                //   input || right_encode(|input|)
-                self.transcript.input_ikm(input);
-                self.transcript.input_ikm(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
-            }
-
-            /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
-            /// operation and passing all writes to `inner`.
-            ///
-            /// Use [`MixWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
-            #[inline]
-            #[cfg(feature = "std")]
-            pub fn mix_writer<W: std::io::Write>(mut self, label: &[u8], inner: W) -> MixWriter<W> {
-                // Append a Mix op header with the label to the transcript.
-                self.op_header(OpCode::Mix, label);
-
-                // Move the protocol to a MixWriter.
-                MixWriter { protocol: self, inner, len: 0 }
-            }
-
-            /// Derives output from the protocol's current state and fills the given slice with it.
-            #[inline]
-            pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
-                // Append a Derive op header with the label to the transcript.
-                //
-                //   0x03 || label || right_encode(|label|)
-                self.op_header(OpCode::Derive, label);
-
-                // Calculate HKDF-Extract("", transcript) and clear the transcript.
-                let (_, prk) =
-                    mem::replace(&mut self.transcript, HkdfExtract::new(None)).finalize();
-
-                // Use HKDF-Expand to derive a new KDF key and the requested output.
-                let mut kdf_key = [0u8; 32];
-                prk.expand(b"kdf-key", &mut kdf_key).expect("should expand KDF key");
-                prk.expand(b"output", out).expect("should expand output");
-
-                // Perform a Mix operation with the KDF key.
-                self.mix(b"kdf-key", &kdf_key);
-
-                // Perform a Mix operation with the output length.
-                self.mix(b"len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
-            }
-
-            /// Derives output from the protocol's current state and returns it as an `N`-byte array.
-            #[inline]
-            pub fn derive_array<const N: usize>(&mut self, label: &[u8]) -> [u8; N] {
-                let mut out = [0u8; N];
-                self.derive(label, &mut out);
-                out
-            }
-
-            /// Encrypts the given slice in place.
-            #[inline]
-            pub fn encrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
-                // Append a Crypt op header with the label to the transcript.
-                //
-                //   0x04 || label || right_encode(|label|)
-                self.op_header(OpCode::Crypt, label);
-
-                // Derive an AEGIS-128L key and nonce.
-                let kn = self.derive_array::<$kdf_key_len>(b"key");
-                let (k, n) = kn.split_at($aead_key_len / 2);
-                let mut aegis = <$aead>::new(
-                    k.try_into().expect("should be 16 bytes"),
-                    n.try_into().expect("should be 16 bytes"),
-                );
-
-                // Encrypt the plaintext.
-                aegis.encrypt(in_out);
-
-                // Finalize the AEGIS-128L tags.
-                let (_, tag256) = aegis.finalize();
-
-                // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-                self.mix(b"tag", &tag256);
-            }
-
-            /// Decrypts the given slice in place.
-            #[inline]
-            pub fn decrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
-                // Append a Crypt op header with the label to the transcript.
-                //
-                //   0x04 || label || right_encode(|label|)
-                self.op_header(OpCode::Crypt, label);
-
-                // Derive an AEGIS-128L key and nonce.
-                let kn = self.derive_array::<$aead_key_len>(b"key");
-                let (k, n) = kn.split_at($aead_key_len / 2);
-                let mut aegis = <$aead>::new(
-                    k.try_into().expect("should be 16 bytes"),
-                    n.try_into().expect("should be 16 bytes"),
-                );
-
-                // Decrypt the ciphertext.
-                aegis.decrypt(in_out);
-
-                // Finalize the AEGIS-128L tags.
-                let (_, tag256) = aegis.finalize();
-
-                // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-                self.mix(b"tag", &tag256);
-            }
-
-            /// Seals the given mutable slice in place.
-            ///
-            /// The last [`TAG_LEN`] bytes of the slice will be overwritten with the authentication tag.
-            #[inline]
-            pub fn seal(&mut self, label: &[u8], in_out: &mut [u8]) {
-                // Split the buffer into plaintext and tag.
-                let (in_out, tag128_out) = in_out.split_at_mut(in_out.len() - TAG_LEN);
-
-                // Append an AuthCrypt op header with the label to the transcript.
-                //
-                //   0x05 || label || right_encode(|label|)
-                self.op_header(OpCode::AuthCrypt, label);
-
-                // Derive an AEGIS-128L key and nonce.
-                let kn = self.derive_array::<$kdf_key_len>(b"key");
-                let (k, n) = kn.split_at($kdf_key_len / 2);
-                let mut aegis = <$aead>::new(
-                    k.try_into().expect("should be 16 bytes"),
-                    n.try_into().expect("should be 16 bytes"),
-                );
-
-                // Encrypt the plaintext.
-                aegis.encrypt(in_out);
-
-                // Finalize the AEGIS-128L tags.
-                let (tag128, tag256) = aegis.finalize();
-
-                // Append the 128-bit AEGIS-128L tag to the ciphertext.
-                tag128_out.copy_from_slice(&tag128);
-
-                // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-                self.mix(b"tag", &tag256);
-            }
-
-            /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
-            /// was authenticated. The last [`TAG_LEN`] bytes of the slice will be unmodified.
-            #[inline]
-            #[must_use]
-            pub fn open<'ct>(&mut self, label: &[u8], in_out: &'ct mut [u8]) -> Option<&'ct [u8]> {
-                // Split the buffer into ciphertext and tag.
-                let (in_out, tag128_in) = in_out.split_at_mut(in_out.len() - TAG_LEN);
-
-                // Append an AuthCrypt op header with the label to the transcript.
-                //
-                //   0x05 || label || right_encode(|label|)
-                self.op_header(OpCode::AuthCrypt, label);
-
-                // Derive an AEGIS-128L key and nonce.
-                let kn = self.derive_array::<$kdf_key_len>(b"key");
-                let (k, n) = kn.split_at($kdf_key_len / 2);
-                let mut aegis = <$aead>::new(
-                    k.try_into().expect("should be 16 bytes"),
-                    n.try_into().expect("should be 16 bytes"),
-                );
-
-                // Decrypt the ciphertext.
-                aegis.decrypt(in_out);
-
-                // Finalize the AEGIS-128L tags.
-                let (tag128, tag256) = aegis.finalize();
-
-                // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-                self.mix(b"tag", &tag256);
-
-                // Check the tag against the counterfactual tag in constant time.
-                if tag128_in.ct_eq(&tag128).into() {
-                    // If the tag is verified, then the ciphertext is authentic. Return the slice of the
-                    // input which contains the plaintext.
-                    Some(in_out)
-                } else {
-                    // Otherwise, the ciphertext is inauthentic and we zero out the inauthentic plaintext to
-                    // avoid bugs where the caller forgets to check the return value of this function and
-                    // discloses inauthentic plaintext.
-                    in_out.fill(0);
-                    None
-                }
-            }
-
-            /// Clones the protocol and mixes `secrets` plus 64 random bytes into the clone. Passes the
-            /// clone to `f` and if `f` returns `Some(R)`, returns `R`. Iterates until a value is returned.
-            #[cfg(feature = "hedge")]
-            #[must_use]
-            pub fn hedge<R>(
-                &self,
-                mut rng: impl rand_core::CryptoRngCore,
-                secrets: &[impl AsRef<[u8]>],
-                max_tries: usize,
-                f: impl Fn(&mut Self) -> Option<R>,
-            ) -> R {
-                for _ in 0..max_tries {
-                    // Clone the protocol's state.
-                    let mut clone = self.clone();
-
-                    // Mix each secret into the clone.
-                    for s in secrets {
-                        clone.mix(b"secret", s.as_ref());
-                    }
-
-                    // Mix a random value into the clone.
-                    let mut r = [0u8; 64];
-                    rng.fill_bytes(&mut r);
-                    clone.mix(b"nonce", &r);
-
-                    // Call the given function with the clone and return if the function was successful.
-                    if let Some(r) = f(&mut clone) {
-                        return r;
-                    }
-                }
-
-                unreachable!("unable to hedge a valid value in {} tries", max_tries);
-            }
-
-            /// Appends an operation header with an optional label to the protocol transcript.
-            #[inline]
-            fn op_header(&mut self, op_code: OpCode, label: &[u8]) {
-                // Append the operation code and label to the transcript:
-                //
-                //   op_code || label || right_encode(|label|)
-                self.transcript.input_ikm(&[op_code as u8]);
-                self.transcript.input_ikm(label);
-                self.transcript.input_ikm(right_encode(&mut [0u8; 9], label.len() as u64 * 8));
-            }
-        }
-
-        /// A [`std::io::Write`] implementation which combines all written data into a single `Mix`
-        /// operation and passes all writes to an inner writer.
-        #[cfg(feature = "std")]
-        #[derive(Debug)]
-        pub struct MixWriter<W> {
-            protocol: $name,
-            inner: W,
-            len: u64,
-        }
-
-        #[cfg(feature = "std")]
-        impl<W: std::io::Write> MixWriter<W> {
-            /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
-            #[inline]
-            pub fn into_inner(mut self) -> ($name, W) {
-                // Append the right-encoded length to the transcript.
-                self.protocol.transcript.input_ikm(right_encode(&mut [0u8; 9], self.len * 8));
-                (self.protocol, self.inner)
-            }
-        }
-
-        #[cfg(feature = "std")]
-        impl<W: std::io::Write> std::io::Write for MixWriter<W> {
-            #[inline]
-            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-                // Track the written length.
-                self.len += buf.len() as u64;
-                // Append the written slice to the protocol transcript.
-                self.protocol.transcript.input_ikm(buf);
-                // Pass the slice to the inner writer and return the result.
-                self.inner.write(buf)
-            }
-
-            #[inline]
-            fn flush(&mut self) -> std::io::Result<()> {
-                self.inner.flush()
-            }
-        }
-    };
+/// A stateful object providing fine-grained symmetric-key cryptographic services like hashing,
+/// message authentication codes, pseudo-random functions, authenticated encryption, and more.
+#[derive(Debug, Clone)]
+pub struct Protocol {
+    transcript: HkdfExtract<Sha256>,
 }
 
-/// Provides [`Protocol128`], a Lockstitch protocol implementation combining SHA-256 and AEGIS-128L
-/// to provide 128-bit security with very high performance.
-pub mod sec128 {
-    define_protocol!(Protocol128, sha2::Sha256, crate::aegis_128l::Aegis128L, 32, 32);
+impl Protocol {
+    /// Creates a new protocol with the given domain.
+    #[inline]
+    pub fn new(domain: &str) -> Protocol {
+        // Initialize a protocol with an empty transcript.
+        let mut protocol = Protocol { transcript: HkdfExtract::new(None) };
 
-    #[cfg(all(test, feature = "std"))]
-    mod tests {
-        use std::io::{self, Cursor};
+        // Append the Init op header to the transcript with the domain as the label.
+        //
+        //   0x01 || domain || right_encode(|domain|)
+        protocol.op_header(OpCode::Init, domain.as_bytes());
 
-        use expect_test::expect;
+        protocol
+    }
 
-        use super::*;
+    /// Mixes the given label and slice into the protocol state.
+    #[inline]
+    pub fn mix(&mut self, label: &[u8], input: &[u8]) {
+        // Append a Mix op header with the label to the transcript.
+        //
+        //   0x02 || label || right_encode(|label|)
+        self.op_header(OpCode::Mix, label);
 
-        #[test]
-        fn known_answers() {
-            let mut protocol = Protocol128::new("com.example.kat");
-            protocol.mix(b"first", b"one");
-            protocol.mix(b"second", b"two");
+        // Append the input to the transcript with right-encoded length.
+        //
+        //   input || right_encode(|input|)
+        self.transcript.input_ikm(input);
+        self.transcript.input_ikm(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
+    }
 
-            expect!["4d8a58dbd43b1870"]
-                .assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
+    /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
+    /// operation and passing all writes to `inner`.
+    ///
+    /// Use [`MixWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
+    #[inline]
+    #[cfg(feature = "std")]
+    pub fn mix_writer<W: std::io::Write>(mut self, label: &[u8], inner: W) -> MixWriter<W> {
+        // Append a Mix op header with the label to the transcript.
+        self.op_header(OpCode::Mix, label);
 
-            let mut plaintext = b"this is an example".to_vec();
-            protocol.encrypt(b"fourth", &mut plaintext);
-            expect!["3d382e329a9c99992d7be4092b4ec1624bd1"].assert_eq(&hex::encode(plaintext));
+        // Move the protocol to a MixWriter.
+        MixWriter { protocol: self, inner, len: 0 }
+    }
 
-            let plaintext = b"this is an example";
-            let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
-            sealed[..plaintext.len()].copy_from_slice(plaintext);
-            protocol.seal(b"fifth", &mut sealed);
+    /// Derives output from the protocol's current state and fills the given slice with it.
+    #[inline]
+    pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
+        // Append a Derive op header with the label to the transcript.
+        //
+        //   0x03 || label || right_encode(|label|)
+        self.op_header(OpCode::Derive, label);
 
-            expect!["f200ec2bc1189c94f41235b5d86d58c83250670bc7a1ef052fca9ca3662a7ba735b7"]
-                .assert_eq(&hex::encode(sealed));
+        // Calculate HKDF-Extract("", transcript) and clear the transcript.
+        let (_, prk) = mem::replace(&mut self.transcript, HkdfExtract::new(None)).finalize();
 
-            expect!["57b0bf5b2934356d"]
-                .assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
-        }
+        // Use HKDF-Expand to derive a new KDF key and the requested output.
+        let mut kdf_key = [0u8; 32];
+        prk.expand(b"kdf-key", &mut kdf_key).expect("should expand KDF key");
+        prk.expand(b"output", out).expect("should expand output");
 
-        #[test]
-        fn readers() {
-            let mut slices = Protocol128::new("com.example.streams");
-            slices.mix(b"first", b"one");
-            slices.mix(b"second", b"two");
+        // Perform a Mix operation with the KDF key.
+        self.mix(b"kdf-key", &kdf_key);
 
-            let streams = Protocol128::new("com.example.streams");
-            let mut streams_write = streams.mix_writer(b"first", io::sink());
-            io::copy(&mut Cursor::new(b"one"), &mut streams_write)
-                .expect("cursor reads and sink writes should be infallible");
-            let (streams, _) = streams_write.into_inner();
+        // Perform a Mix operation with the output length.
+        self.mix(b"len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
+    }
 
-            let mut output = Vec::new();
-            let mut streams_write = streams.mix_writer(b"second", &mut output);
-            io::copy(&mut Cursor::new(b"two"), &mut streams_write)
-                .expect("cursor reads and sink writes should be infallible");
-            let (mut streams, output) = streams_write.into_inner();
+    /// Derives output from the protocol's current state and returns it as an `N`-byte array.
+    #[inline]
+    pub fn derive_array<const N: usize>(&mut self, label: &[u8]) -> [u8; N] {
+        let mut out = [0u8; N];
+        self.derive(label, &mut out);
+        out
+    }
 
-            assert_eq!(slices.derive_array::<16>(b"third"), streams.derive_array::<16>(b"third"));
-            assert_eq!(b"two".as_slice(), output);
-        }
+    /// Encrypts the given slice in place.
+    #[inline]
+    pub fn encrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
+        // Append a Crypt op header with the label to the transcript.
+        //
+        //   0x04 || label || right_encode(|label|)
+        self.op_header(OpCode::Crypt, label);
 
-        #[test]
-        #[cfg(feature = "hedge")]
-        fn hedging() {
-            let mut hedger = Protocol128::new("com.example.hedge");
-            hedger.mix(b"first", b"one");
-            let tag = hedger.hedge(rand::thread_rng(), &[b"two"], 10_000, |clone| {
-                let tag = clone.derive_array::<16>(b"tag");
-                (tag[0] == 0).then_some(tag)
-            });
+        // Derive an AEGIS-128L key and nonce.
+        let kn = self.derive_array::<32>(b"key");
+        let (k, n) = kn.split_at(16);
+        let mut aegis = Aegis128L::new(
+            k.try_into().expect("should be 16 bytes"),
+            n.try_into().expect("should be 16 bytes"),
+        );
 
-            assert_eq!(tag[0], 0);
+        // Encrypt the plaintext.
+        aegis.encrypt(in_out);
+
+        // Finalize the AEGIS-128L tags.
+        let (_, tag256) = aegis.finalize();
+
+        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
+        self.mix(b"tag", &tag256);
+    }
+
+    /// Decrypts the given slice in place.
+    #[inline]
+    pub fn decrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
+        // Append a Crypt op header with the label to the transcript.
+        //
+        //   0x04 || label || right_encode(|label|)
+        self.op_header(OpCode::Crypt, label);
+
+        // Derive an AEGIS-128L key and nonce.
+        let kn = self.derive_array::<32>(b"key");
+        let (k, n) = kn.split_at(16);
+        let mut aegis = Aegis128L::new(
+            k.try_into().expect("should be 16 bytes"),
+            n.try_into().expect("should be 16 bytes"),
+        );
+
+        // Decrypt the ciphertext.
+        aegis.decrypt(in_out);
+
+        // Finalize the AEGIS-128L tags.
+        let (_, tag256) = aegis.finalize();
+
+        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
+        self.mix(b"tag", &tag256);
+    }
+
+    /// Seals the given mutable slice in place.
+    ///
+    /// The last [`TAG_LEN`] bytes of the slice will be overwritten with the authentication tag.
+    #[inline]
+    pub fn seal(&mut self, label: &[u8], in_out: &mut [u8]) {
+        // Split the buffer into plaintext and tag.
+        let (in_out, tag128_out) = in_out.split_at_mut(in_out.len() - TAG_LEN);
+
+        // Append an AuthCrypt op header with the label to the transcript.
+        //
+        //   0x05 || label || right_encode(|label|)
+        self.op_header(OpCode::AuthCrypt, label);
+
+        // Derive an AEGIS-128L key and nonce.
+        let kn = self.derive_array::<32>(b"key");
+        let (k, n) = kn.split_at(16);
+        let mut aegis = Aegis128L::new(
+            k.try_into().expect("should be 16 bytes"),
+            n.try_into().expect("should be 16 bytes"),
+        );
+
+        // Encrypt the plaintext.
+        aegis.encrypt(in_out);
+
+        // Finalize the AEGIS-128L tags.
+        let (tag128, tag256) = aegis.finalize();
+
+        // Append the 128-bit AEGIS-128L tag to the ciphertext.
+        tag128_out.copy_from_slice(&tag128);
+
+        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
+        self.mix(b"tag", &tag256);
+    }
+
+    /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
+    /// was authenticated. The last [`TAG_LEN`] bytes of the slice will be unmodified.
+    #[inline]
+    #[must_use]
+    pub fn open<'ct>(&mut self, label: &[u8], in_out: &'ct mut [u8]) -> Option<&'ct [u8]> {
+        // Split the buffer into ciphertext and tag.
+        let (in_out, tag128_in) = in_out.split_at_mut(in_out.len() - TAG_LEN);
+
+        // Append an AuthCrypt op header with the label to the transcript.
+        //
+        //   0x05 || label || right_encode(|label|)
+        self.op_header(OpCode::AuthCrypt, label);
+
+        // Derive an AEGIS-128L key and nonce.
+        let kn = self.derive_array::<32>(b"key");
+        let (k, n) = kn.split_at(16);
+        let mut aegis = Aegis128L::new(
+            k.try_into().expect("should be 16 bytes"),
+            n.try_into().expect("should be 16 bytes"),
+        );
+
+        // Decrypt the ciphertext.
+        aegis.decrypt(in_out);
+
+        // Finalize the AEGIS-128L tags.
+        let (tag128, tag256) = aegis.finalize();
+
+        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
+        self.mix(b"tag", &tag256);
+
+        // Check the tag against the counterfactual tag in constant time.
+        if tag128_in.ct_eq(&tag128).into() {
+            // If the tag is verified, then the ciphertext is authentic. Return the slice of the
+            // input which contains the plaintext.
+            Some(in_out)
+        } else {
+            // Otherwise, the ciphertext is inauthentic and we zero out the inauthentic plaintext to
+            // avoid bugs where the caller forgets to check the return value of this function and
+            // discloses inauthentic plaintext.
+            in_out.fill(0);
+            None
         }
     }
-}
 
-/// Provides [`Protocol256`], a Lockstitch protocol implementation combining SHA-512 and AEGIS-256
-/// to provide 256-bit security with high performance.
-pub mod sec256 {
-    define_protocol!(Protocol256, sha2::Sha512, crate::aegis_256::Aegis256, 64, 64);
+    /// Clones the protocol and mixes `secrets` plus 64 random bytes into the clone. Passes the
+    /// clone to `f` and if `f` returns `Some(R)`, returns `R`. Iterates until a value is returned.
+    #[cfg(feature = "hedge")]
+    #[must_use]
+    pub fn hedge<R>(
+        &self,
+        mut rng: impl rand_core::CryptoRngCore,
+        secrets: &[impl AsRef<[u8]>],
+        max_tries: usize,
+        f: impl Fn(&mut Self) -> Option<R>,
+    ) -> R {
+        for _ in 0..max_tries {
+            // Clone the protocol's state.
+            let mut clone = self.clone();
 
-    #[cfg(all(test, feature = "std"))]
-    mod tests {
-        use expect_test::expect;
+            // Mix each secret into the clone.
+            for s in secrets {
+                clone.mix(b"secret", s.as_ref());
+            }
 
-        use super::*;
+            // Mix a random value into the clone.
+            let mut r = [0u8; 64];
+            rng.fill_bytes(&mut r);
+            clone.mix(b"nonce", &r);
 
-        #[test]
-        fn known_answers() {
-            let mut protocol = Protocol256::new("com.example.kat");
-            protocol.mix(b"first", b"one");
-            protocol.mix(b"second", b"two");
-
-            expect!["3815c12afa86b3f0"]
-                .assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
-
-            let mut plaintext = b"this is an example".to_vec();
-            protocol.encrypt(b"fourth", &mut plaintext);
-            expect!["61c4565f968f0b1e94a040bb1f6abc81607a"].assert_eq(&hex::encode(plaintext));
-
-            let plaintext = b"this is an example";
-            let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
-            sealed[..plaintext.len()].copy_from_slice(plaintext);
-            protocol.seal(b"fifth", &mut sealed);
-
-            expect!["6f3ca466b1326974f6b36891b48e09cf08cbacccd12fe959a71e9e41772fbe301608"]
-                .assert_eq(&hex::encode(sealed));
-
-            expect!["71b771900301a2e8"]
-                .assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+            // Call the given function with the clone and return if the function was successful.
+            if let Some(r) = f(&mut clone) {
+                return r;
+            }
         }
+
+        unreachable!("unable to hedge a valid value in {} tries", max_tries);
+    }
+
+    /// Appends an operation header with an optional label to the protocol transcript.
+    #[inline]
+    fn op_header(&mut self, op_code: OpCode, label: &[u8]) {
+        // Append the operation code and label to the transcript:
+        //
+        //   op_code || label || right_encode(|label|)
+        self.transcript.input_ikm(&[op_code as u8]);
+        self.transcript.input_ikm(label);
+        self.transcript.input_ikm(right_encode(&mut [0u8; 9], label.len() as u64 * 8));
     }
 }
 
 /// All Lockstitch operation types.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum OpCode {
+enum OpCode {
     /// Initialize a protocol with a domain separation string.
     Init = 0x01,
     /// Mix a labeled input into the protocol transcript.
@@ -456,11 +299,50 @@ pub(crate) enum OpCode {
     AuthCrypt = 0x05,
 }
 
+/// A [`std::io::Write`] implementation which combines all written data into a single `Mix`
+/// operation and passes all writes to an inner writer.
+#[cfg(feature = "std")]
+#[derive(Debug)]
+pub struct MixWriter<W> {
+    protocol: Protocol,
+    inner: W,
+    len: u64,
+}
+
+#[cfg(feature = "std")]
+impl<W: std::io::Write> MixWriter<W> {
+    /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
+    #[inline]
+    pub fn into_inner(mut self) -> (Protocol, W) {
+        // Append the right-encoded length to the transcript.
+        self.protocol.transcript.input_ikm(right_encode(&mut [0u8; 9], self.len * 8));
+        (self.protocol, self.inner)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<W: std::io::Write> std::io::Write for MixWriter<W> {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        // Track the written length.
+        self.len += buf.len() as u64;
+        // Append the written slice to the protocol transcript.
+        self.protocol.transcript.input_ikm(buf);
+        // Pass the slice to the inner writer and return the result.
+        self.inner.write(buf)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 /// Encodes a value using [NIST SP 800-185][]'s `right_encode`.
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
-pub(crate) fn right_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
+fn right_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
     let len = buf.len();
     buf[..len - 1].copy_from_slice(&value.to_be_bytes());
     let n = (len - 1 - value.leading_zeros() as usize / 8).max(1);
@@ -470,7 +352,84 @@ pub(crate) fn right_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
 
 #[cfg(all(test, feature = "std"))]
 mod tests {
+    use std::io::{self, Cursor};
+
+    use expect_test::expect;
+
     use super::*;
+
+    #[test]
+    fn known_answers() {
+        let mut protocol = Protocol::new("com.example.kat");
+        protocol.mix(b"first", b"one");
+        protocol.mix(b"second", b"two");
+
+        expect!["4d8a58dbd43b1870"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
+
+        let mut plaintext = b"this is an example".to_vec();
+        protocol.encrypt(b"fourth", &mut plaintext);
+        expect!["3d382e329a9c99992d7be4092b4ec1624bd1"].assert_eq(&hex::encode(plaintext));
+
+        let plaintext = b"this is an example";
+        let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
+        sealed[..plaintext.len()].copy_from_slice(plaintext);
+        protocol.seal(b"fifth", &mut sealed);
+
+        expect!["f200ec2bc1189c94f41235b5d86d58c83250670bc7a1ef052fca9ca3662a7ba735b7"]
+            .assert_eq(&hex::encode(sealed));
+
+        expect!["57b0bf5b2934356d"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+    }
+
+    #[test]
+    fn readers() {
+        let mut slices = Protocol::new("com.example.streams");
+        slices.mix(b"first", b"one");
+        slices.mix(b"second", b"two");
+
+        let streams = Protocol::new("com.example.streams");
+        let mut streams_write = streams.mix_writer(b"first", io::sink());
+        io::copy(&mut Cursor::new(b"one"), &mut streams_write)
+            .expect("cursor reads and sink writes should be infallible");
+        let (streams, _) = streams_write.into_inner();
+
+        let mut output = Vec::new();
+        let mut streams_write = streams.mix_writer(b"second", &mut output);
+        io::copy(&mut Cursor::new(b"two"), &mut streams_write)
+            .expect("cursor reads and sink writes should be infallible");
+        let (mut streams, output) = streams_write.into_inner();
+
+        assert_eq!(slices.derive_array::<16>(b"third"), streams.derive_array::<16>(b"third"));
+        assert_eq!(b"two".as_slice(), output);
+    }
+
+    #[test]
+    #[cfg(feature = "hedge")]
+    fn hedging() {
+        let mut hedger = Protocol::new("com.example.hedge");
+        hedger.mix(b"first", b"one");
+        let tag = hedger.hedge(rand::thread_rng(), &[b"two"], 10_000, |clone| {
+            let tag = clone.derive_array::<16>(b"tag");
+            (tag[0] == 0).then_some(tag)
+        });
+
+        assert_eq!(tag[0], 0);
+    }
+
+    #[test]
+    fn edge_case() {
+        let mut sender = Protocol::new("");
+        let mut message = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+        sender.encrypt(b"message", &mut message);
+        let tag_s = sender.derive_array::<TAG_LEN>(b"tag");
+
+        let mut receiver = Protocol::new("");
+        receiver.decrypt(b"message", &mut message);
+        let tag_r = receiver.derive_array::<TAG_LEN>(b"tag");
+
+        assert_eq!(message, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+        assert_eq!(tag_s, tag_r);
+    }
 
     #[test]
     fn right_encode_injective() {

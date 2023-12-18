@@ -40,7 +40,7 @@ For example, we can create message digests:
 
 ```rust
 fn digest(message: &[u8]) -> [u8; 32] {
-  let mut md = lockstitch::sec128::Protocol128::new("com.example.md");
+  let mut md = lockstitch::Protocol::new("com.example.md");
   md.mix(b"message", message);
   md.derive_array(b"digest")
 }
@@ -53,7 +53,7 @@ We can create message authentication codes:
 
 ```rust
 fn mac(key: &[u8], message: &[u8]) -> [u8; 16] {
-  let mut mac = lockstitch::sec128::Protocol128::new("com.example.mac");
+  let mut mac = lockstitch::Protocol::new("com.example.mac");
   mac.mix(b"key", key);
   mac.mix(b"message", message);
   mac.derive_array(b"tag")
@@ -71,7 +71,7 @@ fn aead_encrypt(key: &[u8], nonce: &[u8], ad: &[u8], plaintext: &[u8]) -> Vec<u8
   let mut out = vec![0u8; plaintext.len() + lockstitch::TAG_LEN];
   out[..plaintext.len()].copy_from_slice(plaintext);
 
-  let mut aead = lockstitch::sec128::Protocol128::new("com.example.aead");
+  let mut aead = lockstitch::Protocol::new("com.example.aead");
   aead.mix(b"key", key);
   aead.mix(b"nonce", nonce);
   aead.mix(b"ad", ad);
@@ -83,7 +83,7 @@ fn aead_encrypt(key: &[u8], nonce: &[u8], ad: &[u8], plaintext: &[u8]) -> Vec<u8
 fn aead_decrypt(key: &[u8], nonce: &[u8], ad: &[u8], ciphertext: &[u8]) -> Option<Vec<u8>> {
   let mut ciphertext = ciphertext.to_vec();
 
-  let mut aead = lockstitch::sec128::Protocol128::new("com.example.aead");
+  let mut aead = lockstitch::Protocol::new("com.example.aead");
   aead.mix(b"key", key);
   aead.mix(b"nonce", nonce);
   aead.mix(b"ad", ad);

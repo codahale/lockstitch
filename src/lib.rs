@@ -4,7 +4,7 @@
 
 use core::{fmt::Debug, mem};
 
-use crate::aegis::{Aegis, Aegis128L, Aegis256};
+use crate::aegis::{Aegis128L, Aegis256};
 
 use hkdf::{Hkdf, HkdfExtract};
 use sha2::{Sha256, Sha512};
@@ -30,6 +30,18 @@ mod private {
     pub trait Sealed {}
 }
 
+/// A wrapper trait for the cipher implementations.
+pub trait Cipher {
+    /// Encrypts the given slice in place.
+    fn encrypt(&mut self, in_out: &mut [u8]);
+
+    /// Decrypts the given slice in place.
+    fn decrypt(&mut self, in_out: &mut [u8]);
+
+    /// Finalizes the cipher state into a pair of 128-bit and 256-bit authentication tags.
+    fn finalize(self) -> ([u8; 16], [u8; 32]);
+}
+
 /// A typeclass trait for the two different security levels provided. The two available
 /// implementations are [`B128`], which combines HKDF-SHA-256 and AEGIS-128L to offer 128-bit
 /// security, and [`B256`], which combines HKDF-SHA-512 and AEGIS-256 to offer 256-bit security.
@@ -41,7 +53,7 @@ pub trait SecurityLevel: private::Sealed + Clone + Copy {
     type Prk;
 
     /// The type of AEGIS cipher used.
-    type Cipher: Aegis;
+    type Cipher: Cipher;
 
     /// Creates a new, empty transcript.
     fn new_transcript() -> Self::Transcript;

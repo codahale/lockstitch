@@ -1,4 +1,4 @@
-use crate::{intrinsics::*, Aegis};
+use crate::{intrinsics::*, Cipher};
 
 /// An AEGIS-256 instance.
 #[derive(Debug, Clone)]
@@ -156,7 +156,7 @@ impl Aegis256 {
     }
 }
 
-impl Aegis for Aegis256 {
+impl Cipher for Aegis256 {
     fn encrypt(&mut self, in_out: &mut [u8]) {
         // Process whole blocks of plaintext.
         let mut chunks = in_out.chunks_exact_mut(AES_BLOCK_LEN);

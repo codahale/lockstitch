@@ -1,4 +1,4 @@
-use crate::{intrinsics::*, Aegis};
+use crate::{intrinsics::*, Cipher};
 
 /// The length of an AEGIS-128L block.
 const BLOCK_LEN: usize = 32;
@@ -165,7 +165,7 @@ impl Aegis128L {
     }
 }
 
-impl Aegis for Aegis128L {
+impl Cipher for Aegis128L {
     fn encrypt(&mut self, in_out: &mut [u8]) {
         // Process whole blocks of plaintext.
         let mut chunks = in_out.chunks_exact_mut(BLOCK_LEN);

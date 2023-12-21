@@ -58,6 +58,7 @@ rust_2018_idioms = "warn"
 trivial_casts = "warn"
 unused_lifetimes = "warn"
 unused_qualifications = "warn"
+unsafe_op_in_unsafe_fn = "deny"
 missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]

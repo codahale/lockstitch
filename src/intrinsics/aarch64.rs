@@ -36,22 +36,24 @@ pub fn xor3(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
 
     // Use the EOR3 instruction if enabled.
     #[cfg(target_feature = "sha3")]
-    unsafe fn veor3q_u8(mut a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
-        asm!(
-            "EOR3 {a:v}.16B, {a:v}.16B, {b:v}.16B, {c:v}.16B",
-            a = inlateout(vreg) a, b = in(vreg) b, c = in(vreg) c,
-            options(pure, nomem, nostack, preserves_flags)
-        );
+    fn veor3q_u8(mut a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
+        unsafe {
+            asm!(
+                "EOR3 {a:v}.16B, {a:v}.16B, {b:v}.16B, {c:v}.16B",
+                a = inlateout(vreg) a, b = in(vreg) b, c = in(vreg) c,
+                options(pure, nomem, nostack, preserves_flags)
+            );
+        };
         a
     }
 
     // Otherwise, fall back to two EOR operations.
     #[cfg(not(target_feature = "sha3"))]
-    unsafe fn veor3q_u8(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
+    fn veor3q_u8(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
         xor(a, xor(b, c))
     }
 
-    unsafe { veor3q_u8(a, b, c) }
+    veor3q_u8(a, b, c)
 }
 
 /// Bitwise ANDs the given AES blocks.

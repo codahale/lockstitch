@@ -41,8 +41,7 @@ function init(domain):
   transcript
 ```
 
-> [!NOTE]
-> The `Init` operation is only performed once, when a protocol is initialized.
+**N.B.:** The `Init` operation is only performed once, when a protocol is initialized.
 
 `Init` encodes the length of the domain in bits using [NIST SP 800-185][]'s `right_encode`. This
 ensures an unambiguous encoding for any combination of domain and second operation in the
@@ -77,9 +76,8 @@ function mix(transcript, label, input):
 input, regardless of length.  The use of `right_encode` the length of the input supports incremental
 processing of data streams whose sizes are not known in advance.
 
-> [!IMPORTANT]
-> Processing more than 2^61 bytes of input without [deriving output](#derive) will result in
-> undefined behavior.
+**IMPORTANT:** Processing more than 2^61 bytes of input without [deriving output](#derive) will
+result in undefined behavior.
 
 ### `Derive`
 
@@ -112,8 +110,7 @@ A shorter `Derive` operation will return a prefix of a longer one (e.g. `Derive(
 the protocols' transcripts will be different. If a use case requires `Derive` output to be dependent
 on its length, include the length in a `Mix` operation beforehand.
 
-> [!IMPORTANT]
-> Each `Derive` operation is limited to 8160 bytes of output.
+**IMPORTANT:** Each `Derive` operation is limited to 8160 bytes of output.
 
 #### KDF Chains
 
@@ -132,10 +129,9 @@ properties:
   possession of the protocol's transcript as long as one of the future inputs to the protocol is
   secret.
 
-> [!NOTE]
-> HKDF-Extract uses HMAC to derive a pseudo-random key from the transcript, which is not vulnerable
-> to length-extension attacks. Given this, the use of `right_encode` to encode labels and inputs is
-> securely injective.
+**N.B.:** HKDF-Extract uses HMAC to derive a pseudo-random key from the transcript, which is not
+vulnerable to length-extension attacks. Given this, the use of `right_encode` to encode labels and
+inputs is securely injective.
 
 ### `Encrypt`/`Decrypt`
 
@@ -171,10 +167,9 @@ inclusion of the 256-bit tag ensures the protocol's transcript is dependent on b
 AEGIS-128L is key committing (i.e. the probability of an attacker finding a different key, nonce, or
 plaintext which produces the same authentication tag is negligible).
 
-> [!NOTE]
-> [AEGIS-128L by itself is not fully committing][Iso23], as tag collisions can be found if
-> authenticated data is attacker-controlled. Lockstitch does not pass authenticated data to
-> AEGIS-128L, however, mooting this type of attack.
+**N.B.:** [AEGIS-128L by itself is not fully committing][Iso23], as tag collisions can be found if
+authenticated data is attacker-controlled. Lockstitch does not pass authenticated data to
+AEGIS-128L, however, mooting this type of attack.
 
 [Iso23]: https://eprint.iacr.org/2023/1495
 
@@ -391,13 +386,12 @@ function hpke_decrypt(receiver, ephemeral.pub, ciphertext, tag):
   plaintext
 ```
 
-> [!WARNING]
-> This construction does not provide authentication in the public key setting. An adversary in
-> possession of the receiver's public key (i.e. anyone) can create ciphertexts which will decrypt
-> as valid. In the symmetric key setting (i.e. an adversary without the receiver's public key), this
-> is IND-CCA secure, but the real-world scenarios in which that applies are minimal. As-is, the tag
-> is more like a checksum than a MAC, preventing modifications only by adversaries who don't have
-> the recipient's public key.
+**WARNING:** This construction does not provide authentication in the public key setting. An
+adversary in possession of the receiver's public key (i.e. anyone) can create ciphertexts which will
+decrypt as valid. In the symmetric key setting (i.e. an adversary without the receiver's public
+key), this is IND-CCA secure, but the real-world scenarios in which that applies are minimal. As-is,
+the tag is more like a checksum than a MAC, preventing modifications only by adversaries who don't
+have the recipient's public key.
 
 Using a static ECDH shared secret (i.e. `ecdh(receiver.pub, sender.priv)`) would add implicit
 authentication but would require a nonce or an ephemeral key to be IND-CCA secure. The resulting

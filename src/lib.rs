@@ -62,8 +62,8 @@ impl Protocol {
         self.transcript.input_ikm(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
     }
 
-    /// Moves the protocol into a [`Write`] implementation, mixing all written data in a single
-    /// operation and passing all writes to `inner`.
+    /// Moves the protocol into a [`std::io::Write`] implementation, mixing all written data in a
+    /// single operation and passing all writes to `inner`.
     ///
     /// Use [`MixWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
     #[inline]

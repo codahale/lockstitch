@@ -5,8 +5,8 @@ use lockstitch::{subtle::ConstantTimeEq, Protocol, TAG_LEN};
 fn hash() {
     fn md(domain: &str, m: &[u8]) -> [u8; 32] {
         let mut md = Protocol::new(domain);
-        md.mix(b"message", m);
-        md.derive_array(b"digest")
+        md.mix("message", m);
+        md.derive_array("digest")
     }
 
     bolero::check!().with_type::<(String, Vec<u8>, String, Vec<u8>)>().for_each(
@@ -27,9 +27,9 @@ fn hash() {
 fn mac() {
     fn mac(domain: &str, k: &[u8], m: &[u8]) -> [u8; TAG_LEN] {
         let mut mac = Protocol::new(domain);
-        mac.mix(b"key", k);
-        mac.mix(b"message", m);
-        mac.derive_array::<TAG_LEN>(b"tag")
+        mac.mix("key", k);
+        mac.mix("message", m);
+        mac.derive_array::<TAG_LEN>("tag")
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, TypeGenerator)]
@@ -54,21 +54,21 @@ fn mac() {
 fn stream_cipher() {
     fn enc(domain: &str, k: &[u8], n: &[u8], p: &[u8]) -> Vec<u8> {
         let mut stream = Protocol::new(domain);
-        stream.mix(b"key", k);
-        stream.mix(b"nonce", n);
+        stream.mix("key", k);
+        stream.mix("nonce", n);
 
         let mut c = p.to_vec();
-        stream.encrypt(b"message", &mut c);
+        stream.encrypt("message", &mut c);
         c
     }
 
     fn dec(domain: &str, k: &[u8], n: &[u8], c: &[u8]) -> Vec<u8> {
         let mut stream = Protocol::new(domain);
-        stream.mix(b"key", k);
-        stream.mix(b"nonce", n);
+        stream.mix("key", k);
+        stream.mix("nonce", n);
 
         let mut p = c.to_vec();
-        stream.decrypt(b"message", &mut p);
+        stream.decrypt("message", &mut p);
         p
     }
 
@@ -98,25 +98,25 @@ fn stream_cipher() {
 fn aead() {
     fn ae_enc(domain: &str, k: &[u8], n: &[u8], d: &[u8], p: &[u8]) -> Vec<u8> {
         let mut aead = Protocol::new(domain);
-        aead.mix(b"key", k);
-        aead.mix(b"nonce", n);
-        aead.mix(b"ad", d);
+        aead.mix("key", k);
+        aead.mix("nonce", n);
+        aead.mix("ad", d);
 
         let mut out = vec![0u8; p.len() + TAG_LEN];
         out[..p.len()].copy_from_slice(p);
-        aead.seal(b"message", &mut out);
+        aead.seal("message", &mut out);
 
         out
     }
 
     fn ae_dec(domain: &str, k: &[u8], n: &[u8], d: &[u8], c: &[u8]) -> Option<Vec<u8>> {
         let mut aead = Protocol::new(domain);
-        aead.mix(b"key", k);
-        aead.mix(b"nonce", n);
-        aead.mix(b"ad", d);
+        aead.mix("key", k);
+        aead.mix("nonce", n);
+        aead.mix("ad", d);
 
         let mut p = c.to_vec();
-        aead.open(b"message", &mut p).map(|p| p.to_vec())
+        aead.open("message", &mut p).map(|p| p.to_vec())
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, TypeGenerator)]
@@ -148,17 +148,17 @@ fn daead() {
 
         // Mix in the key and associated data.
         let mut dae = Protocol::new(domain);
-        dae.mix(b"key", k);
-        dae.mix(b"ad", d);
+        dae.mix("key", k);
+        dae.mix("ad", d);
 
         // Use a cloned protocol to mix the plaintext and derive a synthetic IV.
         let mut siv = dae.clone();
-        siv.mix(b"message", p);
-        siv.derive(b"iv", iv);
+        siv.mix("message", p);
+        siv.derive("iv", iv);
 
         // Mix the IV and encrypt the ciphertext.
-        dae.mix(b"iv", iv);
-        dae.encrypt(b"message", ciphertext);
+        dae.mix("iv", iv);
+        dae.encrypt("message", ciphertext);
 
         out
     }
@@ -169,19 +169,19 @@ fn daead() {
 
         // Mix in the key and associated data.
         let mut dae = Protocol::new(domain);
-        dae.mix(b"key", k);
-        dae.mix(b"ad", d);
+        dae.mix("key", k);
+        dae.mix("ad", d);
 
         // Clone the protocol with just the key and associated data mixed in.
         let mut siv = dae.clone();
 
         // Mix the IV and decrypt the ciphertext.
-        dae.mix(b"iv", iv);
-        dae.decrypt(b"message", &mut plaintext);
+        dae.mix("iv", iv);
+        dae.decrypt("message", &mut plaintext);
 
         // Re-derive the synthetic IV given the unauthenticated plaintext.
-        siv.mix(b"message", &plaintext);
-        let iv_p = siv.derive_array::<TAG_LEN>(b"iv");
+        siv.mix("message", &plaintext);
+        let iv_p = siv.derive_array::<TAG_LEN>("iv");
 
         bool::from(iv.ct_eq(&iv_p)).then_some(plaintext)
     }
@@ -207,14 +207,14 @@ fn daead() {
 
 #[test]
 fn tuple_hash() {
-    type TupleVec = Vec<(Vec<u8>, Vec<u8>)>;
+    type TupleVec = Vec<(String, Vec<u8>)>;
 
     fn tuple_hash(domain: &str, data: &TupleVec) -> [u8; 32] {
         let mut tuple_hash = Protocol::new(domain);
         for (l, d) in data {
             tuple_hash.mix(l, d);
         }
-        tuple_hash.derive_array(b"digest")
+        tuple_hash.derive_array("digest")
     }
 
     bolero::check!().with_type::<(String, TupleVec, String, TupleVec)>().for_each(

@@ -5,12 +5,12 @@ use lockstitch::{Protocol, TAG_LEN};
 
 #[derive(Clone, Debug, PartialEq)]
 enum Input {
-    Mix(Vec<u8>, Vec<u8>),
-    Derive(Vec<u8>, usize),
-    Encrypt(Vec<u8>, Vec<u8>),
-    Decrypt(Vec<u8>, Vec<u8>),
-    Seal(Vec<u8>, Vec<u8>),
-    Open(Vec<u8>, Vec<u8>),
+    Mix(String, Vec<u8>),
+    Derive(String, usize),
+    Encrypt(String, Vec<u8>),
+    Decrypt(String, Vec<u8>),
+    Seal(String, Vec<u8>),
+    Open(String, Vec<u8>),
 }
 
 impl TypeGenerator for Input {
@@ -50,7 +50,7 @@ impl TypeGenerator for Transcript {
         let mut t = Transcript { domain: driver.gen()?, inputs: driver.gen()? };
 
         // All transcripts must end with a Derive operation to capture the final protocol state.
-        t.inputs.push(Input::Derive(b"final".to_vec(), 16));
+        t.inputs.push(Input::Derive("final".into(), 16));
 
         Some(t)
     }

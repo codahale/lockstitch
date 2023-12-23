@@ -11,8 +11,8 @@ const LENS: &[usize] = &[16, 256, 1024, 16 * 1024, 1024 * 1024];
 fn hash<const LEN: usize>(bencher: divan::Bencher) {
     bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_refs(|message| {
         let mut protocol = Protocol::new("hash");
-        protocol.mix(b"message", message);
-        protocol.derive_array::<32>(b"digest")
+        protocol.mix("message", message);
+        protocol.derive_array::<32>("digest")
     });
 }
 
@@ -23,10 +23,10 @@ fn hash_writer<const LEN: usize>(bencher: divan::Bencher) {
         .counter(BytesCount::new(LEN))
         .bench_values(|mut input| {
             let protocol = Protocol::new("hash");
-            let mut writer = protocol.mix_writer(b"message", io::sink());
+            let mut writer = protocol.mix_writer("message", io::sink());
             io::copy(&mut input, &mut writer).expect("mix writes should be infallible");
             let (mut protocol, _) = writer.into_inner();
-            protocol.derive_array::<32>(b"digest")
+            protocol.derive_array::<32>("digest")
         });
 }
 
@@ -37,9 +37,9 @@ fn stream<const LEN: usize>(bencher: divan::Bencher) {
     bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_values(
         |mut block| {
             let mut protocol = Protocol::new("stream");
-            protocol.mix(b"key", &key);
-            protocol.mix(b"nonce", &nonce);
-            protocol.encrypt(b"message", &mut block);
+            protocol.mix("key", &key);
+            protocol.mix("nonce", &nonce);
+            protocol.encrypt("message", &mut block);
             block
         },
     );
@@ -53,10 +53,10 @@ fn aead<const LEN: usize>(bencher: divan::Bencher) {
     bencher.with_inputs(|| vec![0u8; LEN + TAG_LEN]).counter(BytesCount::new(LEN)).bench_values(
         |mut block| {
             let mut protocol = Protocol::new("aead");
-            protocol.mix(b"key", &key);
-            protocol.mix(b"nonce", &nonce);
-            protocol.mix(b"ad", &ad);
-            protocol.seal(b"message", &mut block);
+            protocol.mix("key", &key);
+            protocol.mix("nonce", &nonce);
+            protocol.mix("ad", &ad);
+            protocol.seal("message", &mut block);
             block
         },
     );
@@ -70,8 +70,8 @@ fn prf<const LEN: usize>(bencher: divan::Bencher) {
     bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_values(
         |mut block| {
             let mut protocol = Protocol::new("prf");
-            protocol.mix(b"key", &key);
-            protocol.derive(b"output", &mut block);
+            protocol.mix("key", &key);
+            protocol.derive("output", &mut block);
             block
         },
     );

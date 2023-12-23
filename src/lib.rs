@@ -42,14 +42,14 @@ impl Protocol {
         // Append the Init op header to the transcript with the domain as the label.
         //
         //   0x01 || domain || right_encode(|domain|)
-        protocol.op_header(OpCode::Init, domain.as_bytes());
+        protocol.op_header(OpCode::Init, domain);
 
         protocol
     }
 
     /// Mixes the given label and slice into the protocol state.
     #[inline]
-    pub fn mix(&mut self, label: &[u8], input: &[u8]) {
+    pub fn mix(&mut self, label: &str, input: &[u8]) {
         // Append a Mix op header with the label to the transcript.
         //
         //   0x02 || label || right_encode(|label|)
@@ -68,7 +68,7 @@ impl Protocol {
     /// Use [`MixWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
     #[inline]
     #[cfg(feature = "std")]
-    pub fn mix_writer<W: std::io::Write>(mut self, label: &[u8], inner: W) -> MixWriter<W> {
+    pub fn mix_writer<W: std::io::Write>(mut self, label: &str, inner: W) -> MixWriter<W> {
         // Append a Mix op header with the label to the transcript.
         self.op_header(OpCode::Mix, label);
 
@@ -78,7 +78,7 @@ impl Protocol {
 
     /// Derives output from the protocol's current state and fills the given slice with it.
     #[inline]
-    pub fn derive(&mut self, label: &[u8], out: &mut [u8]) {
+    pub fn derive(&mut self, label: &str, out: &mut [u8]) {
         // Append a Derive op header with the label to the transcript.
         //
         //   0x03 || label || right_encode(|label|)
@@ -93,15 +93,15 @@ impl Protocol {
         prk.expand(b"output", out).expect("should expand output");
 
         // Perform a Mix operation with the KDF key.
-        self.mix(b"kdf-key", &kdf_key);
+        self.mix("kdf-key", &kdf_key);
 
         // Perform a Mix operation with the output length.
-        self.mix(b"len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
+        self.mix("len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
     }
 
     /// Derives output from the protocol's current state and returns it as an `N`-byte array.
     #[inline]
-    pub fn derive_array<const N: usize>(&mut self, label: &[u8]) -> [u8; N] {
+    pub fn derive_array<const N: usize>(&mut self, label: &str) -> [u8; N] {
         let mut out = [0u8; N];
         self.derive(label, &mut out);
         out
@@ -109,14 +109,14 @@ impl Protocol {
 
     /// Encrypts the given slice in place.
     #[inline]
-    pub fn encrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
+    pub fn encrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Append a Crypt op header with the label to the transcript.
         //
         //   0x04 || label || right_encode(|label|)
         self.op_header(OpCode::Crypt, label);
 
         // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>(b"key");
+        let kn = self.derive_array::<32>("key");
         let (k, n) = kn.split_at(16);
         let mut aegis = Aegis128L::new(
             k.try_into().expect("should be 16 bytes"),
@@ -130,19 +130,19 @@ impl Protocol {
         let (_, tag256) = aegis.finalize();
 
         // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-        self.mix(b"tag", &tag256);
+        self.mix("tag", &tag256);
     }
 
     /// Decrypts the given slice in place.
     #[inline]
-    pub fn decrypt(&mut self, label: &[u8], in_out: &mut [u8]) {
+    pub fn decrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Append a Crypt op header with the label to the transcript.
         //
         //   0x04 || label || right_encode(|label|)
         self.op_header(OpCode::Crypt, label);
 
         // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>(b"key");
+        let kn = self.derive_array::<32>("key");
         let (k, n) = kn.split_at(16);
         let mut aegis = Aegis128L::new(
             k.try_into().expect("should be 16 bytes"),
@@ -156,14 +156,14 @@ impl Protocol {
         let (_, tag256) = aegis.finalize();
 
         // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-        self.mix(b"tag", &tag256);
+        self.mix("tag", &tag256);
     }
 
     /// Seals the given mutable slice in place.
     ///
     /// The last [`TAG_LEN`] bytes of the slice will be overwritten with the authentication tag.
     #[inline]
-    pub fn seal(&mut self, label: &[u8], in_out: &mut [u8]) {
+    pub fn seal(&mut self, label: &str, in_out: &mut [u8]) {
         // Split the buffer into plaintext and tag.
         let (in_out, tag128_out) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
@@ -173,7 +173,7 @@ impl Protocol {
         self.op_header(OpCode::AuthCrypt, label);
 
         // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>(b"key");
+        let kn = self.derive_array::<32>("key");
         let (k, n) = kn.split_at(16);
         let mut aegis = Aegis128L::new(
             k.try_into().expect("should be 16 bytes"),
@@ -190,14 +190,14 @@ impl Protocol {
         tag128_out.copy_from_slice(&tag128);
 
         // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-        self.mix(b"tag", &tag256);
+        self.mix("tag", &tag256);
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
     /// was authenticated. The last [`TAG_LEN`] bytes of the slice will be unmodified.
     #[inline]
     #[must_use]
-    pub fn open<'ct>(&mut self, label: &[u8], in_out: &'ct mut [u8]) -> Option<&'ct [u8]> {
+    pub fn open<'ct>(&mut self, label: &str, in_out: &'ct mut [u8]) -> Option<&'ct [u8]> {
         // Split the buffer into ciphertext and tag.
         let (in_out, tag128_in) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
@@ -207,7 +207,7 @@ impl Protocol {
         self.op_header(OpCode::AuthCrypt, label);
 
         // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>(b"key");
+        let kn = self.derive_array::<32>("key");
         let (k, n) = kn.split_at(16);
         let mut aegis = Aegis128L::new(
             k.try_into().expect("should be 16 bytes"),
@@ -221,7 +221,7 @@ impl Protocol {
         let (tag128, tag256) = aegis.finalize();
 
         // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-        self.mix(b"tag", &tag256);
+        self.mix("tag", &tag256);
 
         // Check the tag against the counterfactual tag in constant time.
         if tag128_in.ct_eq(&tag128).into() {
@@ -254,13 +254,13 @@ impl Protocol {
 
             // Mix each secret into the clone.
             for s in secrets {
-                clone.mix(b"secret", s.as_ref());
+                clone.mix("secret", s.as_ref());
             }
 
             // Mix a random value into the clone.
             let mut r = [0u8; 64];
             rng.fill_bytes(&mut r);
-            clone.mix(b"nonce", &r);
+            clone.mix("nonce", &r);
 
             // Call the given function with the clone and return if the function was successful.
             if let Some(r) = f(&mut clone) {
@@ -273,12 +273,12 @@ impl Protocol {
 
     /// Appends an operation header with an optional label to the protocol transcript.
     #[inline]
-    fn op_header(&mut self, op_code: OpCode, label: &[u8]) {
+    fn op_header(&mut self, op_code: OpCode, label: &str) {
         // Append the operation code and label to the transcript:
         //
         //   op_code || label || right_encode(|label|)
         self.transcript.input_ikm(&[op_code as u8]);
-        self.transcript.input_ikm(label);
+        self.transcript.input_ikm(label.as_bytes());
         self.transcript.input_ikm(right_encode(&mut [0u8; 9], label.len() as u64 * 8));
     }
 }
@@ -360,45 +360,45 @@ mod tests {
     #[test]
     fn known_answers() {
         let mut protocol = Protocol::new("com.example.kat");
-        protocol.mix(b"first", b"one");
-        protocol.mix(b"second", b"two");
+        protocol.mix("first", b"one");
+        protocol.mix("second", b"two");
 
-        expect!["4d8a58dbd43b1870"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"third")));
+        expect!["4d8a58dbd43b1870"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
-        protocol.encrypt(b"fourth", &mut plaintext);
+        protocol.encrypt("fourth", &mut plaintext);
         expect!["3d382e329a9c99992d7be4092b4ec1624bd1"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
-        protocol.seal(b"fifth", &mut sealed);
+        protocol.seal("fifth", &mut sealed);
 
         expect!["f200ec2bc1189c94f41235b5d86d58c83250670bc7a1ef052fca9ca3662a7ba735b7"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["57b0bf5b2934356d"].assert_eq(&hex::encode(protocol.derive_array::<8>(b"sixth")));
+        expect!["57b0bf5b2934356d"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]
     fn readers() {
         let mut slices = Protocol::new("com.example.streams");
-        slices.mix(b"first", b"one");
-        slices.mix(b"second", b"two");
+        slices.mix("first", b"one");
+        slices.mix("second", b"two");
 
         let streams = Protocol::new("com.example.streams");
-        let mut streams_write = streams.mix_writer(b"first", io::sink());
+        let mut streams_write = streams.mix_writer("first", io::sink());
         io::copy(&mut Cursor::new(b"one"), &mut streams_write)
             .expect("cursor reads and sink writes should be infallible");
         let (streams, _) = streams_write.into_inner();
 
         let mut output = Vec::new();
-        let mut streams_write = streams.mix_writer(b"second", &mut output);
+        let mut streams_write = streams.mix_writer("second", &mut output);
         io::copy(&mut Cursor::new(b"two"), &mut streams_write)
             .expect("cursor reads and sink writes should be infallible");
         let (mut streams, output) = streams_write.into_inner();
 
-        assert_eq!(slices.derive_array::<16>(b"third"), streams.derive_array::<16>(b"third"));
+        assert_eq!(slices.derive_array::<16>("third"), streams.derive_array::<16>("third"));
         assert_eq!(b"two".as_slice(), output);
     }
 
@@ -406,9 +406,9 @@ mod tests {
     #[cfg(feature = "hedge")]
     fn hedging() {
         let mut hedger = Protocol::new("com.example.hedge");
-        hedger.mix(b"first", b"one");
+        hedger.mix("first", b"one");
         let tag = hedger.hedge(rand::thread_rng(), &[b"two"], 10_000, |clone| {
-            let tag = clone.derive_array::<16>(b"tag");
+            let tag = clone.derive_array::<16>("tag");
             (tag[0] == 0).then_some(tag)
         });
 
@@ -419,12 +419,12 @@ mod tests {
     fn edge_case() {
         let mut sender = Protocol::new("");
         let mut message = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
-        sender.encrypt(b"message", &mut message);
-        let tag_s = sender.derive_array::<TAG_LEN>(b"tag");
+        sender.encrypt("message", &mut message);
+        let tag_s = sender.derive_array::<TAG_LEN>("tag");
 
         let mut receiver = Protocol::new("");
-        receiver.decrypt(b"message", &mut message);
-        let tag_r = receiver.derive_array::<TAG_LEN>(b"tag");
+        receiver.decrypt("message", &mut message);
+        let tag_r = receiver.derive_array::<TAG_LEN>("tag");
 
         assert_eq!(message, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
         assert_eq!(tag_s, tag_r);

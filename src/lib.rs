@@ -2,12 +2,12 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
-use core::mem;
-
 use crate::aegis_128l::Aegis128L;
 
-use hkdf::HkdfExtract;
-use sha2::Sha256;
+use sha3::{
+    digest::{ExtendableOutputReset, Update, XofReader},
+    TurboShake128, TurboShake128Core,
+};
 pub use subtle;
 use subtle::ConstantTimeEq;
 
@@ -29,7 +29,7 @@ pub const TAG_LEN: usize = 16;
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
 #[derive(Debug, Clone)]
 pub struct Protocol {
-    transcript: HkdfExtract<Sha256>,
+    transcript: TurboShake128,
 }
 
 impl Protocol {
@@ -37,7 +37,8 @@ impl Protocol {
     #[inline]
     pub fn new(domain: &str) -> Protocol {
         // Initialize a protocol with an empty transcript.
-        let mut protocol = Protocol { transcript: HkdfExtract::new(None) };
+        let mut protocol =
+            Protocol { transcript: TurboShake128::from_core(TurboShake128Core::new(0x22)) };
 
         // Append the Init op header to the transcript with the domain as the label.
         //
@@ -58,8 +59,8 @@ impl Protocol {
         // Append the input to the transcript with right-encoded length.
         //
         //   input || right_encode(|input|)
-        self.transcript.input_ikm(input);
-        self.transcript.input_ikm(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
+        self.transcript.update(input);
+        self.transcript.update(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
     }
 
     /// Moves the protocol into a [`std::io::Write`] implementation, mixing all written data in a
@@ -85,12 +86,12 @@ impl Protocol {
         self.op_header(OpCode::Derive, label);
 
         // Calculate HKDF-Extract("", transcript) and clear the transcript.
-        let (_, prk) = mem::replace(&mut self.transcript, HkdfExtract::new(None)).finalize();
+        let mut xof = self.transcript.finalize_xof_reset();
 
         // Use HKDF-Expand to derive a new KDF key and the requested output.
         let mut kdf_key = [0u8; 32];
-        prk.expand(b"kdf-key", &mut kdf_key).expect("should expand KDF key");
-        prk.expand(b"output", out).expect("should expand output");
+        xof.read(&mut kdf_key);
+        xof.read(out);
 
         // Perform a Mix operation with the KDF key.
         self.mix("kdf-key", &kdf_key);
@@ -277,9 +278,9 @@ impl Protocol {
         // Append the operation code and label to the transcript:
         //
         //   op_code || label || right_encode(|label|)
-        self.transcript.input_ikm(&[op_code as u8]);
-        self.transcript.input_ikm(label.as_bytes());
-        self.transcript.input_ikm(right_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        self.transcript.update(&[op_code as u8]);
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(right_encode(&mut [0u8; 9], label.len() as u64 * 8));
     }
 }
 
@@ -314,7 +315,7 @@ impl<W: std::io::Write> MixWriter<W> {
     #[inline]
     pub fn into_inner(mut self) -> (Protocol, W) {
         // Append the right-encoded length to the transcript.
-        self.protocol.transcript.input_ikm(right_encode(&mut [0u8; 9], self.len * 8));
+        self.protocol.transcript.update(right_encode(&mut [0u8; 9], self.len * 8));
         (self.protocol, self.inner)
     }
 }
@@ -326,7 +327,7 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
         // Track the written length.
         self.len += buf.len() as u64;
         // Append the written slice to the protocol transcript.
-        self.protocol.transcript.input_ikm(buf);
+        self.protocol.transcript.update(buf);
         // Pass the slice to the inner writer and return the result.
         self.inner.write(buf)
     }
@@ -363,21 +364,21 @@ mod tests {
         protocol.mix("first", b"one");
         protocol.mix("second", b"two");
 
-        expect!["4d8a58dbd43b1870"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
+        expect!["544f9ff363a3a8de"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
-        expect!["3d382e329a9c99992d7be4092b4ec1624bd1"].assert_eq(&hex::encode(plaintext));
+        expect!["61d866f1352a6c390ff25267c4c0beb2afda"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["f200ec2bc1189c94f41235b5d86d58c83250670bc7a1ef052fca9ca3662a7ba735b7"]
+        expect!["bb5096165e6e09e59521a13bff9fda060dce81eb59d312d87894455a88439d8763c5"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["57b0bf5b2934356d"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["238a00640b845bba"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

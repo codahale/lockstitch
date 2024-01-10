@@ -85,10 +85,11 @@ impl Protocol {
         //   0x03 || label || right_encode(|label|)
         self.op_header(OpCode::Derive, label);
 
-        // Calculate HKDF-Extract("", transcript) and clear the transcript.
+        // Hash the transcript with TurboSHAKE128 and create an XOF reader.
         let mut xof = self.transcript.finalize_xof_reset();
 
-        // Use HKDF-Expand to derive a new KDF key and the requested output.
+        // Use the first 32 bytes of XOF output as the new KDF key and generate the requested output
+        // with the rest.
         let mut kdf_key = [0u8; 32];
         xof.read(&mut kdf_key);
         xof.read(out);

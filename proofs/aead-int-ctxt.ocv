@@ -9,22 +9,22 @@ type key [fixed].
 
 expand AEAD(key, bitstring, bitstring, bitstring, enc, dec, injbot, Z, Penc, Pencctxt).
 
-(* HKDF-SHA-256-Extract is assumed to be a random oracle. *)
+(* TurboSHAKE128 is assumed to be a random oracle. *)
 
 type hash_key [fixed].
 type transcript [bounded, large, nonuniform].
-type prk [fixed, large].
+type hash [fixed, large].
 
-expand ROM_hash(hash_key, transcript, prk, kdf_extract, Okdf_extract, qKDFextract).
+expand ROM_hash(hash_key, transcript, hash, kdf_extract, Okdf_extract, qKDFextract).
 
-(* HKDF-SHA-256-Expand is assumed to be a PRF. *)
+(* TurboSHAKE128's XOF is assumed to be a PRF. *)
 
 type info [fixed].
 const info1: info.
 
 proba Pkdf.
 
-expand PRF(prk, info, key, kdf_expand, Pkdf).
+expand PRF(hash, info, key, kdf_expand, Pkdf).
 
 (* Construction *)
 
@@ -32,13 +32,13 @@ expand PRF(prk, info, key, kdf_expand, Pkdf).
 const ad: bitstring.
 
 letfun full_enc(m: bitstring, hk: hash_key, t: transcript) =
-    prk1 <- kdf_extract(hk, t);
-    k1 <- kdf_expand(prk1, info1);
+    h1 <- kdf_extract(hk, t);
+    k1 <- kdf_expand(h1, info1);
     enc(m, ad, k1).
 
 letfun full_dec(c: bitstring, hk: hash_key, t: transcript) =
-    prk1 <- kdf_extract(hk, t);
-    k1 <- kdf_expand(prk1, info1);
+    h1 <- kdf_extract(hk, t);
+    k1 <- kdf_expand(h1, info1);
     dec(c, ad, k1).
 
 (* Queries *)

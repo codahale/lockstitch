@@ -8,22 +8,22 @@ type key [fixed].
 
 expand IND_CPA_sym_enc(key, bitstring, bitstring, enc, dec, injbot, Z, Penc).
 
-(* HKDF-SHA-256-Extract is assumed to be a random oracle. *)
+(* TurboSHAKE128 is assumed to be a random oracle. *)
 
 type hash_key [fixed].
 type transcript [bounded, large, nonuniform].
-type prk [fixed, large].
+type hash [fixed, large].
 
-expand ROM_hash(hash_key, transcript, prk, kdf_extract, Okdf_extract, qKDFextract).
+expand ROM_hash(hash_key, transcript, hash, kdf_extract, Okdf_extract, qKDFextract).
 
-(* HKDF-SHA-256-Expand is assumed to be a PRF. *)
+(* TurboSHAKE128's XOF is assumed to be a PRF. *)
 
 type info [fixed].
 const info1: info.
 
 proba Pkdf.
 
-expand PRF(prk, info, key, kdf_expand, Pkdf).
+expand PRF(hash, info, key, kdf_expand, Pkdf).
 
 (* Construction *)
 

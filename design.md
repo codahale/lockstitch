@@ -1,9 +1,13 @@
 # The Design Of Lockstitch
 
-Lockstitch provides a single cryptographic service for all symmetric-key operations and an
-incremental, stateful building block for complex schemes, constructions, and protocols, all built on
-top of SHA-256 and [AEGIS-128L][], an authenticated cipher.
+Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
+operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption) in
+complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, Merlin
+transcripts, and Xoodyak's Cyclist mode, Lockstitch uses the [AEGIS-128L][] authenticated cipher and
+[TurboSHAKE128][] to provide 100+ Gb/sec performance on modern processors at a 128-bit security
+level.
 
+[TurboSHAKE128]: https://eprint.iacr.org/2023/342
 [AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-09.html
 
 ## Protocol
@@ -88,29 +92,22 @@ output.
 
 ```text
 function derive(transcript, label, n):
-  transcript ← transcript ǁ 0x03                          // Append a Derive op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|) // Append the encoded label.
-  prk ← hkdf_extract("", transcript))                     // Use HKDF-Extract to derive a PRK from the transcript.
-  kdf_key ← hkdf_expand(prk, "kdf-key", 32)               // Use HKDF-Expand to derive a new 32-byte KDF key.
-  output ← hkdf_expand(prk, "output", n)                  // Use HKDF-Expand to derive the requested output.
-  transcript ← mix(ɛ, "kdf-key", kdf_key)                 // Replace the transcript with a single Mix operation with the KDF key.
-  transcript ← mix(transcript, "len", right_encode(n))    // Append a Mix operation with the output length.
-  (transcript, output)                                    // Return the new transcript along with the output.
+  transcript ← transcript ǁ 0x03                           // Append a Derive op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)  // Append the encoded label.
+  kdf_key ǁ output ← turboshake128(0x22, transcript, 32+n) // Use TurboSHAKE128 to derive a KDF key and the output.
+  transcript ← mix(ɛ, "kdf-key", kdf_key)                  // Replace the transcript with a single Mix operation with the KDF key.
+  transcript ← mix(transcript, "len", right_encode(n))     // Append a Mix operation with the output length.
+  (transcript, output)                                     // Return the new transcript along with the output.
 ```
 
-`Derive` appends an operation code to the protocol's transcript and uses the transcript as initial
-keying material for [HKDF][]'s `Extract` function with an empty string as the salt value. The
-resulting PRK is used with [HKDF][]'s 'Expand' function to generate a new 32-byte KDF key and to
-generate the requested output.
-
-[HKDF]: https://tools.ietf.org/html/rfc5869
+`Derive` appends an operation code to the protocol's transcript and uses the transcript as input to
+TurboSHAKE128. The first 32 bytes of XOF output is used as a KDF key, the remainder is returned as
+the requested output.
 
 A shorter `Derive` operation will return a prefix of a longer one (e.g. `Derive("a", 16)` and
 `Derive("a", 32)` will share the same initial 16 bytes).  Once the operation is complete, however,
 the protocols' transcripts will be different. If a use case requires `Derive` output to be dependent
 on its length, include the length in a `Mix` operation beforehand.
-
-**IMPORTANT:** Each `Derive` operation is limited to 8160 bytes of output.
 
 #### KDF Chains
 
@@ -129,9 +126,8 @@ properties:
   possession of the protocol's transcript as long as one of the future inputs to the protocol is
   secret.
 
-**N.B.:** HKDF-Extract uses HMAC to derive a pseudo-random key from the transcript, which is not
-vulnerable to length-extension attacks. Given this, the use of `right_encode` to encode labels and
-inputs is securely injective.
+**N.B.:**  TurboSHAKE128 is not vulnerable to length-extension attacks, thus the use of
+`right_encode` to encode labels and inputs is securely injective.
 
 ### `Encrypt`/`Decrypt`
 
@@ -233,8 +229,8 @@ function message_digest(message):
   digest
 ```
 
-This construction is indistinguishable from a random oracle if SHA-256 is indistinguishable from a
-random oracle.
+This construction is indistinguishable from a random oracle if TurboSHAKE128 is indistinguishable
+from a random oracle.
 
 ### Message Authentication Codes
 
@@ -275,8 +271,8 @@ function stream_decrypt(key, nonce, ciphertext):
 This construction is IND-CPA-secure under the following assumptions:
 
 1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
-2. HKDF-SHA-256-Extract is indistinguishable from a random oracle.
-3. HKDF-SHA-256-Expand is PRF-secure.
+2. TurboSHAKE128 is indistinguishable from a random oracle.
+3. TurboSHAKE128's XOF is PRF-secure.
 4. At least one of the inputs to the transcript is a nonce (i.e., not used for multiple messages).
 
 ### Authenticated Encryption And Data (AEAD)
@@ -297,7 +293,7 @@ The introduction of a nonce makes the scheme probabilistic (which is required fo
 
 Unlike many standard AEADs (e.g. AES-GCM and ChaCha20Poly1305), it is fully context-committing: the
 tag is a strong cryptographic commitment to all the inputs. AEGIS-128L is key-committing and both
-the key and the nonce are derived from the transcript using HKDF.
+the key and the nonce are derived from the transcript using TurboSHAKE128.
 
 Also unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces
 of associated data without risk of ambiguous inputs.
@@ -316,8 +312,8 @@ This construction is IND-CCA2-secure (i.e. both IND-CPA and INT-CTXT) under the 
 assumptions:
 
 1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
-2. HKDF-SHA-256-Extract is indistinguishable from a random oracle.
-3. HKDF-SHA-256-Expand is PRF-secure.
+2. TurboSHAKE128 is indistinguishable from a random oracle.
+3. TurboSHAKE128's XOF is PRF-secure.
 4. At least one of the inputs to the transcript is a nonce (i.e., not used for multiple messages).
 
 #### Expanded Transcript
@@ -343,9 +339,7 @@ t2 ← t1 || 0x02 || "nonce" || 0x05, 0x01 || 0x3f4ac18bfa54206f5c6de81517618d43
 t3 ← t2 || 0x02 || "ad" || 0x02, 0x01 || "this is public" || 0x0e, 0x01 
 t4 ← t3 || 0x05 || "message" || 0x07, 0x01
 t5 ← t4 || 0x03 || "key" || 0x03, 0x01
-prk0 ← hkdf_extract("", t5)
-kdf_key0 ← hkdf_expand(prk0, "kdf-key", 32) 
-aegis_key ← hkdf_expand(prk0, "output", 32) 
+kdf_key0 || aegis_key ← turboshake128(0x22, t5, 64) 
 t6 ← 0x03 || "kdf-key" || 0x07, 0x01 || kdf_key0 || 0x20, 0x01
 t7 ← t6 || 0x03 || "len" || 0x03, 0x01 || 0x20, 0x01 || 0x02, 0x01
 (ciphertext, tag128, tag256) ← aegis128l::encrypt(aegis_key, "this is a secret")

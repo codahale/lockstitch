@@ -4,8 +4,10 @@ Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption) in
 complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, Merlin
 transcripts, and Xoodyak's Cyclist mode, Lockstitch uses the [AEGIS-128L][] authenticated cipher and
-SHA-256 to provide 100+ Gb/sec performance on modern processors at a 128-bit security level.
+[TurboSHAKE128][] to provide 100+ Gb/sec performance on modern processors at a 128-bit security
+level.
 
+[TurboSHAKE128]: https://eprint.iacr.org/2023/342
 [AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-09.html
 
 ## CAUTION
@@ -105,16 +107,15 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 
 ## Cargo Features
 
-* `asm`: Enables hand-coded assembly for SHA-256 for `x86` and `x86_64` and a vectorized
-implementation for `aarch64`. Enabled by default.
+* `asm`: Enables hand-coded assembly for TurboSHAKE128 for `aarch64`. Enabled by default.
 * `docs`: Enables the docs-only `perf` and `design` modules.
 * `hedge`: Enables hedged random value generation with `rand_core`. Enabled by default.
 * `std`: Enables features based on the Rust standard library. Enabled by default.
 
 ## Performance
 
-Lockstitch's SHA-256 and AEGIS-128L implementations benefit significantly from the use of specific
-CPU instructions.
+Lockstitch's AEGIS-128L implementation benefit significantly from the use of specific CPU
+instructions.
 
 ### `x86`/`x86_64`
 

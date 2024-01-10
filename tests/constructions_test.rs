@@ -1,5 +1,5 @@
 use bolero::TypeGenerator;
-use lockstitch::{subtle::ConstantTimeEq, Protocol, TAG_LEN};
+use lockstitch::{ct_eq, Protocol, TAG_LEN};
 
 #[test]
 fn hash() {
@@ -183,7 +183,7 @@ fn daead() {
         siv.mix("message", &plaintext);
         let iv_p = siv.derive_array::<TAG_LEN>("iv");
 
-        bool::from(iv.ct_eq(&iv_p)).then_some(plaintext)
+        ct_eq(iv, &iv_p).then_some(plaintext)
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, TypeGenerator)]

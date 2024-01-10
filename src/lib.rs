@@ -4,12 +4,11 @@
 
 use crate::aegis_128l::Aegis128L;
 
+use cmov::CmovEq;
 use sha3::{
     digest::{ExtendableOutputReset, Update, XofReader},
     TurboShake128, TurboShake128Core,
 };
-pub use subtle;
-use subtle::ConstantTimeEq;
 
 mod aegis_128l;
 mod intrinsics;
@@ -226,7 +225,7 @@ impl Protocol {
         self.mix("tag", &tag256);
 
         // Check the tag against the counterfactual tag in constant time.
-        if tag128_in.ct_eq(&tag128).into() {
+        if ct_eq(tag128_in, &tag128) {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -337,6 +336,14 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     fn flush(&mut self) -> std::io::Result<()> {
         self.inner.flush()
     }
+}
+
+/// Compares two slices for equality in constant time.
+#[inline]
+pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    let mut res = 1;
+    a.cmovne(b, 0, &mut res);
+    res != 0
 }
 
 /// Encodes a value using [NIST SP 800-185][]'s `right_encode`.

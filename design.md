@@ -81,34 +81,24 @@ result in undefined behavior.
 
 ### `Derive`
 
-A `Derive` operation appends an operation code and a label to the protocol's transcript, hashes the
-entirety of the transcript, uses the hash to produce derived output, replaces the transcript with
-`Mix` operations containing derived output and the requested output length, and returns the derived
-output.
+A `Derive` operation appends an operation code and a label to the protocol's transcript, appends a
+`Mix` operation with the requested output length, and uses [`HKDF-Extract`][HKDF] to derive a
+pseudo-random key (PRK) from the transcript and the key derivation key (KDK) from the last `Derive`
+operation (if any). `Derive` then uses [`HKDF-Expand`][HKDF] and the PRK to derive a new KDK and the
+requested output.
+
+[HKDF]: https://tools.ietf.org/html/rfc5869
 
 ```text
 function derive(transcript, label, n):
   transcript ← transcript ǁ 0x03                          // Append a Derive op code to the transcript.
   transcript ← transcript ǁ label ǁ right_encode(|label|) // Append the encoded label.
-  prk ← hkdf_extract("", transcript))                     // Use HKDF-Extract to derive a PRK from the transcript.
-  kdf_key ← hkdf_expand(prk, "kdf-key", 32)               // Use HKDF-Expand to derive a new 32-byte KDF key.
-  output ← hkdf_expand(prk, "output", n)                  // Use HKDF-Expand to derive the requested output.
-  transcript ← mix(ɛ, "kdf-key", kdf_key)                 // Replace the transcript with a single Mix operation with the KDF key.
   transcript ← mix(transcript, "len", right_encode(n))    // Append a Mix operation with the output length.
-  (transcript, output)                                    // Return the new transcript along with the output.
+  prk ← hkdf_extract(kdk_prev, transcript)                // Use HKDF-Extract with the previous KDK to derive a PRK from the transcript.
+  kdk_next ← hkdf_expand(prk, "kdk", 32)                  // Use HKDF-Expand to derive a new 32-byte KDK.
+  output ← hkdf_expand(prk, "output", n)                  // Use HKDF-Expand to derive the requested output.
+  (ɛ, output)                                             // Return an empty new transcript along with the output.
 ```
-
-`Derive` appends an operation code to the protocol's transcript and uses the transcript as initial
-keying material for [HKDF][]'s `Extract` function with an empty string as the salt value. The
-resulting PRK is used with [HKDF][]'s 'Expand' function to generate a new 32-byte KDF key and to
-generate the requested output.
-
-[HKDF]: https://tools.ietf.org/html/rfc5869
-
-A shorter `Derive` operation will return a prefix of a longer one (e.g. `Derive("a", 16)` and
-`Derive("a", 32)` will share the same initial 16 bytes).  Once the operation is complete, however,
-the protocols' transcripts will be different. If a use case requires `Derive` output to be dependent
-on its length, include the length in a `Mix` operation beforehand.
 
 **IMPORTANT:** Each `Derive` operation is limited to 8160 bytes of output.
 
@@ -337,21 +327,24 @@ ad ← "this is public"
 That expands to the following sequence of primitive operations:
 
 ```text
+kdk0 ← ""
 t0 ← 0x01 || 0x01, 0x80 || "com.example.aead"
 t1 ← t0 || 0x02 || "key" || 0x03, 0x01 || 0x06c47a03da9a2e6cdebdcafdfd62b57d || 0x80, 0x01 
 t2 ← t1 || 0x02 || "nonce" || 0x05, 0x01 || 0x3f4ac18bfa54206f5c6de81517618d43 || 0x80, 0x01 
 t3 ← t2 || 0x02 || "ad" || 0x02, 0x01 || "this is public" || 0x0e, 0x01 
 t4 ← t3 || 0x05 || "message" || 0x07, 0x01
 t5 ← t4 || 0x03 || "key" || 0x03, 0x01
-prk0 ← hkdf_extract("", t5)
-kdf_key0 ← hkdf_expand(prk0, "kdf-key", 32) 
+t6 ← t7 || 0x02 || "len" || 0x03, 0x01 || 0x20, 0x01 || 0x02, 0x01
+prk0 ← hkdf_extract(kdk0, t5)
+kdk1 ← hkdf_expand(prk0, "kdk", 32) 
 aegis_key ← hkdf_expand(prk0, "output", 32) 
-t6 ← 0x03 || "kdf-key" || 0x07, 0x01 || kdf_key0 || 0x20, 0x01
-t7 ← t6 || 0x03 || "len" || 0x03, 0x01 || 0x20, 0x01 || 0x02, 0x01
 (ciphertext, tag128, tag256) ← aegis128l::encrypt(aegis_key, "this is a secret")
 t8 ← t7 || 0x03 || "tag" || 0x03, 0x01 || tag256 || 0x20, 0x01
 (ciphertext, tag128)
 ```
+
+A following `Derive` operation would use `kdk1` as the salt for `HKDF-Extract` when deriving a PRK
+from the transcript.
 
 ## Complex Protocols
 

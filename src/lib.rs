@@ -2,8 +2,6 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
-use core::mem;
-
 use crate::aegis_128l::Aegis128L;
 
 use hkdf::HkdfExtract;
@@ -84,19 +82,19 @@ impl Protocol {
         //   0x03 || label || right_encode(|label|)
         self.op_header(OpCode::Derive, label);
 
-        // Calculate HKDF-Extract("", transcript) and clear the transcript.
-        let (_, prk) = mem::replace(&mut self.transcript, HkdfExtract::new(None)).finalize();
-
-        // Use HKDF-Expand to derive a new KDF key and the requested output.
-        let mut kdf_key = [0u8; 32];
-        prk.expand(b"kdf-key", &mut kdf_key).expect("should expand KDF key");
-        prk.expand(b"output", out).expect("should expand output");
-
-        // Perform a Mix operation with the KDF key.
-        self.mix("kdf-key", &kdf_key);
-
         // Perform a Mix operation with the output length.
         self.mix("len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
+
+        // Calculate HKDF-Extract(kdk_prev, transcript).
+        let (_, prk) = self.transcript.clone().finalize();
+
+        // Use HKDF-Expand to derive a new key derivation key and the requested output.
+        let mut kdk_next = [0u8; 32];
+        prk.expand(b"kdk", &mut kdk_next).expect("should expand KDF key");
+        prk.expand(b"output", out).expect("should expand output");
+
+        // Clear the transcript and prepare for HKDF-Extract(kdk_next, transcript).
+        self.transcript = HkdfExtract::new(Some(&kdk_next));
     }
 
     /// Derives output from the protocol's current state and returns it as an `N`-byte array.
@@ -363,21 +361,21 @@ mod tests {
         protocol.mix("first", b"one");
         protocol.mix("second", b"two");
 
-        expect!["4d8a58dbd43b1870"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
+        expect!["20ea2bf0d8234351"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
-        expect!["3d382e329a9c99992d7be4092b4ec1624bd1"].assert_eq(&hex::encode(plaintext));
+        expect!["6c8405e45254c90ff32a2a45ca32daa4dbe6"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["f200ec2bc1189c94f41235b5d86d58c83250670bc7a1ef052fca9ca3662a7ba735b7"]
+        expect!["bef5a96ed7311f643b9dac3deac2e4d2581b20a16b2050d25c752876d04146661486"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["57b0bf5b2934356d"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["4cfab68afbd620b4"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

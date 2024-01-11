@@ -84,20 +84,20 @@ impl Protocol {
         //   0x03 || label || right_encode(|label|)
         self.op_header(OpCode::Derive, label);
 
+        // Perform a Mix operation with the output length.
+        self.mix("len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
+
         // Hash the transcript with TurboSHAKE128 and create an XOF reader.
         let mut xof = self.transcript.finalize_xof_reset();
 
-        // Use the first 32 bytes of XOF output as the new KDF key and generate the requested output
+        // Use the first 32 bytes of XOF output as the new KDK and generate the requested output
         // with the rest.
-        let mut kdf_key = [0u8; 32];
-        xof.read(&mut kdf_key);
+        let mut kdk = [0u8; 32];
+        xof.read(&mut kdk);
         xof.read(out);
 
-        // Perform a Mix operation with the KDF key.
-        self.mix("kdf-key", &kdf_key);
-
-        // Perform a Mix operation with the output length.
-        self.mix("len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
+        // Perform a Mix operation with the KDK.
+        self.mix("kdk", &kdk);
     }
 
     /// Derives output from the protocol's current state and returns it as an `N`-byte array.
@@ -372,21 +372,21 @@ mod tests {
         protocol.mix("first", b"one");
         protocol.mix("second", b"two");
 
-        expect!["544f9ff363a3a8de"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
+        expect!["9d741fc2d9c5cba0"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
-        expect!["61d866f1352a6c390ff25267c4c0beb2afda"].assert_eq(&hex::encode(plaintext));
+        expect!["78bcf239b3af72128df5f49f4bb31b841996"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["bb5096165e6e09e59521a13bff9fda060dce81eb59d312d87894455a88439d8763c5"]
+        expect!["9312a44bbff42cbbd090a5ffdaa25f50268e77c4d1436abc2db879d502624a8b27e1"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["238a00640b845bba"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["6bd64f48c005df1f"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

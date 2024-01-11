@@ -85,29 +85,27 @@ result in undefined behavior.
 
 ### `Derive`
 
-A `Derive` operation appends an operation code and a label to the protocol's transcript, hashes the
-entirety of the transcript, uses the hash to produce derived output, replaces the transcript with
-`Mix` operations containing derived output and the requested output length, and returns the derived
-output.
+A `Derive` operation accepts a label and an output length, appends them to the protocol's transcript
+along with a constant operation code, hashes the transcript, replaces the transcript with derived
+output, and returns the requested length of output derived from the protocol state.
 
 ```text
 function derive(transcript, label, n):
   transcript ← transcript ǁ 0x03                           // Append a Derive op code to the transcript.
   transcript ← transcript ǁ label ǁ right_encode(|label|)  // Append the encoded label.
-  kdf_key ǁ output ← turboshake128(0x22, transcript, 32+n) // Use TurboSHAKE128 to derive a KDF key and the output.
-  transcript ← mix(ɛ, "kdf-key", kdf_key)                  // Replace the transcript with a single Mix operation with the KDF key.
   transcript ← mix(transcript, "len", right_encode(n))     // Append a Mix operation with the output length.
+  kdk ǁ output ← turboshake128(0x22, transcript, 32+n)     // Use TurboSHAKE128 to derive a KDK and the output.
+  transcript ← mix(ɛ, "kdk", kdk)                          // Replace the transcript with a single Mix operation with the KDK.
   (transcript, output)                                     // Return the new transcript along with the output.
 ```
 
-`Derive` appends an operation code to the protocol's transcript and uses the transcript as input to
-TurboSHAKE128. The first 32 bytes of XOF output is used as a KDF key, the remainder is returned as
-the requested output.
+`Derive` appends an operation code, the operation label, and a `Mix` operation containing the
+requested output length to the transcript. It then uses the transcript as input to TurboSHAKE128.
+The first 32 bytes of XOF output are used as a key derivation key (KDK) and the remainder is used to
+generate the requested output. Finally, the transcript is replaced with a single `Mix` operation
+containing the KDK.
 
-A shorter `Derive` operation will return a prefix of a longer one (e.g. `Derive("a", 16)` and
-`Derive("a", 32)` will share the same initial 16 bytes).  Once the operation is complete, however,
-the protocols' transcripts will be different. If a use case requires `Derive` output to be dependent
-on its length, include the length in a `Mix` operation beforehand.
+**N.B.:** A `Derive` operation's output depends on both the label and the output length.
 
 #### KDF Chains
 
@@ -339,11 +337,11 @@ t2 ← t1 || 0x02 || "nonce" || 0x05, 0x01 || 0x3f4ac18bfa54206f5c6de81517618d43
 t3 ← t2 || 0x02 || "ad" || 0x02, 0x01 || "this is public" || 0x0e, 0x01 
 t4 ← t3 || 0x05 || "message" || 0x07, 0x01
 t5 ← t4 || 0x03 || "key" || 0x03, 0x01
-kdf_key0 || aegis_key ← turboshake128(0x22, t5, 64) 
-t6 ← 0x03 || "kdf-key" || 0x07, 0x01 || kdf_key0 || 0x20, 0x01
-t7 ← t6 || 0x03 || "len" || 0x03, 0x01 || 0x20, 0x01 || 0x02, 0x01
-(ciphertext, tag128, tag256) ← aegis128l::encrypt(aegis_key, "this is a secret")
-t8 ← t7 || 0x03 || "tag" || 0x03, 0x01 || tag256 || 0x20, 0x01
+t6 ← t5 || 0x02 || "len" || 0x03, 0x01 || 0x20, 0x01 || 0x02, 0x01
+kdk0 || ek0 ← turboshake128(0x22, t6, 64) 
+t7 ← 0x02 || "kdk" || 0x07, 0x01 || kdk0 || 0x20, 0x01
+(ciphertext, tag128, tag256) ← aegis128l::encrypt(ek0, "this is a secret")
+t8 ← t7 || 0x02 || "tag" || 0x03, 0x01 || tag256 || 0x20, 0x01
 (ciphertext, tag128)
 ```
 

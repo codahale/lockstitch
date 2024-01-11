@@ -8,7 +8,8 @@ top of SHA-256 and [AEGIS-128L][], an authenticated cipher.
 
 ## Protocol
 
-The basic unit of Lockstitch is the protocol, which encapsulates a transcript of encoded operations.
+The basic unit of Lockstitch is the protocol, which encapsulates a transcript of encoded operations
+and a key deriving key (KDK).
 
 A Lockstitch protocol supports the following operations:
 
@@ -38,7 +39,8 @@ transcript with a constant operation code and then performing a `Mix` operation 
 function init(domain):
   transcript ← 0x01                                         // Begin the transcript with an Init op code.
   transcript ← transcript ǁ domain ǁ right_encode(|domain|) // Append the encoded domain.
-  transcript
+  kdk ← ɛ                                                   // Use an empty string as the initial KDK.
+  (transcript, kdk)
 ```
 
 **N.B.:** The `Init` operation is only performed once, when a protocol is initialized.
@@ -64,11 +66,11 @@ A `Mix` operation accepts a label and an input, encodes them, and appends them t
 transcript along with a constant operation code:
 
 ```text
-function mix(transcript, label, input):
+function mix((transcript, kdk), label, input):
   transcript ← transcript ǁ 0x02                          // Append a Mix op code to the transcript.
   transcript ← transcript ǁ label ǁ right_encode(|label|) // Append the encoded label.
   transcript ← transcript ǁ input ǁ right_encode(|input|) // Append the encoded input.
-  transcript
+  (transcript, kdk)
 ```
 
 `Mix` encodes the length of the label in bits and the length of the input in bits using [NIST SP
@@ -82,22 +84,21 @@ result in undefined behavior.
 ### `Derive`
 
 A `Derive` operation appends an operation code and a label to the protocol's transcript, appends a
-`Mix` operation with the requested output length, and uses [`HKDF-Extract`][HKDF] to derive a
-pseudo-random key (PRK) from the transcript and the key derivation key (KDK) from the last `Derive`
-operation (if any). `Derive` then uses [`HKDF-Expand`][HKDF] and the PRK to derive a new KDK and the
-requested output.
+`Mix` operation with the requested output length, and uses [`HKDF-Extract`][HKDF] and the KDK to
+derive a pseudo-random key (PRK) from the transcript. `Derive` then uses [`HKDF-Expand`][HKDF] and
+the PRK to derive a new KDK and the requested output and finally clears the transcript's contents.
 
 [HKDF]: https://tools.ietf.org/html/rfc5869
 
 ```text
-function derive(transcript, label, n):
-  transcript ← transcript ǁ 0x03                          // Append a Derive op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|) // Append the encoded label.
-  transcript ← mix(transcript, "len", right_encode(n))    // Append a Mix operation with the output length.
-  prk ← hkdf_extract(kdk_prev, transcript)                // Use HKDF-Extract with the previous KDK to derive a PRK from the transcript.
-  kdk_next ← hkdf_expand(prk, "kdk", 32)                  // Use HKDF-Expand to derive a new 32-byte KDK.
-  output ← hkdf_expand(prk, "output", n)                  // Use HKDF-Expand to derive the requested output.
-  (ɛ, output)                                             // Return an empty new transcript along with the output.
+function derive((transcript, kdk), label, n):
+  transcript ← transcript ǁ 0x03                                     // Append a Derive op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)            // Append the encoded label.
+  (transcript, kdk) ← mix((transcript, kdk), "len", right_encode(n)) // Append a Mix operation with the output length.
+  prk ← hkdf_extract(kdk, transcript)                                // Use HKDF-Extract to derive a PRK from the transcript.
+  kdk′ ← hkdf_expand(prk, "kdk", 32)                                 // Use HKDF-Expand to derive a new 32-byte KDK.
+  output ← hkdf_expand(prk, "output", n)                             // Use HKDF-Expand to derive the requested output.
+  ((ɛ, kdk′), output)                                                // Return an empty new transcript and the new KDK along with the output.
 ```
 
 **IMPORTANT:** Each `Derive` operation is limited to 8160 bytes of output.
@@ -130,21 +131,21 @@ AEGIS-128L key and nonce, encrypt or decrypt an input with AEGIS-128L, and appen
 with the 32-byte AEGIS-128L tag to the transcript.
 
 ```text
-function encrypt(transcript, label, plaintext):
-  transcript ← transcript ǁ 0x04                                      // Append a Crypt op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|)             // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)           // Derive an AEGIS-128L key and nonce.
-  (ciphertext, _, tag256) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
-  transcript ← mix(transcript, "tag", tag256)                         // Append a Mix operation with the 256-bit tag.
-  (transcript, ciphertext)
+function encrypt((transcript, kdk), label, plaintext):
+  transcript ← transcript ǁ 0x04                                          // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)                 // Append the encoded label.
+  ((transcript, kdk), key ǁ nonce) ← derive((transcript, kdk), "key", 32) // Derive an AEGIS-128L key and nonce.
+  (ciphertext, _, tag256) ← aegis128l::encrypt(key, nonce, plaintext)     // Encrypt the plaintext.
+  (transcript, kdk) ← mix((transcript, kdk), "tag", tag256)               // Append a Mix operation with the 256-bit tag.
+  ((transcript, kdk), ciphertext)
 
-function decrypt(transcript, label, ciphertext):
-  transcript ← transcript ǁ 0x04                                      // Append a Crypt op code to the transcript.
-  transcript ← transcript ǁ label ǁ right_encode(|label|)             // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)           // Derive an AEGIS-128L key and nonce.
-  (plaintext, _, tag256) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
-  transcript ← mix(transcript, "tag", tag256)                         // Append a Mix operation with the 256-bit tag.
-  (transcript, plaintext)
+function decrypt((transcript, kdk), label, ciphertext):
+  transcript ← transcript ǁ 0x04                                          // Append a Crypt op code to the transcript.
+  transcript ← transcript ǁ label ǁ right_encode(|label|)                 // Append the encoded label.
+  ((transcript, kdk), key ǁ nonce) ← derive((transcript, kdk), "key", 32) // Derive an AEGIS-128L key and nonce.
+  (plaintext, _, tag256) ← aegis128l::decrypt(key, nonce, ciphertext)     // Decrypt the ciphertext.
+  (transcript, kdk) ← mix((transcript, kdk), "tag", tag256)               // Append a Mix operation with the 256-bit tag.
+  ((transcript, kdk), plaintext)
 ```
 
 Three points bear mentioning about `Encrypt` and `Decrypt`.
@@ -186,24 +187,24 @@ the 32-byte AEGIS-128L tag to the transcript, and append the 16-byte AEGIS-128L 
 ciphertext.
 
 ```text
-function seal(transcript, label, plaintext):
+function seal((transcript, kdk), label, plaintext):
   transcript ← transcript ǁ 0x05                                           // Append an AuthCrypt op code to the transcript.
   transcript ← transcript ǁ label ǁ right_encode(|label|)                  // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)                // Derive an AEGIS-128L key and nonce.
+  ((transcript, kdk), key ǁ nonce) ← derive((transcript, kdk), "key", 32)  // Derive an AEGIS-128L key and nonce.
   (ciphertext, tag128, tag256) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
-  transcript ← mix(transcript, "tag", tag256)                              // Append a Mix operation with the 256-bit tag.
-  (transcript, ciphertext, tag128)                                         // Return the ciphertext and the 128-bit tag.
+  (transcript, kdk) ← mix((transcript, kdk), "tag", tag256)                // Append a Mix operation with the 256-bit tag.
+  ((transcript, kdk), ciphertext, tag128)                                  // Return the ciphertext and the 128-bit tag.
 
-function open(transcript, label, ciphertext, tag128):
+function open((transcript, kdk), label, ciphertext, tag128):
   transcript ← transcript ǁ 0x05                                           // Append an AuthCrypt op code to the transcript.
   transcript ← transcript ǁ label ǁ right_encode(|label|)                  // Append the encoded label.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)                // Derive an AEGIS-128L key and nonce.
+  ((transcript, kdk), key ǁ nonce) ← derive((transcript, kdk), "key", 32)  // Derive an AEGIS-128L key and nonce.
   (plaintext, tag128, tag256) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
-  transcript ← mix(transcript, "tag", tag128)                              // Append a Mix operation with the 256-bit tag.
+  (transcript, kdk) ← mix((transcript, kdk), "tag", tag128)                // Append a Mix operation with the 256-bit tag.
   if tag128 = tag128′:                                                     // Compare the 128-bit tags in constant time.
-    (transcript, plaintext)
+    ((transcript, kdk), plaintext)
   else:
-    (transcript, ⊥)
+    ((transcript, kdk), ⊥)
 ```
 
 ## Basic Protocols

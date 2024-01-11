@@ -75,6 +75,9 @@ impl Protocol {
     }
 
     /// Derives output from the protocol's current state and fills the given slice with it.
+    ///
+    /// The output is dependent on the protocol's prior transcript, the label, and the length of
+    /// `out`.
     #[inline]
     pub fn derive(&mut self, label: &str, out: &mut [u8]) {
         // Append a Derive op header with the label to the transcript.
@@ -85,16 +88,16 @@ impl Protocol {
         // Perform a Mix operation with the output length.
         self.mix("len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
 
-        // Calculate HKDF-Extract(kdk_prev, transcript).
+        // Derive a PRK via HKDF-Extract(kdk, transcript).
         let (_, prk) = self.transcript.clone().finalize();
 
-        // Use HKDF-Expand to derive a new key derivation key and the requested output.
-        let mut kdk_next = [0u8; 32];
-        prk.expand(b"kdk", &mut kdk_next).expect("should expand KDF key");
+        // Use HKDF-Expand and the PRK to derive a new KDK and the requested output.
+        let mut kdk = [0u8; 32];
+        prk.expand(b"kdk", &mut kdk).expect("should expand KDK");
         prk.expand(b"output", out).expect("should expand output");
 
-        // Clear the transcript and prepare for HKDF-Extract(kdk_next, transcript).
-        self.transcript = HkdfExtract::new(Some(&kdk_next));
+        // Clear the transcript and prepare for HKDF-Extract(kdk', transcript).
+        self.transcript = HkdfExtract::new(Some(&kdk));
     }
 
     /// Derives output from the protocol's current state and returns it as an `N`-byte array.

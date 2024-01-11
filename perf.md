@@ -1,6 +1,6 @@
 # Performance
 
-## `x86_64` (GCP `c3-standard-4`, Intel Sapphire Rapids, rustc 1.74, `-target-cpu=native`)
+## `x86_64` (GCP `c3-standard-4`, Intel Sapphire Rapids, rustc 1.75, `-target-cpu=native`)
 
 ```text
 Timer precision: 24.44 ns
@@ -52,7 +52,7 @@ benchmarks      fastest       │ slowest       │ median        │ mean      
 
 ```
 
-## `aarch64` (Apple M2 Air 2022, rustc 1.74)
+## `aarch64` (Apple M2 Air 2022, rustc 1.75)
 
 ```text
 Timer precision: 41.66 ns

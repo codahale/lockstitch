@@ -87,16 +87,15 @@ impl Protocol {
         // Perform a Mix operation with the output length.
         self.mix("len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
 
-        // Hash the transcript with TurboSHAKE128 and create an XOF reader.
+        // Hash the transcript with TurboSHAKE128 and reset it to the empty string.
         let mut xof = self.transcript.finalize_xof_reset();
 
-        // Use the first 32 bytes of XOF output as the new KDK and generate the requested output
-        // with the rest.
+        // Generate 32+N bytes of TurboSHAKE128 output.
         let mut kdk = [0u8; 32];
         xof.read(&mut kdk);
         xof.read(out);
 
-        // Perform a Mix operation with the KDK.
+        // Begin the new transcript with a Mix operation using the KDK as input.
         self.mix("kdk", &kdk);
     }
 

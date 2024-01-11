@@ -328,8 +328,8 @@ ad ← "this is public"
 That expands to the following sequence of primitive operations:
 
 ```text
-kdk0 ← ɛ
 t0 ← 0x01 ǁ 0x01, 0x80 ǁ "com.example.aead"
+kdk0 ← ɛ
 t1 ← t0 ǁ 0x02 ǁ "key" ǁ 0x03, 0x01 ǁ 0x06c47a03da9a2e6cdebdcafdfd62b57d ǁ 0x80, 0x01 
 t2 ← t1 ǁ 0x02 ǁ "nonce" ǁ 0x05, 0x01 ǁ 0x3f4ac18bfa54206f5c6de81517618d43 ǁ 0x80, 0x01 
 t3 ← t2 ǁ 0x02 ǁ "ad" ǁ 0x02, 0x01 ǁ "this is public" ǁ 0x0e, 0x01 
@@ -338,8 +338,8 @@ t5 ← t4 ǁ 0x03 ǁ "key" ǁ 0x03, 0x01
 t6 ← t5 ǁ 0x02 ǁ "len" ǁ 0x03, 0x01 ǁ 0x20, 0x01 ǁ 0x02, 0x01
 prk0 ← hkdf_extract(kdk0, t6)
 kdk1 ← hkdf_expand(prk0, "kdk", 32) 
-aegis_key ← hkdf_expand(prk0, "output", 32) 
-(ciphertext, tag128, tag256) ← aegis128l::encrypt(aegis_key, "this is a secret")
+k0 ǁ n0 ← hkdf_expand(prk0, "output", 32) 
+(ciphertext, tag128, tag256) ← aegis128l::encrypt(k0, n0, "this is a secret")
 t7 ← 0x03 ǁ "tag" ǁ 0x03, 0x01 ǁ tag256 ǁ 0x20, 0x01
 (ciphertext, tag128)
 ```

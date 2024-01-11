@@ -116,6 +116,9 @@ impl Protocol {
         //   0x04 || label || right_encode(|label|)
         self.op_header(OpCode::Crypt, label);
 
+        // Perform a Mix operation with the plaintext length.
+        self.mix("len", right_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");
         let (k, n) = kn.split_at(16);
@@ -141,6 +144,9 @@ impl Protocol {
         //
         //   0x04 || label || right_encode(|label|)
         self.op_header(OpCode::Crypt, label);
+
+        // Perform a Mix operation with the plaintext length.
+        self.mix("len", right_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
 
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");
@@ -172,6 +178,9 @@ impl Protocol {
         //
         //   0x05 || label || right_encode(|label|)
         self.op_header(OpCode::AuthCrypt, label);
+
+        // Perform a Mix operation with the plaintext length.
+        self.mix("len", right_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
 
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");
@@ -206,6 +215,9 @@ impl Protocol {
         //
         //   0x05 || label || right_encode(|label|)
         self.op_header(OpCode::AuthCrypt, label);
+
+        // Perform a Mix operation with the plaintext length.
+        self.mix("len", right_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
 
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");
@@ -368,17 +380,17 @@ mod tests {
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
-        expect!["6c8405e45254c90ff32a2a45ca32daa4dbe6"].assert_eq(&hex::encode(plaintext));
+        expect!["e06289eeea8f938c65ca984eb1c1a9df6557"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["bef5a96ed7311f643b9dac3deac2e4d2581b20a16b2050d25c752876d04146661486"]
+        expect!["c5e08d9df027dab5f83c30314c098bd65eb4ac6866dd154802b47b0c4cce5b14ab7a"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["4cfab68afbd620b4"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["2ddaec8811f6092a"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

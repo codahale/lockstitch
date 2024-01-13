@@ -62,9 +62,7 @@ fn aead<const LEN: usize>(bencher: divan::Bencher) {
     );
 }
 
-const PRF_LENS: &[usize] = &[16, 256, 1024, 2 * 1024, 4 * 1024];
-
-#[divan::bench(consts = PRF_LENS)]
+#[divan::bench(consts = LENS)]
 fn prf<const LEN: usize>(bencher: divan::Bencher) {
     let key = [0u8; 32];
     bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_values(

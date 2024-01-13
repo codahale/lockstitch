@@ -319,7 +319,7 @@ assumptions:
 
 #### Expanded Transcript
 
-To make it clear what Lockstitch is doing behind the scenes, the Lockstich API can be converted into
+To make it clear what Lockstitch is doing behind the scenes, the Lockstitch API can be converted into
 a sequence of primitive operations. For example, consider the following concrete use of the
 `aead_seal` function:
 

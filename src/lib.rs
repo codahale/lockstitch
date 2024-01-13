@@ -4,10 +4,11 @@
 
 use crate::aegis_128l::Aegis128L;
 
-use hkdf::HkdfExtract;
-use sha2::Sha256;
-pub use subtle;
-use subtle::ConstantTimeEq;
+use cmov::CmovEq;
+use sha3::{
+    digest::{ExtendableOutputReset, Update, XofReader},
+    TurboShake128, TurboShake128Core,
+};
 
 mod aegis_128l;
 mod intrinsics;
@@ -27,7 +28,7 @@ pub const TAG_LEN: usize = 16;
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
 #[derive(Debug, Clone)]
 pub struct Protocol {
-    transcript: HkdfExtract<Sha256>,
+    transcript: TurboShake128,
 }
 
 impl Protocol {
@@ -35,7 +36,8 @@ impl Protocol {
     #[inline]
     pub fn new(domain: &str) -> Protocol {
         // Initialize a protocol with an empty transcript.
-        let mut protocol = Protocol { transcript: HkdfExtract::new(None) };
+        let mut protocol =
+            Protocol { transcript: TurboShake128::from_core(TurboShake128Core::new(0x22)) };
 
         // Append the Init op header to the transcript with the domain as the label.
         //
@@ -56,8 +58,8 @@ impl Protocol {
         // Append the input to the transcript with right-encoded length.
         //
         //   input || right_encode(|input|)
-        self.transcript.input_ikm(input);
-        self.transcript.input_ikm(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
+        self.transcript.update(input);
+        self.transcript.update(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
     }
 
     /// Moves the protocol into a [`std::io::Write`] implementation, mixing all written data in a
@@ -88,16 +90,16 @@ impl Protocol {
         // Perform a Mix operation with the output length.
         self.mix("len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
 
-        // Derive a PRK via HKDF-Extract(kdk, transcript).
-        let (_, prk) = self.transcript.clone().finalize();
+        // Hash the transcript with TurboSHAKE128 and reset it to the empty string.
+        let mut xof = self.transcript.finalize_xof_reset();
 
-        // Use HKDF-Expand and the PRK to derive a new KDK and the requested output.
+        // Generate 32+N bytes of TurboSHAKE128 output.
         let mut kdk = [0u8; 32];
-        prk.expand(b"kdk", &mut kdk).expect("should expand KDK");
-        prk.expand(b"output", out).expect("should expand output");
+        xof.read(&mut kdk);
+        xof.read(out);
 
-        // Clear the transcript and prepare for HKDF-Extract(kdk', transcript).
-        self.transcript = HkdfExtract::new(Some(&kdk));
+        // Begin the new transcript with a Mix operation using the KDK as input.
+        self.mix("kdk", &kdk);
     }
 
     /// Derives output from the protocol's current state and returns it as an `N`-byte array.
@@ -237,7 +239,7 @@ impl Protocol {
         self.mix("tag", &tag256);
 
         // Check the tag against the counterfactual tag in constant time.
-        if tag128_in.ct_eq(&tag128).into() {
+        if ct_eq(tag128_in, &tag128) {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -290,9 +292,9 @@ impl Protocol {
         // Append the operation code and label to the transcript:
         //
         //   op_code || label || right_encode(|label|)
-        self.transcript.input_ikm(&[op_code as u8]);
-        self.transcript.input_ikm(label.as_bytes());
-        self.transcript.input_ikm(right_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        self.transcript.update(&[op_code as u8]);
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(right_encode(&mut [0u8; 9], label.len() as u64 * 8));
     }
 }
 
@@ -327,7 +329,7 @@ impl<W: std::io::Write> MixWriter<W> {
     #[inline]
     pub fn into_inner(mut self) -> (Protocol, W) {
         // Append the right-encoded length to the transcript.
-        self.protocol.transcript.input_ikm(right_encode(&mut [0u8; 9], self.len * 8));
+        self.protocol.transcript.update(right_encode(&mut [0u8; 9], self.len * 8));
         (self.protocol, self.inner)
     }
 }
@@ -339,7 +341,7 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
         // Track the written length.
         self.len += buf.len() as u64;
         // Append the written slice to the protocol transcript.
-        self.protocol.transcript.input_ikm(buf);
+        self.protocol.transcript.update(buf);
         // Pass the slice to the inner writer and return the result.
         self.inner.write(buf)
     }
@@ -348,6 +350,14 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     fn flush(&mut self) -> std::io::Result<()> {
         self.inner.flush()
     }
+}
+
+/// Compares two slices for equality in constant time.
+#[inline]
+pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    let mut res = 1;
+    a.cmovne(b, 0, &mut res);
+    res != 0
 }
 
 /// Encodes a value using [NIST SP 800-185][]'s `right_encode`.
@@ -376,21 +386,21 @@ mod tests {
         protocol.mix("first", b"one");
         protocol.mix("second", b"two");
 
-        expect!["20ea2bf0d8234351"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
+        expect!["9d741fc2d9c5cba0"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
-        expect!["e06289eeea8f938c65ca984eb1c1a9df6557"].assert_eq(&hex::encode(plaintext));
+        expect!["ec324ce127e09da0b60bf87199acd016969a"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["c5e08d9df027dab5f83c30314c098bd65eb4ac6866dd154802b47b0c4cce5b14ab7a"]
+        expect!["9aec57dd29ad1dfd45ca56098e26bdbb928d39e23c9bf64a712a9d04adfab8803707"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["2ddaec8811f6092a"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["21d58fc6560a5c49"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

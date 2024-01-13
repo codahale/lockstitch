@@ -10,7 +10,7 @@ Game 1 is
        Oenc(m1: bitstring, m2: bitstring) :=
        if Z(m1) = Z(m2) then
        m0: bitstring <- (if b then m1 else m2);
-       return((m: bitstring <- m0; prk1: prk <- kdf_extract(hk_2, t_2); k1: key <- kdf_expand(prk1, info1); m_1: bitstring <- m; k: key <- k1; r <-R enc_seed; enc_r(m_1, k, r)))
+       return((m: bitstring <- m0; prk1: hash <- kdf_extract(hk_2, t_2); k1: key <- kdf_expand(prk1, info1); m_1: bitstring <- m; k: key <- k1; r <-R enc_seed; enc_r(m_1, k, r)))
      ) | (
        foreach iH <= qKDFextract do
        OH(x1: transcript) :=
@@ -35,7 +35,7 @@ Game 2 is
        if b then
          m0: bitstring <- m1;
          m: bitstring <- m0;
-         prk1: prk <- kdf_extract(hk_2, t_2);
+         prk1: hash <- kdf_extract(hk_2, t_2);
          k1: key <- kdf_expand(prk1, info1);
          m_1: bitstring <- m;
          k: key <- k1;
@@ -44,7 +44,7 @@ Game 2 is
        else
          m0: bitstring <- m2;
          m: bitstring <- m0;
-         prk1: prk <- kdf_extract(hk_2, t_2);
+         prk1: hash <- kdf_extract(hk_2, t_2);
          k1: key <- kdf_expand(prk1, info1);
          m_1: bitstring <- m;
          k: key <- k1;
@@ -79,12 +79,12 @@ Game 3 is
        Oenc(m1: bitstring, m2: bitstring) :=
        if Z(m1) = Z(m2) then
        if b then
-         prk1: prk <- kdf_extract(hk_2, t_2);
+         prk1: hash <- kdf_extract(hk_2, t_2);
          k1: key <- kdf_expand(prk1, info1);
          r <-R enc_seed;
          return(enc_r(m1, k1, r))
        else
-         prk1: prk <- kdf_extract(hk_2, t_2);
+         prk1: hash <- kdf_extract(hk_2, t_2);
          k1: key <- kdf_expand(prk1, info1);
          r <-R enc_seed;
          return(enc_r(m2, k1, r))
@@ -110,12 +110,12 @@ Game 4 is
        Oenc(m1: bitstring, m2: bitstring) :=
        if Z(m1) = Z(m2) then
        if b then
-         prk1: prk <- kdf_extract(hk_2, t_2);
+         prk1: hash <- kdf_extract(hk_2, t_2);
          k1: key <- kdf_expand(prk1, info1);
          r_2 <-R enc_seed;
          return(enc_r(m1, k1, r_2))
        else
-         prk1: prk <- kdf_extract(hk_2, t_2);
+         prk1: hash <- kdf_extract(hk_2, t_2);
          k1: key <- kdf_expand(prk1, info1);
          r_1 <-R enc_seed;
          return(enc_r(m2, k1, r_1))
@@ -140,19 +140,19 @@ Game 5 is
        Oenc(m1: bitstring, m2: bitstring) :=
        if Z(m1) = Z(m2) then
        if b then
-         prk1: prk <- (x_O: transcript <- t_2; {23}find [unique] u_8 = ri_8 <= qEnc suchthat defined(x_O[ri_8], r_3[ri_8]) && {26}(x_O = x_O[ri_8]) then r_3[u_8] orfind u_7 = ri_7 <= qEnc suchthat defined(x_O_1[ri_7], r_4[ri_7]) && {36}(x_O = x_O_1[ri_7]) then r_4[u_7] orfind u_6 = ri_6 <= qKDFextract suchthat defined(x_O_2[ri_6], r_5[ri_6]) && (x_O = x_O_2[ri_6]) then r_5[u_6] else r_3 <-R prk; r_3);
+         prk1: hash <- (x_O: transcript <- t_2; {23}find [unique] u_8 = ri_8 <= qEnc suchthat defined(x_O[ri_8], r_3[ri_8]) && {26}(x_O = x_O[ri_8]) then r_3[u_8] orfind u_7 = ri_7 <= qEnc suchthat defined(x_O_1[ri_7], r_4[ri_7]) && {36}(x_O = x_O_1[ri_7]) then r_4[u_7] orfind u_6 = ri_6 <= qKDFextract suchthat defined(x_O_2[ri_6], r_5[ri_6]) && (x_O = x_O_2[ri_6]) then r_5[u_6] else r_3 <-R hash; r_3);
          k1: key <- kdf_expand(prk1, info1);
          r_2 <-R enc_seed;
          return(enc_r(m1, k1, r_2))
        else
-         prk1: prk <- (x_O_1: transcript <- t_2; {78}find [unique] u_5 = ri_5 <= qEnc suchthat defined(x_O[ri_5], r_3[ri_5]) && {81}(x_O_1 = x_O[ri_5]) then r_3[u_5] orfind u_4 = ri_4 <= qEnc suchthat defined(x_O_1[ri_4], r_4[ri_4]) && {91}(x_O_1 = x_O_1[ri_4]) then r_4[u_4] orfind u_3 = ri_3 <= qKDFextract suchthat defined(x_O_2[ri_3], r_5[ri_3]) && (x_O_1 = x_O_2[ri_3]) then r_5[u_3] else r_4 <-R prk; r_4);
+         prk1: hash <- (x_O_1: transcript <- t_2; {78}find [unique] u_5 = ri_5 <= qEnc suchthat defined(x_O[ri_5], r_3[ri_5]) && {81}(x_O_1 = x_O[ri_5]) then r_3[u_5] orfind u_4 = ri_4 <= qEnc suchthat defined(x_O_1[ri_4], r_4[ri_4]) && {91}(x_O_1 = x_O_1[ri_4]) then r_4[u_4] orfind u_3 = ri_3 <= qKDFextract suchthat defined(x_O_2[ri_3], r_5[ri_3]) && (x_O_1 = x_O_2[ri_3]) then r_5[u_3] else r_4 <-R hash; r_4);
          k1: key <- kdf_expand(prk1, info1);
          r_1 <-R enc_seed;
          return(enc_r(m2, k1, r_1))
      ) | (
        foreach iH <= qKDFextract do
        OH(x1: transcript) :=
-       return((x_O_2: transcript <- x1; find [unique] u_2 = ri_2 <= qEnc suchthat defined(x_O[ri_2], r_3[ri_2]) && (x_O_2 = x_O[ri_2]) then r_3[u_2] orfind u_1 = ri_1 <= qEnc suchthat defined(x_O_1[ri_1], r_4[ri_1]) && (x_O_2 = x_O_1[ri_1]) then r_4[u_1] orfind u = ri <= qKDFextract suchthat defined(x_O_2[ri], r_5[ri]) && (x_O_2 = x_O_2[ri]) then r_5[u] else r_5 <-R prk; r_5))
+       return((x_O_2: transcript <- x1; find [unique] u_2 = ri_2 <= qEnc suchthat defined(x_O[ri_2], r_3[ri_2]) && (x_O_2 = x_O[ri_2]) then r_3[u_2] orfind u_1 = ri_1 <= qEnc suchthat defined(x_O_1[ri_1], r_4[ri_1]) && (x_O_2 = x_O_1[ri_1]) then r_4[u_1] orfind u = ri <= qKDFextract suchthat defined(x_O_2[ri], r_5[ri]) && (x_O_2 = x_O_2[ri]) then r_5[u] else r_5 <-R hash; r_5))
      ))
 
 
@@ -176,19 +176,19 @@ Game 6 is
        Oenc(m1: bitstring, m2: bitstring) :=
        if Z(m1) = Z(m2) then
        if b then
-         prk1: prk <- (x_O: transcript <- t_2; {23}find [unique] u_8 = ri_8 <= qEnc suchthat defined(x_O[ri_8], r_3[ri_8]) then r_3[u_8] orfind u_6 = ri_6 <= qKDFextract suchthat defined(x_O_2[ri_6], r_5[ri_6]) && (x_O = x_O_2[ri_6]) then r_5[u_6] else r_3 <-R prk; r_3);
+         prk1: hash <- (x_O: transcript <- t_2; {23}find [unique] u_8 = ri_8 <= qEnc suchthat defined(x_O[ri_8], r_3[ri_8]) then r_3[u_8] orfind u_6 = ri_6 <= qKDFextract suchthat defined(x_O_2[ri_6], r_5[ri_6]) && (x_O = x_O_2[ri_6]) then r_5[u_6] else r_3 <-R hash; r_3);
          k1: key <- kdf_expand(prk1, info1);
          r_2 <-R enc_seed;
          return(enc_r(m1, k1, r_2))
        else
-         prk1: prk <- (x_O_1: transcript <- t_2; {64}find [unique] u_4 = ri_4 <= qEnc suchthat defined(x_O_1[ri_4], r_4[ri_4]) then r_4[u_4] orfind u_3 = ri_3 <= qKDFextract suchthat defined(x_O_2[ri_3], r_5[ri_3]) && (x_O_1 = x_O_2[ri_3]) then r_5[u_3] else r_4 <-R prk; r_4);
+         prk1: hash <- (x_O_1: transcript <- t_2; {64}find [unique] u_4 = ri_4 <= qEnc suchthat defined(x_O_1[ri_4], r_4[ri_4]) then r_4[u_4] orfind u_3 = ri_3 <= qKDFextract suchthat defined(x_O_2[ri_3], r_5[ri_3]) && (x_O_1 = x_O_2[ri_3]) then r_5[u_3] else r_4 <-R hash; r_4);
          k1: key <- kdf_expand(prk1, info1);
          r_1 <-R enc_seed;
          return(enc_r(m2, k1, r_1))
      ) | (
        foreach iH <= qKDFextract do
        OH(x1: transcript) :=
-       return((x_O_2: transcript <- x1; find [unique] u_2 = ri_2 <= qEnc suchthat defined(x_O[ri_2], r_3[ri_2]) && (x_O_2 = x_O[ri_2]) then r_3[u_2] orfind u_1 = ri_1 <= qEnc suchthat defined(x_O_1[ri_1], r_4[ri_1]) && (x_O_2 = x_O_1[ri_1]) then r_4[u_1] orfind u = ri <= qKDFextract suchthat defined(x_O_2[ri], r_5[ri]) && (x_O_2 = x_O_2[ri]) then r_5[u] else r_5 <-R prk; r_5))
+       return((x_O_2: transcript <- x1; find [unique] u_2 = ri_2 <= qEnc suchthat defined(x_O[ri_2], r_3[ri_2]) && (x_O_2 = x_O[ri_2]) then r_3[u_2] orfind u_1 = ri_1 <= qEnc suchthat defined(x_O_1[ri_1], r_4[ri_1]) && (x_O_2 = x_O_1[ri_1]) then r_4[u_1] orfind u = ri <= qKDFextract suchthat defined(x_O_2[ri], r_5[ri]) && (x_O_2 = x_O_2[ri]) then r_5[u] else r_5 <-R hash; r_5))
      ))
 
 
@@ -210,36 +210,36 @@ Game 7 is
        if b then
          x_O: transcript <- t_2;
          find [unique] u_8 = ri_8 <= qEnc suchthat defined(r_3[ri_8]) then
-           prk1: prk <- r_3[u_8];
+           prk1: hash <- r_3[u_8];
            k1: key <- kdf_expand(prk1, info1);
            r_2 <-R enc_seed;
            return(enc_r(m1, k1, r_2))
          orfind u_6 = ri_6 <= qKDFextract suchthat defined(x_O_2[ri_6], r_5[ri_6]) && (x_O = x_O_2[ri_6]) then
-           prk1: prk <- r_5[u_6];
+           prk1: hash <- r_5[u_6];
            k1: key <- kdf_expand(prk1, info1);
            r_2 <-R enc_seed;
            return(enc_r(m1, k1, r_2))
          else
-           r_3 <-R prk;
-           prk1: prk <- r_3;
+           r_3 <-R hash;
+           prk1: hash <- r_3;
            k1: key <- kdf_expand(prk1, info1);
            r_2 <-R enc_seed;
            return(enc_r(m1, k1, r_2))
        else
          x_O_1: transcript <- t_2;
          find [unique] u_4 = ri_4 <= qEnc suchthat defined(r_4[ri_4]) then
-           prk1: prk <- r_4[u_4];
+           prk1: hash <- r_4[u_4];
            k1: key <- kdf_expand(prk1, info1);
            r_1 <-R enc_seed;
            return(enc_r(m2, k1, r_1))
          orfind u_3 = ri_3 <= qKDFextract suchthat defined(x_O_2[ri_3], r_5[ri_3]) && (x_O_1 = x_O_2[ri_3]) then
-           prk1: prk <- r_5[u_3];
+           prk1: hash <- r_5[u_3];
            k1: key <- kdf_expand(prk1, info1);
            r_1 <-R enc_seed;
            return(enc_r(m2, k1, r_1))
          else
-           r_4 <-R prk;
-           prk1: prk <- r_4;
+           r_4 <-R hash;
+           prk1: hash <- r_4;
            k1: key <- kdf_expand(prk1, info1);
            r_1 <-R enc_seed;
            return(enc_r(m2, k1, r_1))
@@ -254,7 +254,7 @@ Game 7 is
        orfind u = ri <= qKDFextract suchthat defined(x_O_2[ri], r_5[ri]) && (x_O_2 = x_O_2[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -291,7 +291,7 @@ Game 8 is
            r_2 <-R enc_seed;
            return(enc_r(m1, k1, r_2))
          else
-           r_3 <-R prk;
+           r_3 <-R hash;
            k1: key <- kdf_expand(r_3, info1);
            r_2 <-R enc_seed;
            return(enc_r(m1, k1, r_2))
@@ -306,7 +306,7 @@ Game 8 is
            r_1 <-R enc_seed;
            return(enc_r(m2, k1, r_1))
          else
-           r_4 <-R prk;
+           r_4 <-R hash;
            k1: key <- kdf_expand(r_4, info1);
            r_1 <-R enc_seed;
            return(enc_r(m2, k1, r_1))
@@ -321,7 +321,7 @@ Game 8 is
        orfind u = ri <= qKDFextract suchthat defined(x1[ri], x_O_2[ri], r_5[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -346,7 +346,7 @@ Game 9 is
            r_2 <-R enc_seed;
            return(enc_r(m1, k1, r_2))
          else
-           r_3 <-R prk;
+           r_3 <-R hash;
            k1: key <- kdf_expand(r_3, info1);
            r_2 <-R enc_seed;
            return(enc_r(m1, k1, r_2))
@@ -357,7 +357,7 @@ Game 9 is
            r_1 <-R enc_seed;
            return(enc_r(m2, k1, r_1))
          else
-           r_4 <-R prk;
+           r_4 <-R hash;
            k1: key <- kdf_expand(r_4, info1);
            r_1 <-R enc_seed;
            return(enc_r(m2, k1, r_1))
@@ -368,7 +368,7 @@ Game 9 is
 {110}  find [unique] u = ri <= qKDFextract suchthat defined(x1[ri], x_O_2[ri], r_5[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -394,7 +394,7 @@ Game 10 is
            r_2 <-R enc_seed;
            return(enc_r(m1, k1, r_2))
          else
-           r_3 <-R prk;
+           r_3 <-R hash;
            k1: key <- kdf_expand(r_3, info1);
            r_2 <-R enc_seed;
            return(enc_r(m1, k1, r_2))
@@ -405,7 +405,7 @@ Game 10 is
            r_1 <-R enc_seed;
            return(enc_r(m2, k1, r_1))
          else
-           r_4 <-R prk;
+           r_4 <-R hash;
            k1: key <- kdf_expand(r_4, info1);
            r_1 <-R enc_seed;
            return(enc_r(m2, k1, r_1))
@@ -416,7 +416,7 @@ Game 10 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -441,7 +441,7 @@ Game 11 is
            r_2 <-R enc_seed;
            return(enc_r(m1, k1, r_2))
          else
-           r_3 <-R prk;
+           r_3 <-R hash;
            k1: key <- kdf_expand(r_3, info1);
            r_2 <-R enc_seed;
            return(enc_r(m1, k1, r_2))
@@ -451,7 +451,7 @@ Game 11 is
            r_1 <-R enc_seed;
            return(enc_r(m2, k1, r_1))
          else
-           r_4 <-R prk;
+           r_4 <-R hash;
            k1: key <- kdf_expand(r_4, info1);
            r_1 <-R enc_seed;
            return(enc_r(m2, k1, r_1))
@@ -461,7 +461,7 @@ Game 11 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -485,7 +485,7 @@ Game 12 is
            r_9 <-R enc_seed;
            return(enc_r(m1, k1, r_9))
          else
-           r_3 <-R prk;
+           r_3 <-R hash;
            k1: key <- kdf_expand(r_3, info1);
            r_8 <-R enc_seed;
            return(enc_r(m1, k1, r_8))
@@ -495,7 +495,7 @@ Game 12 is
            r_7 <-R enc_seed;
            return(enc_r(m2, k1, r_7))
          else
-           r_4 <-R prk;
+           r_4 <-R hash;
            k1: key <- kdf_expand(r_4, info1);
            r_6 <-R enc_seed;
            return(enc_r(m2, k1, r_6))
@@ -505,7 +505,7 @@ Game 12 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -528,7 +528,7 @@ Game 13 is
            r_9 <-R enc_seed;
            return(enc_r(m1, k1, r_9))
          else
-           r_3 <-R prk;
+           r_3 <-R hash;
            k1: key <- kdf_expand(r_3, info1);
            r_8 <-R enc_seed;
            return(enc_r(m1, k1, r_8))
@@ -538,7 +538,7 @@ Game 13 is
            r_7 <-R enc_seed;
            return(enc_r(m2, k1, r_7))
          else
-           r_4: prk <- cst_prk;
+           r_4: hash <- cst_hash;
            k1: key <- (x_O_3: info <- info1; {115}find [unique] u_9 = ri_9 <= qEnc suchthat defined(u_4[ri_9], x_O_4[ri_9], r_11[ri_9]) && {119}((u_4[ri_9] = i) && (x_O_3 = x_O_4[ri_9])) then r_11[u_9] else r_10 <-R key; r_10);
            r_6 <-R enc_seed;
            return(enc_r(m2, k1, r_6))
@@ -548,7 +548,7 @@ Game 13 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -575,7 +575,7 @@ Game 14 is
            r_9 <-R enc_seed;
            return(enc_r(m1, k1, r_9))
          else
-           r_3 <-R prk;
+           r_3 <-R hash;
            k1: key <- kdf_expand(r_3, info1);
            r_8 <-R enc_seed;
            return(enc_r(m1, k1, r_8))
@@ -585,7 +585,7 @@ Game 14 is
            r_7 <-R enc_seed;
            return(enc_r(m2, k1, r_7))
          else
-           r_4: prk <- cst_prk;
+           r_4: hash <- cst_hash;
            k1: key <- (x_O_3: info <- info1; r_10 <-R key; r_10);
            r_6 <-R enc_seed;
            return(enc_r(m2, k1, r_6))
@@ -595,7 +595,7 @@ Game 14 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -620,7 +620,7 @@ Game 15 is
            r_9 <-R enc_seed;
            return(enc_r(m1, k1, r_9))
          else
-           r_3 <-R prk;
+           r_3 <-R hash;
            k1: key <- kdf_expand(r_3, info1);
            r_8 <-R enc_seed;
            return(enc_r(m1, k1, r_8))
@@ -641,7 +641,7 @@ Game 15 is
              r_7 <-R enc_seed;
              return(enc_r(m2, k1, r_7))
          else
-           r_4: prk <- cst_prk;
+           r_4: hash <- cst_hash;
            x_O_3: info <- info1;
            r_10 <-R key;
            k1: key <- r_10;
@@ -653,7 +653,7 @@ Game 15 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -682,7 +682,7 @@ Game 16 is
            r_9 <-R enc_seed;
            return(enc_r(m1, k1, r_9))
          else
-           r_3 <-R prk;
+           r_3 <-R hash;
            k1: key <- kdf_expand(r_3, info1);
            r_8 <-R enc_seed;
            return(enc_r(m1, k1, r_8))
@@ -708,7 +708,7 @@ Game 16 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -732,7 +732,7 @@ Game 17 is
            r_9 <-R enc_seed;
            return(enc_r(m1, k1, r_9))
          else
-           r_3 <-R prk;
+           r_3 <-R hash;
            k1: key <- kdf_expand(r_3, info1);
            r_8 <-R enc_seed;
            return(enc_r(m1, k1, r_8))
@@ -758,7 +758,7 @@ Game 17 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -785,7 +785,7 @@ Game 18 is
            r_9 <-R enc_seed;
            return(enc_r(m1, k1, r_9))
          else
-           r_3 <-R prk;
+           r_3 <-R hash;
            k1: key <- kdf_expand(r_3, info1);
            r_8 <-R enc_seed;
            return(enc_r(m1, k1, r_8))
@@ -803,7 +803,7 @@ Game 18 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -826,7 +826,7 @@ Game 19 is
            r_9 <-R enc_seed;
            return(enc_r(m1, k1, r_9))
          else
-           r_3: prk <- cst_prk;
+           r_3: hash <- cst_hash;
            k1: key <- (x_O_5: info <- info1; {76}find [unique] u_12 = ri_13 <= qEnc suchthat defined(u_8[ri_13], x_O_6[ri_13], r_13[ri_13]) && {80}((u_8[ri_13] = i) && (x_O_5 = x_O_6[ri_13])) then r_13[u_12] else r_12 <-R key; r_12);
            r_8 <-R enc_seed;
            return(enc_r(m1, k1, r_8))
@@ -844,7 +844,7 @@ Game 19 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -871,7 +871,7 @@ Game 20 is
            r_9 <-R enc_seed;
            return(enc_r(m1, k1, r_9))
          else
-           r_3: prk <- cst_prk;
+           r_3: hash <- cst_hash;
            k1: key <- (x_O_5: info <- info1; r_12 <-R key; r_12);
            r_8 <-R enc_seed;
            return(enc_r(m1, k1, r_8))
@@ -889,7 +889,7 @@ Game 20 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -925,7 +925,7 @@ Game 21 is
              r_9 <-R enc_seed;
              return(enc_r(m1, k1, r_9))
          else
-           r_3: prk <- cst_prk;
+           r_3: hash <- cst_hash;
            x_O_5: info <- info1;
            r_12 <-R key;
            k1: key <- r_12;
@@ -945,7 +945,7 @@ Game 21 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -998,7 +998,7 @@ Game 22 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -1046,7 +1046,7 @@ Game 23 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -1089,7 +1089,7 @@ Game 24 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -1129,7 +1129,7 @@ Game 25 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -1171,7 +1171,7 @@ Game 26 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -1212,7 +1212,7 @@ Game 27 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -1252,7 +1252,7 @@ Game 28 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -1294,7 +1294,7 @@ Game 29 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -1335,7 +1335,7 @@ Game 30 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 
@@ -1365,7 +1365,7 @@ Game 31 is
        find [unique] u = ri <= qKDFextract suchthat defined(r_5[ri], x1[ri]) && (x1 = x1[ri]) then
          return(r_5[u])
        else
-         r_5 <-R prk;
+         r_5 <-R hash;
          return(r_5)
      ))
 

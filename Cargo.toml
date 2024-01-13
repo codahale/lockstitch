@@ -25,9 +25,6 @@ hedge = ["rand_core"]
 portable = ["aes"]
 std = []
 
-[patch.crates-io]
-keccak = { git = "https://github.com/RustCrypto/sponges", package = "keccak" }
-
 [workspace]
 members = ["benchmarks", "xtask"]
 

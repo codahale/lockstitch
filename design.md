@@ -75,10 +75,10 @@ function mix(transcript, label, input):
   transcript
 ```
 
-`Mix` encodes the length of the label in bits and the length of the input in bits using [NIST SP
-800-185][]'s `right_encode`. This ensures an unambiguous encoding for any combination of label and
-input, regardless of length. The use of `right_encode` the length of the input supports incremental
-processing of data streams whose sizes are not known in advance.
+`Mix` encodes the length of the label in bits and the length of the input in bits using the
+`right_encode` function from [NIST SP 800-185][]. This ensures an unambiguous encoding for any
+combination of label and input, regardless of length. The use of `right_encode` the length of the
+input supports incremental processing of data streams whose sizes are not known in advance.
 
 ### `Derive`
 

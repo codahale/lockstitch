@@ -91,14 +91,14 @@ function derive(transcript, label, n):
   transcript ← transcript ǁ 0x03                           // Append a Derive op code to the transcript.
   transcript ← transcript ǁ label ǁ right_encode(|label|)  // Append the encoded label.
   transcript ← mix(transcript, "len", right_encode(n))     // Append a Mix operation with the output length.
-  kdk ǁ output ← turboshake128(0x22, transcript, 32+n)     // Use TurboSHAKE128 to derive a KDK and the output.
+  kdk ǁ output ← turboshake128(0x22, transcript, 256+n)    // Use TurboSHAKE128 to derive a KDK and the output.
   transcript ← mix(ɛ, "kdk", kdk)                          // Replace the transcript with a single Mix operation with the KDK.
   (transcript, output)                                     // Return the new transcript along with the output.
 ```
 
 `Derive` appends an operation code, the operation label, and a `Mix` operation containing the
 requested output length to the transcript. It then uses the transcript as input to TurboSHAKE128.
-The first 32 bytes of XOF output are used as a key derivation key (KDK) and the remainder is used to
+The first 256 bits of XOF output are used as a key derivation key (KDK) and the remainder is used to
 generate the requested output. Finally, the transcript is replaced with a single `Mix` operation
 containing the KDK.
 
@@ -136,7 +136,7 @@ properties:
 
 `Encrypt` and `Decrypt` operations append an operation code and a label to the transcript, append a
 `Mix` operation with the plaintext length to the transcript, derive an AEGIS-128L key and nonce,
-encrypt or decrypt an input with AEGIS-128L, and append a `Mix` operation with the 32-byte
+encrypt or decrypt an input with AEGIS-128L, and append a `Mix` operation with the 256-bit
 AEGIS-128L tag to the transcript.
 
 ```text
@@ -144,7 +144,7 @@ function encrypt(transcript, label, plaintext):
   transcript ← transcript ǁ 0x04                                      // Append a Crypt op code to the transcript.
   transcript ← transcript ǁ label ǁ right_encode(|label|)             // Append the encoded label.
   transcript ← mix(transcript, "len", right_encode(|plaintext|))      // Append a Mix operation with the plaintext length.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)           // Derive an AEGIS-128L key and nonce.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 256)          // Derive an AEGIS-128L key and nonce.
   (ciphertext, _, tag256) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
   transcript ← mix(transcript, "tag", tag256)                         // Append a Mix operation with the 256-bit tag.
   (transcript, ciphertext)
@@ -153,7 +153,7 @@ function decrypt(transcript, label, ciphertext):
   transcript ← transcript ǁ 0x04                                      // Append a Crypt op code to the transcript.
   transcript ← transcript ǁ label ǁ right_encode(|label|)             // Append the encoded label.
   transcript ← mix(transcript, "len", right_encode(|plaintext|))      // Append a Mix operation with the plaintext length.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)           // Derive an AEGIS-128L key and nonce.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 256)          // Derive an AEGIS-128L key and nonce.
   (plaintext, _, tag256) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
   transcript ← mix(transcript, "tag", tag256)                         // Append a Mix operation with the 256-bit tag.
   (transcript, plaintext)
@@ -187,15 +187,15 @@ produce modified ciphertexts which successfully decrypt). For IND-CPA and IND-CC
 
 `Seal` and `Open` operations append an operation code and a label to the transcript, append a `Mix`
 operation with the plaintext length to the transcript, derive an AEGIS-128L key and nonce, encrypt
-or decrypt an input with AEGIS-128L, append a `Mix` operation with the 32-byte AEGIS-128L tag to the
-transcript, and append the 16-byte AEGIS-128L tag to the ciphertext.
+or decrypt an input with AEGIS-128L, append a `Mix` operation with the 256-bit AEGIS-128L tag to the
+transcript, and append the 128-bit AEGIS-128L tag to the ciphertext.
 
 ```text
 function seal(transcript, label, plaintext):
   transcript ← transcript ǁ 0x05                                           // Append an AuthCrypt op code to the transcript.
   transcript ← transcript ǁ label ǁ right_encode(|label|)                  // Append the encoded label.
   transcript ← mix(transcript, "len", right_encode(|plaintext|))           // Append a Mix operation with the plaintext length.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)                // Derive an AEGIS-128L key and nonce.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 256)               // Derive an AEGIS-128L key and nonce.
   (ciphertext, tag128, tag256) ← aegis128l::encrypt(key, nonce, plaintext) // Encrypt the plaintext.
   transcript ← mix(transcript, "tag", tag256)                              // Append a Mix operation with the 256-bit tag.
   (transcript, ciphertext, tag128)                                         // Return the ciphertext and the 128-bit tag.
@@ -203,8 +203,8 @@ function seal(transcript, label, plaintext):
 function open(transcript, label, ciphertext, tag128):
   transcript ← transcript ǁ 0x05                                           // Append an AuthCrypt op code to the transcript.
   transcript ← transcript ǁ label ǁ right_encode(|label|)                  // Append the encoded label.
-  transcript ← mix(transcript, "len", right_encode(|ciphertext|-16))       // Append a Mix operation with the plaintext length.
-  (transcript, key ǁ nonce) ← derive(transcript, "key", 32)                // Derive an AEGIS-128L key and nonce.
+  transcript ← mix(transcript, "len", right_encode(|ciphertext|-128))      // Append a Mix operation with the plaintext length.
+  (transcript, key ǁ nonce) ← derive(transcript, "key", 256)               // Derive an AEGIS-128L key and nonce.
   (plaintext, tag128, tag256) ← aegis128l::decrypt(key, nonce, ciphertext) // Decrypt the ciphertext.
   transcript ← mix(transcript, "tag", tag256)                              // Append a Mix operation with the 256-bit tag.
   if tag128 = tag128′:                                                     // Compare the 128-bit tags in constant time.
@@ -224,9 +224,9 @@ Calculating a message digest is as simple as a `Mix` and a `Derive`:
 
 ```text
 function message_digest(message):
-  md ← init("com.example.md")            // Initialize a protocol with a domain string.
-  md ← mix(md, "message", data)          // Mix the message into the protocol.
-  (_, digest) ← derive(md, "digest", 32) // Derive 32 bytes of output and return it.
+  md ← init("com.example.md")             // Initialize a protocol with a domain string.
+  md ← mix(md, "message", data)           // Mix the message into the protocol.
+  (_, digest) ← derive(md, "digest", 256) // Derive 256 bits of output and return it.
   digest
 ```
 
@@ -242,7 +242,7 @@ function mac(key, message):
   mac ← init("com.example.mac")      // Initialize a protocol with a domain string.
   mac ← mix(mac, "key", key)         // Mix the key into the protocol.
   mac ← mix(mac, "message", message) // Mix the message into the protocol.
-  (_, tag) ← derive(mac, "tag", 16)  // Derive 16 bytes of output and return it.
+  (_, tag) ← derive(mac, "tag", 128) // Derive 128 bits of output and return it.
   tag
 ```
 
@@ -401,14 +401,14 @@ Lockstitch can be used to implement EdDSA-style Schnorr digital signatures:
 
 ```text
 function sign(signer, message):
-  schnorr ← init("com.example.eddsa")                     // Initialize a protocol with a domain string.
-  schnorr ← mix(schnorr, "signer", signer.pub)            // Mix the signer's public key into the protocol.
-  schnorr ← mix(schnorr, "message", message)              // Mix the message into the protocol.
-  (k, I) ← p256::key_gen()                                // Generate a commitment scalar and point.
-  schnorr ← mix(schnorr, "commitment", I)                 // Mix the commitment point into the protocol.
-  (_, r) ← p256::scalar(derive(schnorr, "challenge", 32)) // Derive a challenge scalar.
-  s ← signer.priv * r + k                                 // Calculate the proof scalar.
-  (I, s)                                                  // Return the commitment point and proof scalar.
+  schnorr ← init("com.example.eddsa")                      // Initialize a protocol with a domain string.
+  schnorr ← mix(schnorr, "signer", signer.pub)             // Mix the signer's public key into the protocol.
+  schnorr ← mix(schnorr, "message", message)               // Mix the message into the protocol.
+  (k, I) ← p256::key_gen()                                 // Generate a commitment scalar and point.
+  schnorr ← mix(schnorr, "commitment", I)                  // Mix the commitment point into the protocol.
+  (_, r) ← p256::scalar(derive(schnorr, "challenge", 256)) // Derive a challenge scalar.
+  s ← signer.priv * r + k                                  // Calculate the proof scalar.
+  (I, s)                                                   // Return the commitment point and proof scalar.
 ```
 
 The resulting signature is strongly bound to both the message and the signer's public key, making it
@@ -417,13 +417,13 @@ verification function must account for co-factors to be strongly unforgeable.
 
 ```text
 function verify(signer.pub, message, I, s):
-  schnorr ← init("com.example.eddsa")                      // Initialize a protocol with a domain string.
-  schnorr ← mix(schnorr, "signer", signer.pub)             // Mix the signer's public key into the protocol.
-  schnorr ← mix(schnorr, "message", message)               // Mix the message into the protocol.
-  schnorr ← mix(schnorr, "commitment", I)                  // Mix the commitment point into the protocol.
-  (_, r′) ← p256::scalar(derive(schnorr, "challenge", 32)) // Derive a counterfactual challenge scalar.
-  I′ ← [s]G - [r′]signer.pub                               // Calculate the counterfactual commitment point.
-  I = I′                                                   // The signature is valid if both points are equal.
+  schnorr ← init("com.example.eddsa")                       // Initialize a protocol with a domain string.
+  schnorr ← mix(schnorr, "signer", signer.pub)              // Mix the signer's public key into the protocol.
+  schnorr ← mix(schnorr, "message", message)                // Mix the message into the protocol.
+  schnorr ← mix(schnorr, "commitment", I)                   // Mix the commitment point into the protocol.
+  (_, r′) ← p256::scalar(derive(schnorr, "challenge", 256)) // Derive a counterfactual challenge scalar.
+  I′ ← [s]G - [r′]signer.pub                                // Calculate the counterfactual commitment point.
+  I = I′                                                    // The signature is valid if both points are equal.
 ```
 
 An additional variation on this construction uses `Encrypt` instead of `Mix` to include the
@@ -448,7 +448,7 @@ function signcrypt(sender, receiver.pub, plaintext):
   (sc, ciphertext) ← encrypt(sc, "message", plaintext)     // Encrypt the plaintext.
   (k, I) ← p256::key_gen()                                 // Generate a commitment scalar and point.
   sc ← mix(sc, "commitment", I)                            // Mix the commitment point into the protocol.
-  (_, r) ← p256::scalar(derive(sc, "challenge", 32))       // Derive a challenge scalar.
+  (_, r) ← p256::scalar(derive(sc, "challenge", 256))      // Derive a challenge scalar.
   s ← sender.priv * r + k                                  // Calculate the proof scalar.
   (ephemeral.pub, ciphertext, I, s)                        // Return the ephemeral public key, ciphertext, and signature.
 ```
@@ -462,7 +462,7 @@ function unsigncrypt(receiver, sender.pub, ephemeral.pub, I, s):
   sc ← mix(sc, "ecdh", ecdh(receiver.priv, ephemeral.pub)) // Mix the ECDH shared secret into the protocol.
   (sc, plaintext) ← decrypt(sc, "message", ciphertext)     // Decrypt the ciphertext.
   sc ← mix(sc, "commitment", I)                            // Mix the commitment point into the protocol.
-  (_, r′) ← p256::scalar(derive(sc, "challenge", 32))      // Derive a counterfactual challenge scalar.
+  (_, r′) ← p256::scalar(derive(sc, "challenge", 256))     // Derive a counterfactual challenge scalar.
   I′ ← [s]G - [r′]sender.pub                               // Calculate the counterfactual commitment point.
   if I = I′:
     plaintext                                              // If both points are equal, return the plaintext.
@@ -515,18 +515,18 @@ random value, and used to derive a hedged ephemeral:
 
 ```text
 function hedged_sign(signer, message):
-  eddsa ← init("com.example.eddsa")                     // Initialize a protocol with a domain string.
-  eddsa ← mix(eddsa, "signer", signer.pub)              // Mix the signer's public key into the protocol.
-  eddsa ← mix(eddsa, "message", message)                // Mix the message into the protocol.
-  with clone ← clone(eddsa) do                          // Clone the protocol.
-    clone ← mix(clone, "signer", signer.priv)           // Mix the signer's private key into the clone.
-    clone ← mix(clone, "rand", rand(64))                // Mix 64 random bytes into the clone.
-    k ← p256::scalar(derive(clone, "commitment", 32))   // Derive a commitment scalar from the clone.
-    I ← [k]G                                            // Calculate the commitment point.
-    yield (k, I)                                        // Return the ephemeral key pair to the signing scope.
-  end                                                   // Discard the cloned protocol.
-  eddsa ← mix(eddsa, "commitment", I)                   // Mix the commitment point into the protocol.
-  (_, r) ← p256::scalar(derive(eddsa, "challenge", 32)) // Derive a challenge scalar.
-  s ← signer.priv * r + k                               // Calculate the proof scalar.
-  (I, s)                                                // Return the commitment point and proof scalar.
+  eddsa ← init("com.example.eddsa")                      // Initialize a protocol with a domain string.
+  eddsa ← mix(eddsa, "signer", signer.pub)               // Mix the signer's public key into the protocol.
+  eddsa ← mix(eddsa, "message", message)                 // Mix the message into the protocol.
+  with clone ← clone(eddsa) do                           // Clone the protocol.
+    clone ← mix(clone, "signer", signer.priv)            // Mix the signer's private key into the clone.
+    clone ← mix(clone, "rand", rand(512))                // Mix 512 random bits into the clone.
+    k ← p256::scalar(derive(clone, "commitment", 256))   // Derive a commitment scalar from the clone.
+    I ← [k]G                                             // Calculate the commitment point.
+    yield (k, I)                                         // Return the ephemeral key pair to the signing scope.
+  end                                                    // Discard the cloned protocol.
+  eddsa ← mix(eddsa, "commitment", I)                    // Mix the commitment point into the protocol.
+  (_, r) ← p256::scalar(derive(eddsa, "challenge", 256)) // Derive a challenge scalar.
+  s ← signer.priv * r + k                                // Calculate the proof scalar.
+  (I, s)                                                 // Return the commitment point and proof scalar.
 ```

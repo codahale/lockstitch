@@ -159,29 +159,29 @@ function decrypt(transcript, label, ciphertext):
   (transcript, plaintext)
 ```
 
-Three points bear mentioning about `Encrypt` and `Decrypt`.
+Three points bear mentioning about `Encrypt` and `Decrypt`:
 
-First, both `Encrypt` and `Decrypt` use the same operation code to ensure protocols have the same
-transcript after both encrypting and decrypting data.
+1. Both `Encrypt` and `Decrypt` use the same operation code to ensure protocols have the same
+   transcript after both encrypting and decrypting data.
+2. Despite not updating the protocol transcript with either the plaintext or ciphertext, the
+   inclusion of the 256-bit tag ensures the protocol's transcript is dependent on both because
+   AEGIS-128L is key committing (i.e. the probability of an attacker finding a different key, nonce,
+   or plaintext which produces the same authentication tag is negligible).
 
-Second, despite not updating the protocol transcript with either the plaintext or ciphertext, the
-inclusion of the 256-bit tag ensures the protocol's transcript is dependent on both because
-AEGIS-128L is key committing (i.e. the probability of an attacker finding a different key, nonce, or
-plaintext which produces the same authentication tag is negligible).
+   **IMPORTANT:** [AEGIS-128L by itself is not fully committing][Iso23], as tag collisions can be
+   found if authenticated data is attacker-controlled. Lockstitch does not pass authenticated data
+   to AEGIS-128L, however, mooting this type of attack.
+3. `Encrypt` operations provide no authentication by themselves. An attacker can modify a
+   ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
+   they are EAV secure (i.e. a passive adversary will not be able to read plaintext without knowing
+   the protocol's prior transcript) but not IND-CPA secure (i.e. an active adversary with an
+   encryption oracle will be able to detect duplicate plaintexts) or IND-CCA secure (i.e. an active
+   adversary can produce modified ciphertexts which successfully decrypt).
 
-**IMPORTANT:** [AEGIS-128L by itself is not fully committing][Iso23], as tag collisions can be found
-if authenticated data is attacker-controlled. Lockstitch does not pass authenticated data to
-AEGIS-128L, however, mooting this type of attack.
+   For IND-CPA security, the protocol's transcript must include a probabilistic value (like a nonce)
+   and for IND-CCA security, use [`Seal`/`Open`](#sealopen).
 
-[Iso23]: https://eprint.iacr.org/2023/1495
-
-Third, `Encrypt` operations provide no authentication by themselves. An attacker can modify a
-ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
-they are EAV secure (i.e. a passive adversary will not be able to read plaintext without knowing the
-protocol's prior transcript) but not IND-CPA secure (i.e. an active adversary with an encryption
-oracle will be able to detect duplicate plaintexts) or IND-CCA secure (i.e. an active adversary can
-produce modified ciphertexts which successfully decrypt). For IND-CPA and IND-CCA security, use
-[`Seal`/`Open`](#sealopen).
+[Iso23]: <https://eprint.iacr.org/2023/1495>
 
 ### `Seal`/`Open`
 
@@ -212,6 +212,9 @@ function open(transcript, label, ciphertext, tag128):
   else:
     (transcript, ⊥)
 ```
+
+`Seal` and `Open` provide IND-CCA2 security as long as the protocol's transcript includes a
+probabilistic value, like a nonce.
 
 ## Basic Protocols
 

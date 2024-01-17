@@ -518,7 +518,6 @@ dependencies = [
  "hex",
  "hex-literal",
  "rand",
- "rand_core",
  "sha3",
  "wycheproof",
 ]

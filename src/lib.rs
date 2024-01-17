@@ -252,40 +252,6 @@ impl Protocol {
         }
     }
 
-    /// Clones the protocol and mixes `secrets` plus 64 random bytes into the clone. Passes the
-    /// clone to `f` and if `f` returns `Some(R)`, returns `R`. Iterates until a value is returned.
-    #[cfg(feature = "hedge")]
-    #[must_use]
-    pub fn hedge<R>(
-        &self,
-        mut rng: impl rand_core::CryptoRngCore,
-        secrets: &[impl AsRef<[u8]>],
-        max_tries: usize,
-        f: impl Fn(&mut Self) -> Option<R>,
-    ) -> R {
-        for _ in 0..max_tries {
-            // Clone the protocol's state.
-            let mut clone = self.clone();
-
-            // Mix each secret into the clone.
-            for s in secrets {
-                clone.mix("secret", s.as_ref());
-            }
-
-            // Mix a random value into the clone.
-            let mut r = [0u8; 64];
-            rng.fill_bytes(&mut r);
-            clone.mix("nonce", &r);
-
-            // Call the given function with the clone and return if the function was successful.
-            if let Some(r) = f(&mut clone) {
-                return r;
-            }
-        }
-
-        unreachable!("unable to hedge a valid value in {} tries", max_tries);
-    }
-
     /// Appends an operation header with an optional label to the protocol transcript.
     #[inline]
     fn op_header(&mut self, op_code: OpCode, label: &str) {
@@ -423,19 +389,6 @@ mod tests {
 
         assert_eq!(slices.derive_array::<16>("third"), streams.derive_array::<16>("third"));
         assert_eq!(b"two".as_slice(), output);
-    }
-
-    #[test]
-    #[cfg(feature = "hedge")]
-    fn hedging() {
-        let mut hedger = Protocol::new("com.example.hedge");
-        hedger.mix("first", b"one");
-        let tag = hedger.hedge(rand::thread_rng(), &[b"two"], 10_000, |clone| {
-            let tag = clone.derive_array::<16>("tag");
-            (tag[0] == 0).then_some(tag)
-        });
-
-        assert_eq!(tag[0], 0);
     }
 
     #[test]

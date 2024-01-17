@@ -109,7 +109,6 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 
 * `asm`: Enables hand-coded assembly for TurboSHAKE128 for `aarch64`. Enabled by default.
 * `docs`: Enables the docs-only `perf` and `design` modules.
-* `hedge`: Enables hedged random value generation with `rand_core`. Enabled by default.
 * `std`: Enables features based on the Rust standard library. Enabled by default.
 
 ## Performance

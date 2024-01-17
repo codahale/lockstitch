@@ -62,6 +62,14 @@ impl Protocol {
         self.transcript.update(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
     }
 
+    /// Mixes the given label and integer into the protocol state.
+    ///
+    /// `input` is encoded using `right_encode`, providing a short and unambiguous encoding.
+    #[inline]
+    pub fn mix_int(&mut self, label: &str, input: u64) {
+        self.mix(label, right_encode(&mut [0u8; 9], input));
+    }
+
     /// Moves the protocol into a [`std::io::Write`] implementation, mixing all written data in a
     /// single operation and passing all writes to `inner`.
     ///
@@ -88,7 +96,7 @@ impl Protocol {
         self.op_header(OpCode::Derive, label);
 
         // Perform a Mix operation with the output length.
-        self.mix("len", right_encode(&mut [0u8; 9], out.len() as u64 * 8));
+        self.mix_int("len", out.len() as u64 * 8);
 
         // Hash the transcript with TurboSHAKE128 and reset it to the empty string.
         let mut xof = self.transcript.finalize_xof_reset();
@@ -119,7 +127,7 @@ impl Protocol {
         self.op_header(OpCode::Crypt, label);
 
         // Perform a Mix operation with the plaintext length.
-        self.mix("len", right_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        self.mix_int("len", in_out.len() as u64 * 8);
 
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");
@@ -148,7 +156,7 @@ impl Protocol {
         self.op_header(OpCode::Crypt, label);
 
         // Perform a Mix operation with the plaintext length.
-        self.mix("len", right_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        self.mix_int("len", in_out.len() as u64 * 8);
 
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");
@@ -182,7 +190,7 @@ impl Protocol {
         self.op_header(OpCode::AuthCrypt, label);
 
         // Perform a Mix operation with the plaintext length.
-        self.mix("len", right_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        self.mix_int("len", in_out.len() as u64 * 8);
 
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");
@@ -219,7 +227,7 @@ impl Protocol {
         self.op_header(OpCode::AuthCrypt, label);
 
         // Perform a Mix operation with the plaintext length.
-        self.mix("len", right_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        self.mix_int("len", in_out.len() as u64 * 8);
 
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");

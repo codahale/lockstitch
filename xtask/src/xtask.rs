@@ -18,9 +18,6 @@ enum Command {
     /// Format, build, test, and lint.
     CI,
 
-    /// Run the CryptoVerif proofs.
-    Proofs,
-
     // Run benchmarks.
     Bench {
         /// Additional arguments.
@@ -59,7 +56,6 @@ fn main() -> Result<()> {
 
     match xtask.cmd.unwrap_or(Command::CI) {
         Command::CI => ci(&sh),
-        Command::Proofs => proofs(&sh),
         Command::Bench { args } => bench(&sh, args),
         Command::Cloud { cmd } => match cmd {
             CloudCommand::Create => cloud_create(&sh),
@@ -78,17 +74,6 @@ fn ci(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo build --all-targets --all-features").run()?;
     cmd!(sh, "cargo test").run()?;
     cmd!(sh, "cargo clippy --all-features --tests --benches").run()?;
-
-    Ok(())
-}
-
-fn proofs(sh: &Shell) -> Result<()> {
-    for model in sh.read_dir("proofs").expect("should have a proofs dir") {
-        if model.extension().map(|s| s == "ocv").unwrap_or(false) {
-            let proof = model.with_extension("proof");
-            cmd!(sh, "cryptoverif -oproof {proof} {model}").run()?;
-        }
-    }
 
     Ok(())
 }

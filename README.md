@@ -16,8 +16,7 @@ modern processors at a 128-bit security level.
 
 Neither the design nor the implementation of this library have been independently evaluated. The
 design is documented in [`design.md`](design.md); read it and see if the arguments therein are
-convincing. CryptoVerif proofs can be found in the `proofs` directory; read them and see if the
-models and games therein are accurate.
+convincing.
 
 In addition, there is absolutely no guarantee of backwards compatibility.
 

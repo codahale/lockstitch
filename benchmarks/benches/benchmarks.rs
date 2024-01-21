@@ -7,20 +7,20 @@ use lockstitch::{Protocol, TAG_LEN};
 
 const LENS: &[usize] = &[16, 256, 1024, 16 * 1024, 1024 * 1024];
 
-#[divan::bench(consts = LENS)]
-fn hash<const LEN: usize>(bencher: divan::Bencher) {
-    bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_refs(|message| {
+#[divan::bench(args = LENS)]
+fn hash(bencher: divan::Bencher, len: usize) {
+    bencher.with_inputs(|| vec![0u8; len]).counter(BytesCount::new(len)).bench_refs(|message| {
         let mut protocol = Protocol::new("hash");
         protocol.mix("message", message);
         protocol.derive_array::<32>("digest")
     });
 }
 
-#[divan::bench(consts = LENS)]
-fn hash_writer<const LEN: usize>(bencher: divan::Bencher) {
+#[divan::bench(args = LENS)]
+fn hash_writer(bencher: divan::Bencher, len: usize) {
     bencher
-        .with_inputs(|| io::repeat(0).take(LEN as u64))
-        .counter(BytesCount::new(LEN))
+        .with_inputs(|| io::repeat(0).take(len as u64))
+        .counter(BytesCount::new(len))
         .bench_values(|mut input| {
             let protocol = Protocol::new("hash");
             let mut writer = protocol.mix_writer("message", io::sink());
@@ -30,11 +30,11 @@ fn hash_writer<const LEN: usize>(bencher: divan::Bencher) {
         });
 }
 
-#[divan::bench(consts = LENS)]
-fn stream<const LEN: usize>(bencher: divan::Bencher) {
+#[divan::bench(args = LENS)]
+fn stream(bencher: divan::Bencher, len: usize) {
     let key = [0u8; 32];
     let nonce = [0u8; 16];
-    bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_values(
+    bencher.with_inputs(|| vec![0u8; len]).counter(BytesCount::new(len)).bench_values(
         |mut block| {
             let mut protocol = Protocol::new("stream");
             protocol.mix("key", &key);
@@ -45,12 +45,12 @@ fn stream<const LEN: usize>(bencher: divan::Bencher) {
     );
 }
 
-#[divan::bench(consts = LENS)]
-fn aead<const LEN: usize>(bencher: divan::Bencher) {
+#[divan::bench(args = LENS)]
+fn aead(bencher: divan::Bencher, len: usize) {
     let key = [0u8; 32];
     let nonce = [0u8; 16];
     let ad = [0u8; 32];
-    bencher.with_inputs(|| vec![0u8; LEN + TAG_LEN]).counter(BytesCount::new(LEN)).bench_values(
+    bencher.with_inputs(|| vec![0u8; len + TAG_LEN]).counter(BytesCount::new(len)).bench_values(
         |mut block| {
             let mut protocol = Protocol::new("aead");
             protocol.mix("key", &key);
@@ -62,10 +62,10 @@ fn aead<const LEN: usize>(bencher: divan::Bencher) {
     );
 }
 
-#[divan::bench(consts = LENS)]
-fn prf<const LEN: usize>(bencher: divan::Bencher) {
+#[divan::bench(args = LENS)]
+fn prf(bencher: divan::Bencher, len: usize) {
     let key = [0u8; 32];
-    bencher.with_inputs(|| vec![0u8; LEN]).counter(BytesCount::new(LEN)).bench_values(
+    bencher.with_inputs(|| vec![0u8; len]).counter(BytesCount::new(len)).bench_values(
         |mut block| {
             let mut protocol = Protocol::new("prf");
             protocol.mix("key", &key);

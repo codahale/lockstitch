@@ -24,7 +24,7 @@ fn hash_writer(bencher: divan::Bencher, len: usize) {
         .bench_values(|mut input| {
             let protocol = Protocol::new("hash");
             let mut writer = protocol.mix_writer("message", io::sink());
-            io::copy(&mut input, &mut writer).expect("mix writes should be infallible");
+            io::copy(&mut input, &mut writer).expect("should be infallible");
             let (mut protocol, _) = writer.into_inner();
             protocol.derive_array::<32>("digest")
         });

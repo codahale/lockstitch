@@ -385,14 +385,12 @@ mod tests {
 
         let streams = Protocol::new("com.example.streams");
         let mut streams_write = streams.mix_writer("first", io::sink());
-        io::copy(&mut Cursor::new(b"one"), &mut streams_write)
-            .expect("cursor reads and sink writes should be infallible");
+        io::copy(&mut Cursor::new(b"one"), &mut streams_write).expect("should be infallible");
         let (streams, _) = streams_write.into_inner();
 
         let mut output = Vec::new();
         let mut streams_write = streams.mix_writer("second", &mut output);
-        io::copy(&mut Cursor::new(b"two"), &mut streams_write)
-            .expect("cursor reads and sink writes should be infallible");
+        io::copy(&mut Cursor::new(b"two"), &mut streams_write).expect("should be infallible");
         let (mut streams, output) = streams_write.into_inner();
 
         assert_eq!(slices.derive_array::<16>("third"), streams.derive_array::<16>("third"));

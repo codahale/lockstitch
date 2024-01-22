@@ -8,7 +8,7 @@ Function (XOF), and [AEGIS-128L][], an authenticated cipher, to provide 100+ Gb/
 modern processors at a 128-bit security level.
 
 [TurboSHAKE128]: https://www.ietf.org/archive/id/draft-irtf-cfrg-kangarootwelve-12.html
-[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-09.html
+[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-10.html
 
 ## Protocol
 

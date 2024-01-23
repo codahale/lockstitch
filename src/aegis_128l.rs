@@ -19,16 +19,9 @@ impl Aegis128L {
         let nonce = load(nonce);
 
         // Initialize cipher state.
-        let mut state = [
-            xor(key, nonce),
-            c1,
-            c0,
-            c1,
-            xor(key, nonce),
-            xor(key, c0),
-            xor(key, c1),
-            xor(key, c0),
-        ];
+        let key_nonce = xor(key, nonce);
+        let key_c0 = xor(key, c0);
+        let mut state = [key_nonce, c1, c0, c1, key_nonce, key_c0, xor(key, c1), key_c0];
 
         // Update the state with the nonce and key 10 times.
         for _ in 0..10 {

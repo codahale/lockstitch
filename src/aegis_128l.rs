@@ -10,7 +10,7 @@ pub struct Aegis128L {
 
 impl Aegis128L {
     /// Creates a new AEGIS-128L instance with the given key and nonce.
-    pub fn new(key: &[u8; AES_BLOCK_LEN], nonce: &[u8; AES_BLOCK_LEN]) -> Self {
+    pub fn new(key: &[u8], nonce: &[u8]) -> Self {
         // Initialize constants.
         let (c0, c1) = load_2x(&C);
 

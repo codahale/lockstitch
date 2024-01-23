@@ -132,10 +132,7 @@ impl Protocol {
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");
         let (k, n) = kn.split_at(16);
-        let mut aegis = Aegis128L::new(
-            k.try_into().expect("should be 16 bytes"),
-            n.try_into().expect("should be 16 bytes"),
-        );
+        let mut aegis = Aegis128L::new(k, n);
 
         // Encrypt the plaintext.
         aegis.encrypt(in_out);
@@ -161,10 +158,7 @@ impl Protocol {
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");
         let (k, n) = kn.split_at(16);
-        let mut aegis = Aegis128L::new(
-            k.try_into().expect("should be 16 bytes"),
-            n.try_into().expect("should be 16 bytes"),
-        );
+        let mut aegis = Aegis128L::new(k, n);
 
         // Decrypt the ciphertext.
         aegis.decrypt(in_out);
@@ -195,10 +189,7 @@ impl Protocol {
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");
         let (k, n) = kn.split_at(16);
-        let mut aegis = Aegis128L::new(
-            k.try_into().expect("should be 16 bytes"),
-            n.try_into().expect("should be 16 bytes"),
-        );
+        let mut aegis = Aegis128L::new(k, n);
 
         // Encrypt the plaintext.
         aegis.encrypt(in_out);
@@ -232,10 +223,7 @@ impl Protocol {
         // Derive an AEGIS-128L key and nonce.
         let kn = self.derive_array::<32>("key");
         let (k, n) = kn.split_at(16);
-        let mut aegis = Aegis128L::new(
-            k.try_into().expect("should be 16 bytes"),
-            n.try_into().expect("should be 16 bytes"),
-        );
+        let mut aegis = Aegis128L::new(k, n);
 
         // Decrypt the ciphertext.
         aegis.decrypt(in_out);

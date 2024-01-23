@@ -12,8 +12,7 @@ impl Aegis128L {
     /// Creates a new AEGIS-128L instance with the given key and nonce.
     pub fn new(key: &[u8; AES_BLOCK_LEN], nonce: &[u8; AES_BLOCK_LEN]) -> Self {
         // Initialize constants.
-        let c0 = load(&C0);
-        let c1 = load(&C1);
+        let (c0, c1) = load_2x(&C);
 
         // Initialize key and nonce blocks.
         let key = load(key);
@@ -217,13 +216,9 @@ fn update(state: &mut [AesBlock; 8], m0: AesBlock, m1: AesBlock) {
 /// The length of an AEGIS-128L block.
 const BLOCK_LEN: usize = 32;
 
-/// Initialization constant.
-const C0: [u8; 16] = [
+/// Initialization constants `C0` and `C1`.
+const C: [u8; 32] = [
     0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15, 0x22, 0x37, 0x59, 0x90, 0xe9, 0x79, 0x62,
-];
-
-/// Initialization constant.
-const C1: [u8; 16] = [
     0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5, 0x28, 0xdd,
 ];
 

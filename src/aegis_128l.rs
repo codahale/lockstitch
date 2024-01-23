@@ -1,28 +1,19 @@
 use crate::intrinsics::*;
 
-/// The length of an AEGIS-128L block.
-const BLOCK_LEN: usize = 32;
-
 /// An AEGIS-128L instance.
 #[derive(Debug, Clone)]
 pub struct Aegis128L {
     state: [AesBlock; 8],
     ad_len: u64,
-    mc_len: u64,
+    msg_len: u64,
 }
 
 impl Aegis128L {
     /// Creates a new AEGIS-128L instance with the given key and nonce.
     pub fn new(key: &[u8; AES_BLOCK_LEN], nonce: &[u8; AES_BLOCK_LEN]) -> Self {
         // Initialize constants.
-        let c0 = load(&[
-            0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15, 0x22, 0x37, 0x59, 0x90, 0xe9,
-            0x79, 0x62,
-        ]);
-        let c1 = load(&[
-            0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5,
-            0x28, 0xdd,
-        ]);
+        let c0 = load(&C0);
+        let c1 = load(&C1);
 
         // Initialize key and nonce blocks.
         let key = load(key);
@@ -45,7 +36,7 @@ impl Aegis128L {
             update(&mut state, nonce, key);
         }
 
-        Aegis128L { state, ad_len: 0, mc_len: 0 }
+        Aegis128L { state, ad_len: 0, msg_len: 0 }
     }
 
     /// Processes the given authenticated data.
@@ -86,7 +77,7 @@ impl Aegis128L {
             chunk.copy_from_slice(&tmp[..chunk.len()]);
         }
 
-        self.mc_len += in_out.len() as u64;
+        self.msg_len += in_out.len() as u64;
     }
 
     /// Decrypts the given slice in place.
@@ -103,14 +94,17 @@ impl Aegis128L {
             self.dec_partial(cn);
         }
 
-        self.mc_len += in_out.len() as u64;
+        self.msg_len += in_out.len() as u64;
     }
 
     /// Finalizes the cipher state into a pair of 128-bit and 256-bit authentication tags.
     pub fn finalize(mut self) -> ([u8; 16], [u8; 32]) {
+        let ad_len_bits = self.ad_len * 8;
+        let msg_len_bits = self.msg_len * 8;
+
         // Create a block from the associated data and message lengths, in bits, XOR it with the 3rd
         // state block and update the state with that value.
-        let t = xor(load_64x2(self.ad_len * 8, self.mc_len * 8), self.state[2]);
+        let t = xor(load_64x2(ad_len_bits, msg_len_bits), self.state[2]);
         for _ in 0..7 {
             update(&mut self.state, t, t);
         }
@@ -129,73 +123,74 @@ impl Aegis128L {
     #[cfg(all(test, feature = "std"))]
     fn absorb(&mut self, ai: &[u8]) {
         // Load the input blocks.
-        let (ai0, ai1) = load_2x(ai);
+        let (t0, t1) = load_2x(ai);
 
         // Update the cipher state with the two blocks.
-        update(&mut self.state, ai0, ai1);
+        update(&mut self.state, t0, t1);
     }
 
-    fn enc(&mut self, in_out: &mut [u8]) {
+    fn enc(&mut self, xi: &mut [u8]) {
         // Generate two blocks of keystream.
         let z0 = xor3(self.state[6], self.state[1], and(self.state[2], self.state[3]));
         let z1 = xor3(self.state[2], self.state[5], and(self.state[6], self.state[7]));
 
         // Load the plaintext blocks.
-        let (xi0, xi1) = load_2x(in_out);
+        let (t0, t1) = load_2x(xi);
 
         // XOR the plaintext blocks with the keystream to produce ciphertext blocks.
-        let ci0 = xor(xi0, z0);
-        let ci1 = xor(xi1, z1);
-
-        // Store ciphertext blocks in the output slice.
-        store_2x(in_out, ci0, ci1);
+        let out0 = xor(t0, z0);
+        let out1 = xor(t1, z1);
 
         // Update the state with the plaintext blocks.
-        update(&mut self.state, xi0, xi1);
+        update(&mut self.state, t0, t1);
+
+        // Store ciphertext blocks in the output slice.
+        store_2x(xi, out0, out1);
     }
 
-    fn dec(&mut self, in_out: &mut [u8]) {
+    fn dec(&mut self, ci: &mut [u8]) {
         // Generate two blocks of keystream.
         let z0 = xor3(self.state[6], self.state[1], and(self.state[2], self.state[3]));
         let z1 = xor3(self.state[2], self.state[5], and(self.state[6], self.state[7]));
 
         // Load the ciphertext blocks.
-        let (ci0, ci1) = load_2x(in_out);
+        let (t0, t1) = load_2x(ci);
 
         // XOR the ciphertext blocks with the keystream to produce plaintext blocks.
-        let xi0 = xor(z0, ci0);
-        let xi1 = xor(z1, ci1);
-
-        // Store plaintext blocks in the output slice.
-        store_2x(in_out, xi0, xi1);
+        let out0 = xor(z0, t0);
+        let out1 = xor(z1, t1);
 
         // Update the state with the plaintext blocks.
-        update(&mut self.state, xi0, xi1);
+        update(&mut self.state, out0, out1);
+
+        // Store plaintext blocks in the output slice.
+        store_2x(ci, out0, out1);
     }
 
-    fn dec_partial(&mut self, in_out: &mut [u8]) {
-        let mut tmp = [0u8; BLOCK_LEN];
-
-        // Pad the ciphertext with zeros to form two blocks.
-        tmp[..in_out.len()].copy_from_slice(in_out);
-        let (cn0, cn1) = load_2x(&tmp);
-
+    fn dec_partial(&mut self, xn: &mut [u8]) {
         // Generate two blocks of keystream.
         let z0 = xor3(self.state[6], self.state[1], and(self.state[2], self.state[3]));
         let z1 = xor3(self.state[2], self.state[5], and(self.state[6], self.state[7]));
 
+        // Pad the ciphertext with zeros to form two blocks.
+        let mut tmp = [0u8; BLOCK_LEN];
+        tmp[..xn.len()].copy_from_slice(xn);
+        let (t0, t1) = load_2x(&tmp);
+
         // XOR the ciphertext blocks with the keystream to produce padded plaintext blocks.
-        let xn0 = xor(cn0, z0);
-        let xn1 = xor(cn1, z1);
+        let out0 = xor(t0, z0);
+        let out1 = xor(t1, z1);
 
         // Store the decrypted plaintext blocks in the output slice.
-        store_2x(&mut tmp, xn0, xn1);
-        in_out.copy_from_slice(&tmp[..in_out.len()]);
+        store_2x(&mut tmp, out0, out1);
+        xn.copy_from_slice(&tmp[..xn.len()]);
 
-        // Pad the plaintext with zeros to form two blocks and update the state with them.
-        tmp[in_out.len()..].fill(0);
-        let (xn0, xn1) = load_2x(&tmp);
-        update(&mut self.state, xn0, xn1);
+        // Pad the plaintext with zeros to form two blocks.
+        tmp[xn.len()..].fill(0);
+        let (v0, v1) = load_2x(&tmp);
+
+        // Update the state with the padded plaintext blocks.
+        update(&mut self.state, v0, v1);
     }
 }
 
@@ -218,6 +213,19 @@ fn update(state: &mut [AesBlock; 8], m0: AesBlock, m1: AesBlock) {
     state[0] = xor(state[0], m0);
     state[4] = xor(state[4], m1);
 }
+
+/// The length of an AEGIS-128L block.
+const BLOCK_LEN: usize = 32;
+
+/// Initialization constant.
+const C0: [u8; 16] = [
+    0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15, 0x22, 0x37, 0x59, 0x90, 0xe9, 0x79, 0x62,
+];
+
+/// Initialization constant.
+const C1: [u8; 16] = [
+    0xdb, 0x3d, 0x18, 0x55, 0x6d, 0xc2, 0x2f, 0xf1, 0x20, 0x11, 0x31, 0x42, 0x73, 0xb5, 0x28, 0xdd,
+];
 
 #[cfg(all(test, feature = "std"))]
 mod tests {

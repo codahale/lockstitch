@@ -31,12 +31,11 @@ pub fn xor(a: AesBlock, b: AesBlock) -> AesBlock {
 
 /// Bitwise XORs the given AES blocks.
 #[inline]
+#[cfg(target_feature = "sha3")]
 pub fn xor3(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
     // TODO replace with veor3q_u8 intrinsic when that's stable
-
-    // Use the EOR3 instruction if enabled.
-    #[cfg(target_feature = "sha3")]
-    fn veor3q_u8(mut a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
+    #[target_feature(enable = "sha3")]
+    unsafe fn veor3q_u8(mut a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
         unsafe {
             asm!(
                 "EOR3 {a:v}.16B, {a:v}.16B, {b:v}.16B, {c:v}.16B",
@@ -47,13 +46,14 @@ pub fn xor3(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
         a
     }
 
-    // Otherwise, fall back to two EOR operations.
-    #[cfg(not(target_feature = "sha3"))]
-    fn veor3q_u8(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
-        xor(a, xor(b, c))
-    }
+    unsafe { veor3q_u8(a, b, c) }
+}
 
-    veor3q_u8(a, b, c)
+/// Bitwise XORs the given AES blocks.
+#[inline]
+#[cfg(not(target_feature = "sha3"))]
+pub fn xor3(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
+    xor(a, xor(b, c))
 }
 
 /// Bitwise ANDs the given AES blocks.

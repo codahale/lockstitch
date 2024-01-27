@@ -109,6 +109,7 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 * `asm`: Enables hand-coded assembly for TurboSHAKE128 for `aarch64`. Enabled by default.
 * `docs`: Enables the docs-only `perf` and `design` modules.
 * `std`: Enables features based on the Rust standard library. Enabled by default.
+* `zeroize`: Enables support for zeroizing protocol state. Enabled by default.
 
 ## Performance
 

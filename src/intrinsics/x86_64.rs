@@ -10,7 +10,7 @@ pub use x86::__m128i as AesBlock;
 /// Loads an AES block from the given slice.
 #[inline]
 pub fn load(bytes: &[u8]) -> AesBlock {
-    unsafe { _mm_loadu_si128(bytes.as_ptr() as *const __m128i) }
+    unsafe { _mm_loadu_si128(bytes.as_ptr().cast()) }
 }
 
 /// Loads an AES block from the two given u64 values as big-endian integers.
@@ -22,7 +22,7 @@ pub fn load_64x2(a: u64, b: u64) -> AesBlock {
 /// Stores an AES block in the given slice.
 #[inline]
 pub fn store(bytes: &mut [u8], block: AesBlock) {
-    unsafe { _mm_storeu_si128(bytes.as_mut_ptr() as *mut __m128i, block) };
+    unsafe { _mm_storeu_si128(bytes.as_mut_ptr().cast(), block) };
 }
 
 /// Bitwise XORs the given AES blocks.

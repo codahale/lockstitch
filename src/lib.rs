@@ -436,21 +436,17 @@ mod tests {
 
     #[test]
     fn right_encode_test_vectors() {
-        let mut buf = [0; 9];
+        macro_rules! test {
+            ($in:expr,$exp:expr) => {
+                assert_eq!(right_encode(&mut [0u8; 9], $in), $exp);
+            };
+        }
 
-        assert_eq!(right_encode(&mut buf, 0), [0, 1]);
-
-        assert_eq!(right_encode(&mut buf, 128), [128, 1]);
-
-        assert_eq!(right_encode(&mut buf, 65536), [1, 0, 0, 3]);
-
-        assert_eq!(right_encode(&mut buf, 4096), [16, 0, 2]);
-
-        assert_eq!(
-            right_encode(&mut buf, 18446744073709551615),
-            [255, 255, 255, 255, 255, 255, 255, 255, 8]
-        );
-
-        assert_eq!(right_encode(&mut buf, 12345), [48, 57, 2]);
+        test!(0, [0, 1]);
+        test!(128, [128, 1]);
+        test!(65536, [1, 0, 0, 3]);
+        test!(4096, [16, 0, 2]);
+        test!(18446744073709551615, [255, 255, 255, 255, 255, 255, 255, 255, 8]);
+        test!(12345, [48, 57, 2]);
     }
 }

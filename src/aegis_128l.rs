@@ -186,17 +186,22 @@ impl Aegis128L {
     }
 }
 
-#[cfg(feature = "zeroize")]
 impl Drop for Aegis128L {
     fn drop(&mut self) {
-        use zeroize::Zeroize;
-        for s in self.state.iter_mut() {
-            s.zeroize();
+        #[cfg(feature = "zeroize")]
+        {
+            use zeroize::Zeroize;
+            for s in self.state.iter_mut() {
+                s.zeroize();
+            }
+            self.ad_len.zeroize();
+            self.msg_len.zeroize();
         }
-        self.ad_len.zeroize();
-        self.msg_len.zeroize();
     }
 }
+
+#[cfg(feature = "zeroize")]
+impl zeroize::ZeroizeOnDrop for Aegis128L {}
 
 /// The core AEGIS-128L update function.
 fn update(state: &mut [AesBlock; 8], m0: AesBlock, m1: AesBlock) {

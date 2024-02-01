@@ -1,83 +1,115 @@
-#![allow(elided_lifetimes_in_paths)]
-
 use std::io::{self, Read};
 
-use divan::counter::BytesCount;
-use lockstitch::{Protocol, TAG_LEN};
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
+use lockstitch::Protocol;
 
 const LENS: &[usize] = &[16, 256, 1024, 16 * 1024, 1024 * 1024];
 
-#[divan::bench(args = LENS)]
-fn hash(bencher: divan::Bencher, len: usize) {
-    bencher.with_inputs(|| vec![0u8; len]).counter(BytesCount::new(len)).bench_refs(|message| {
-        let mut protocol = Protocol::new("hash");
-        protocol.mix("message", message);
-        protocol.derive_array::<32>("digest")
-    });
-}
-
-#[divan::bench(args = LENS)]
-fn hash_writer(bencher: divan::Bencher, len: usize) {
-    bencher
-        .with_inputs(|| io::repeat(0).take(len as u64))
-        .counter(BytesCount::new(len))
-        .bench_values(|mut input| {
-            let protocol = Protocol::new("hash");
-            let mut writer = protocol.mix_writer("message", io::sink());
-            io::copy(&mut input, &mut writer).expect("should be infallible");
-            let (mut protocol, _) = writer.into_inner();
-            protocol.derive_array::<32>("digest")
+fn hash(c: &mut Criterion) {
+    let mut g = c.benchmark_group("hash");
+    for &len in LENS {
+        g.throughput(Throughput::Bytes(len as u64));
+        g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
+            let input = vec![0u8; len];
+            b.iter(|| {
+                let mut protocol = Protocol::new("hash");
+                protocol.mix("message", &input);
+                protocol.derive_array::<32>("digest")
+            });
         });
+    }
+    g.finish();
 }
 
-#[divan::bench(args = LENS)]
-fn stream(bencher: divan::Bencher, len: usize) {
+fn hash_writer(c: &mut Criterion) {
+    let mut g = c.benchmark_group("hash-writer");
+    for &len in LENS {
+        g.throughput(Throughput::Bytes(len as u64));
+        g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
+            b.iter_batched_ref(
+                || io::repeat(0u8).take(len as u64),
+                |input| {
+                    let protocol = Protocol::new("hash");
+                    let mut writer = protocol.mix_writer("message", io::sink());
+                    io::copy(input, &mut writer).expect("should be infallible");
+                    let (mut protocol, _) = writer.into_inner();
+                    protocol.derive_array::<32>("digest")
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    g.finish();
+}
+
+fn stream(c: &mut Criterion) {
     let key = [0u8; 32];
     let nonce = [0u8; 16];
-    bencher.with_inputs(|| vec![0u8; len]).counter(BytesCount::new(len)).bench_values(
-        |mut block| {
-            let mut protocol = Protocol::new("stream");
-            protocol.mix("key", &key);
-            protocol.mix("nonce", &nonce);
-            protocol.encrypt("message", &mut block);
-            block
-        },
-    );
+    let mut g = c.benchmark_group("stream");
+    for &len in LENS {
+        g.throughput(Throughput::Bytes(len as u64));
+        g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
+            let input = vec![0u8; len];
+            b.iter_batched_ref(
+                || input.clone(),
+                |block| {
+                    let mut protocol = Protocol::new("stream");
+                    protocol.mix("key", &key);
+                    protocol.mix("nonce", &nonce);
+                    protocol.encrypt("message", block);
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    g.finish();
 }
 
-#[divan::bench(args = LENS)]
-fn aead(bencher: divan::Bencher, len: usize) {
+fn aead(c: &mut Criterion) {
     let key = [0u8; 32];
     let nonce = [0u8; 16];
     let ad = [0u8; 32];
-    bencher.with_inputs(|| vec![0u8; len + TAG_LEN]).counter(BytesCount::new(len)).bench_values(
-        |mut block| {
-            let mut protocol = Protocol::new("aead");
-            protocol.mix("key", &key);
-            protocol.mix("nonce", &nonce);
-            protocol.mix("ad", &ad);
-            protocol.seal("message", &mut block);
-            block
-        },
-    );
+    let mut g = c.benchmark_group("aead");
+    for &len in LENS {
+        g.throughput(Throughput::Bytes(len as u64));
+        g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
+            let input = vec![0u8; len];
+            b.iter_batched_ref(
+                || input.clone(),
+                |block| {
+                    let mut protocol = Protocol::new("aead");
+                    protocol.mix("key", &key);
+                    protocol.mix("nonce", &nonce);
+                    protocol.mix("ad", &ad);
+                    protocol.seal("message", block);
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    g.finish();
 }
 
-#[divan::bench(args = LENS)]
-fn prf(bencher: divan::Bencher, len: usize) {
+fn prf(c: &mut Criterion) {
     let key = [0u8; 32];
-    bencher.with_inputs(|| vec![0u8; len]).counter(BytesCount::new(len)).bench_values(
-        |mut block| {
-            let mut protocol = Protocol::new("prf");
-            protocol.mix("key", &key);
-            protocol.derive("output", &mut block);
-            block
-        },
-    );
+    let mut g = c.benchmark_group("prf");
+    for &len in LENS {
+        g.throughput(Throughput::Bytes(len as u64));
+        g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
+            let input = vec![0u8; len];
+            b.iter_batched_ref(
+                || input.clone(),
+                |block| {
+                    let mut protocol = Protocol::new("aead");
+                    protocol.mix("key", &key);
+                    protocol.derive("output", block);
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    g.finish();
 }
 
-#[global_allocator]
-static ALLOC: divan::AllocProfiler = divan::AllocProfiler::system();
-
-fn main() {
-    divan::main();
-}
+criterion_group!(benches, aead, hash, hash_writer, prf, stream,);
+criterion_main!(benches);

@@ -3,14 +3,15 @@ use std::io::{self, Read};
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
 use lockstitch::Protocol;
 
-const LENS: &[usize] = &[16, 256, 1024, 16 * 1024, 1024 * 1024];
+const LENS: &[(usize, &str)] =
+    &[(16, "16B"), (256, "256B"), (1024, "1KiB"), (16 * 1024, "16KiB"), (1024 * 1024, "1MiB")];
 
 fn hash(c: &mut Criterion) {
     let mut g = c.benchmark_group("hash");
-    for &len in LENS {
+    for &(len, id) in LENS {
         let input = vec![0u8; len];
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(len), &input, |b, input| {
+        g.bench_with_input(BenchmarkId::from_parameter(id), &input, |b, input| {
             b.iter(|| {
                 let mut protocol = Protocol::new("hash");
                 protocol.mix("message", input);
@@ -23,9 +24,9 @@ fn hash(c: &mut Criterion) {
 
 fn hash_writer(c: &mut Criterion) {
     let mut g = c.benchmark_group("hash-writer");
-    for &len in LENS {
+    for &(len, id) in LENS {
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
+        g.bench_with_input(BenchmarkId::from_parameter(id), &len, |b, &len| {
             b.iter_batched(
                 || io::repeat(0u8).take(len as u64),
                 |mut input| {
@@ -46,9 +47,9 @@ fn stream(c: &mut Criterion) {
     let key = [0u8; 32];
     let nonce = [0u8; 16];
     let mut g = c.benchmark_group("stream");
-    for &len in LENS {
+    for &(len, id) in LENS {
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
+        g.bench_with_input(BenchmarkId::from_parameter(id), &len, |b, &len| {
             b.iter_batched_ref(
                 || vec![0u8; len],
                 |block| {
@@ -69,9 +70,9 @@ fn aead(c: &mut Criterion) {
     let nonce = [0u8; 16];
     let ad = [0u8; 32];
     let mut g = c.benchmark_group("aead");
-    for &len in LENS {
+    for &(len, id) in LENS {
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
+        g.bench_with_input(BenchmarkId::from_parameter(id), &len, |b, &len| {
             b.iter_batched_ref(
                 || vec![0u8; len],
                 |block| {
@@ -91,9 +92,9 @@ fn aead(c: &mut Criterion) {
 fn prf(c: &mut Criterion) {
     let key = [0u8; 32];
     let mut g = c.benchmark_group("prf");
-    for &len in LENS {
+    for &(len, id) in LENS {
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
+        g.bench_with_input(BenchmarkId::from_parameter(id), &len, |b, &len| {
             b.iter_batched_ref(
                 || vec![0u8; len],
                 |block| {

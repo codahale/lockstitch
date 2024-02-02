@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 criterion = "0.5.1"
-lockstitch = { path = "..", default-features = false, features = ["std"] }
+lockstitch = { path = ".." }
 
 [[bench]]
 name = "benchmarks"

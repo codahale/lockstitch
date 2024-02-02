@@ -1,6 +1,6 @@
 use std::io::{self, Read};
 
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use lockstitch::Protocol;
 
 const LENS: &[(usize, &str)] =
@@ -11,7 +11,7 @@ fn hash(c: &mut Criterion) {
     for &(len, id) in LENS {
         let input = vec![0u8; len];
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(id), &input, |b, input| {
+        g.bench_with_input(id, &input, |b, input| {
             b.iter(|| {
                 let mut protocol = Protocol::new("hash");
                 protocol.mix("message", input);
@@ -26,7 +26,7 @@ fn hash_writer(c: &mut Criterion) {
     let mut g = c.benchmark_group("hash-writer");
     for &(len, id) in LENS {
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(id), &len, |b, &len| {
+        g.bench_with_input(id, &len, |b, &len| {
             b.iter_batched(
                 || io::repeat(0u8).take(len as u64),
                 |mut input| {
@@ -50,7 +50,7 @@ fn stream(c: &mut Criterion) {
     for &(len, id) in LENS {
         let input = vec![0u8; len];
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(id), &input, |b, input| {
+        g.bench_with_input(id, &input, |b, input| {
             b.iter_batched_ref(
                 || input.clone(),
                 |block| {
@@ -74,7 +74,7 @@ fn aead(c: &mut Criterion) {
     for &(len, id) in LENS {
         let input = vec![0u8; len];
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(id), &input, |b, input| {
+        g.bench_with_input(id, &input, |b, input| {
             b.iter_batched_ref(
                 || input.clone(),
                 |block| {
@@ -96,7 +96,7 @@ fn prf(c: &mut Criterion) {
     let mut g = c.benchmark_group("prf");
     for &(len, id) in LENS {
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(id), &len, |b, &len| {
+        g.bench_with_input(id, &len, |b, &len| {
             let input = vec![0u8; len];
             b.iter_batched_ref(
                 || input.clone(),

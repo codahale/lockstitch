@@ -3,101 +3,95 @@
 ## `x86_64` (GCP `c3-standard-4`, Intel Sapphire Rapids, rustc 1.75, `-target-cpu=native`)
 
 ```text
-Timer precision: 24.44 ns
- benchmarks      fastest       │ slowest       │ median        │ mean          │ samples │ iters
-├─ aead                       │               │               │               │         │
-│  ├─ 16        722.9 ns      │ 89.01 µs      │ 737 ns        │ 751.6 ns      │ 1329859 │ 1329859
-│  │            21.1 MiB/s    │ 175.5 KiB/s   │ 20.7 MiB/s    │ 20.3 MiB/s    │         │
-│  ├─ 256       739.6 ns      │ 25.31 µs      │ 752.2 ns      │ 763.4 ns      │ 1309321 │ 1309321
-│  │            330 MiB/s     │ 9.644 MiB/s   │ 324.5 MiB/s   │ 319.7 MiB/s   │         │
-│  ├─ 1024      797 ns        │ 66.78 µs      │ 815.2 ns      │ 827.8 ns      │ 1207513 │ 1207513
-│  │            1.196 GiB/s   │ 14.62 MiB/s   │ 1.169 GiB/s   │ 1.152 GiB/s   │         │
-│  ├─ 16384     1.972 µs      │ 80.6 µs       │ 2.015 µs      │ 2.03 µs       │ 492412  │ 492412
-│  │            7.736 GiB/s   │ 193.8 MiB/s   │ 7.571 GiB/s   │ 7.514 GiB/s   │         │
-│  ╰─ 1048576   81.99 µs      │ 684.8 µs      │ 82.26 µs      │ 83.14 µs      │ 12027   │ 12027
-│               11.91 GiB/s   │ 1.426 GiB/s   │ 11.87 GiB/s   │ 11.74 GiB/s   │         │
-├─ hash                       │               │               │               │         │
-│  ├─ 16        563.4 ns      │ 9.461 µs      │ 573.7 ns      │ 577.4 ns      │ 216343  │ 1730744
-│  │            27.08 MiB/s   │ 1.612 MiB/s   │ 26.59 MiB/s   │ 26.42 MiB/s   │         │
-│  ├─ 256       770.1 ns      │ 14.75 µs      │ 782.1 ns      │ 787.3 ns      │ 317402  │ 1269608
-│  │            317 MiB/s     │ 16.54 MiB/s   │ 312.1 MiB/s   │ 310 MiB/s     │         │
-│  ├─ 1024      1.761 µs      │ 77.91 µs      │ 1.787 µs      │ 1.806 µs      │ 553532  │ 553532
-│  │            554.3 MiB/s   │ 12.53 MiB/s   │ 546.4 MiB/s   │ 540.6 MiB/s   │         │
-│  ├─ 16384     19.51 µs      │ 95.16 µs      │ 19.68 µs      │ 19.91 µs      │ 50207   │ 50207
-│  │            800.6 MiB/s   │ 164.1 MiB/s   │ 793.9 MiB/s   │ 784.4 MiB/s   │         │
-│  ╰─ 1048576   1.223 ms      │ 1.302 ms      │ 1.232 ms      │ 1.238 ms      │ 808     │ 808
-│               817.1 MiB/s   │ 767.7 MiB/s   │ 811.3 MiB/s   │ 807.2 MiB/s   │         │
-├─ prf                        │               │               │               │         │
-│  ├─ 16        559.6 ns      │ 4.234 µs      │ 569.5 ns      │ 572.7 ns      │ 218102  │ 1744816
-│  │            27.26 MiB/s   │ 3.603 MiB/s   │ 26.79 MiB/s   │ 26.63 MiB/s   │         │
-│  ├─ 256       764.3 ns      │ 13.69 µs      │ 776.8 ns      │ 781.8 ns      │ 319599  │ 1278396
-│  │            319.3 MiB/s   │ 17.82 MiB/s   │ 314.2 MiB/s   │ 312.2 MiB/s   │         │
-│  ├─ 1024      1.759 µs      │ 25.31 µs      │ 1.782 µs      │ 1.794 µs      │ 557189  │ 557189
-│  │            554.9 MiB/s   │ 38.58 MiB/s   │ 547.7 MiB/s   │ 544.2 MiB/s   │         │
-│  ├─ 16384     19.54 µs      │ 90.92 µs      │ 19.67 µs      │ 19.77 µs      │ 50561   │ 50561
-│  │            799.6 MiB/s   │ 171.8 MiB/s   │ 794.2 MiB/s   │ 790 MiB/s     │         │
-│  ╰─ 1048576   1.223 ms      │ 1.285 ms      │ 1.229 ms      │ 1.23 ms       │ 813     │ 813
-│               817.1 MiB/s   │ 777.9 MiB/s   │ 813.3 MiB/s   │ 812.7 MiB/s   │         │
-╰─ stream                     │               │               │               │         │
-   ├─ 16        695.9 ns      │ 80.93 µs      │ 707.8 ns      │ 718.1 ns      │ 1391914 │ 1391914
-   │            21.92 MiB/s   │ 193 KiB/s     │ 21.55 MiB/s   │ 21.24 MiB/s   │         │
-   ├─ 256       713.3 ns      │ 23.95 µs      │ 727 ns        │ 736.9 ns      │ 1356415 │ 1356415
-   │            342.2 MiB/s   │ 10.19 MiB/s   │ 335.7 MiB/s   │ 331.3 MiB/s   │         │
-   ├─ 1024      771.5 ns      │ 32.69 µs      │ 789.6 ns      │ 799.6 ns      │ 1250098 │ 1250098
-   │            1.236 GiB/s   │ 29.86 MiB/s   │ 1.207 GiB/s   │ 1.192 GiB/s   │         │
-   ├─ 16384     1.947 µs      │ 72.38 µs      │ 1.984 µs      │ 2 µs          │ 499876  │ 499876
-   │            7.833 GiB/s   │ 215.8 MiB/s   │ 7.687 GiB/s   │ 7.628 GiB/s   │         │
-   ╰─ 1048576   81.96 µs      │ 139 µs        │ 82.21 µs      │ 82.84 µs      │ 12072   │ 12072
-                11.91 GiB/s   │ 7.021 GiB/s   │ 11.87 GiB/s   │ 11.78 GiB/s   │         │
+aead/16                 time:   [715.88 ns 716.04 ns 716.22 ns]
+                        thrpt:  [21.305 MiB/s 21.310 MiB/s 21.315 MiB/s]
+aead/256                time:   [745.06 ns 745.30 ns 745.56 ns]
+                        thrpt:  [327.46 MiB/s 327.57 MiB/s 327.68 MiB/s]
+aead/1024               time:   [809.50 ns 809.67 ns 809.85 ns]
+                        thrpt:  [1.1776 GiB/s 1.1779 GiB/s 1.1781 GiB/s]
+aead/16384              time:   [2.0743 µs 2.0768 µs 2.0796 µs]
+                        thrpt:  [7.3372 GiB/s 7.3472 GiB/s 7.3562 GiB/s]
+aead/1048576            time:   [86.810 µs 87.077 µs 87.393 µs]
+                        thrpt:  [11.174 GiB/s 11.215 GiB/s 11.249 GiB/s]
+
+hash/16                 time:   [559.65 ns 560.00 ns 560.63 ns]
+                        thrpt:  [27.217 MiB/s 27.248 MiB/s 27.265 MiB/s]
+hash/256                time:   [763.12 ns 763.25 ns 763.38 ns]
+                        thrpt:  [319.81 MiB/s 319.87 MiB/s 319.92 MiB/s]
+hash/1024               time:   [1.7552 µs 1.7558 µs 1.7564 µs]
+                        thrpt:  [555.99 MiB/s 556.19 MiB/s 556.40 MiB/s]
+hash/16384              time:   [19.830 µs 19.841 µs 19.853 µs]
+                        thrpt:  [787.05 MiB/s 787.51 MiB/s 787.97 MiB/s]
+hash/1048576            time:   [1.2397 ms 1.2404 ms 1.2411 ms]
+                        thrpt:  [805.75 MiB/s 806.19 MiB/s 806.64 MiB/s]
+
+prf/16                  time:   [574.06 ns 574.18 ns 574.30 ns]
+                        thrpt:  [26.569 MiB/s 26.575 MiB/s 26.581 MiB/s]
+prf/256                 time:   [783.48 ns 783.75 ns 783.99 ns]
+                        thrpt:  [311.41 MiB/s 311.50 MiB/s 311.61 MiB/s]
+prf/1024                time:   [1.7691 µs 1.7695 µs 1.7700 µs]
+                        thrpt:  [551.75 MiB/s 551.88 MiB/s 552.01 MiB/s]
+prf/16384               time:   [19.795 µs 19.801 µs 19.806 µs]
+                        thrpt:  [788.89 MiB/s 789.12 MiB/s 789.32 MiB/s]
+prf/1048576             time:   [1.2361 ms 1.2363 ms 1.2365 ms]
+                        thrpt:  [808.75 MiB/s 808.87 MiB/s 808.99 MiB/s]
+
+stream/16               time:   [692.19 ns 692.47 ns 692.79 ns]
+                        thrpt:  [22.025 MiB/s 22.035 MiB/s 22.044 MiB/s]
+stream/256              time:   [712.33 ns 712.64 ns 713.08 ns]
+                        thrpt:  [342.37 MiB/s 342.59 MiB/s 342.73 MiB/s]
+stream/1024             time:   [776.51 ns 776.81 ns 777.14 ns]
+                        thrpt:  [1.2272 GiB/s 1.2277 GiB/s 1.2282 GiB/s]
+stream/16384            time:   [2.0361 µs 2.0383 µs 2.0408 µs]
+                        thrpt:  [7.4769 GiB/s 7.4859 GiB/s 7.4941 GiB/s]
+stream/1048576          time:   [86.668 µs 86.839 µs 87.009 µs]
+                        thrpt:  [11.224 GiB/s 11.246 GiB/s 11.268 GiB/s]
 ```
 
 ## `aarch64` (Apple M2 Air 2022, rustc 1.75)
 
 ```text
-Timer precision: 41.66 ns
-benchmarks      fastest       │ slowest       │ median        │ mean          │ samples │ iters
-├─ aead                       │               │               │               │         │
-│  ├─ 16        366.8 ns      │ 3.851 µs      │ 385.1 ns      │ 387.5 ns      │ 161141  │ 2578256
-│  │            41.59 MiB/s   │ 3.962 MiB/s   │ 39.62 MiB/s   │ 39.37 MiB/s   │         │
-│  ├─ 256       382.5 ns      │ 4.687 µs      │ 418.9 ns      │ 420.3 ns      │ 148588  │ 2377408
-│  │            638.2 MiB/s   │ 52.08 MiB/s   │ 582.7 MiB/s   │ 580.8 MiB/s   │         │
-│  ├─ 1024      421.5 ns      │ 6.374 µs      │ 447.6 ns      │ 451 ns        │ 276924  │ 2215392
-│  │            2.262 GiB/s   │ 153.1 MiB/s   │ 2.13 GiB/s    │ 2.114 GiB/s   │         │
-│  ├─ 16384     1.333 µs      │ 30.77 µs      │ 1.395 µs      │ 1.408 µs      │ 355020  │ 710040
-│  │            11.44 GiB/s   │ 507.7 MiB/s   │ 10.93 GiB/s   │ 10.83 GiB/s   │         │
-│  ╰─ 1048576   64.99 µs      │ 1.012 ms      │ 65.29 µs      │ 66.77 µs      │ 14977   │ 14977
-│               15.02 GiB/s   │ 987.6 MiB/s   │ 14.95 GiB/s   │ 14.62 GiB/s   │         │
-├─ hash                       │               │               │               │         │
-│  ├─ 16        247 ns        │ 3.239 µs      │ 260.1 ns      │ 261.4 ns      │ 238727  │ 3819632
-│  │            61.75 MiB/s   │ 4.71 MiB/s    │ 58.66 MiB/s   │ 58.35 MiB/s   │         │
-│  ├─ 256       320 ns        │ 3.53 µs       │ 333 ns        │ 334.2 ns      │ 186815  │ 2989040
-│  │            762.9 MiB/s   │ 69.14 MiB/s   │ 733 MiB/s     │ 730.4 MiB/s   │         │
-│  ├─ 1024      702.8 ns      │ 5.395 µs      │ 723.6 ns      │ 728.8 ns      │ 171426  │ 1371408
-│  │            1.356 GiB/s   │ 180.9 MiB/s   │ 1.317 GiB/s   │ 1.308 GiB/s   │         │
-│  ├─ 16384     7.583 µs      │ 88.87 µs      │ 7.708 µs      │ 7.747 µs      │ 129068  │ 129068
-│  │            2.012 GiB/s   │ 175.8 MiB/s   │ 1.979 GiB/s   │ 1.969 GiB/s   │         │
-│  ╰─ 1048576   478 µs        │ 629.6 µs      │ 478.4 µs      │ 481.2 µs      │ 2079    │ 2079
-│               2.042 GiB/s   │ 1.55 GiB/s    │ 2.04 GiB/s    │ 2.029 GiB/s   │         │
-├─ prf                        │               │               │               │         │
-│  ├─ 16        247 ns        │ 3.179 µs      │ 262.7 ns      │ 266.6 ns      │ 234096  │ 3745536
-│  │            61.75 MiB/s   │ 4.799 MiB/s   │ 58.08 MiB/s   │ 57.21 MiB/s   │         │
-│  ├─ 256       322.6 ns      │ 3.15 µs       │ 340.8 ns      │ 342.1 ns      │ 182523  │ 2920368
-│  │            756.7 MiB/s   │ 77.48 MiB/s   │ 716.2 MiB/s   │ 713.6 MiB/s   │         │
-│  ├─ 1024      676.7 ns      │ 12.12 µs      │ 708 ns        │ 714.9 ns      │ 349507  │ 1398028
-│  │            1.409 GiB/s   │ 80.54 MiB/s   │ 1.346 GiB/s   │ 1.333 GiB/s   │         │
-│  ├─ 16384     7.333 µs      │ 55.62 µs      │ 7.458 µs      │ 7.485 µs      │ 133582  │ 133582
-│  │            2.08 GiB/s    │ 280.9 MiB/s   │ 2.045 GiB/s   │ 2.038 GiB/s   │         │
-│  ╰─ 1048576   466.4 µs      │ 1 ms          │ 468 µs        │ 471.8 µs      │ 2120    │ 2120
-│               2.093 GiB/s   │ 999.4 MiB/s   │ 2.086 GiB/s   │ 2.069 GiB/s   │         │
-╰─ stream                     │               │               │               │         │
-   ├─ 16        359 ns        │ 6.89 µs       │ 400.7 ns      │ 404.7 ns      │ 308592  │ 2468736
-   │            42.49 MiB/s   │ 2.214 MiB/s   │ 38.07 MiB/s   │ 37.69 MiB/s   │         │
-   ├─ 256       369.4 ns      │ 6.905 µs      │ 405.9 ns      │ 408.1 ns      │ 306039  │ 2448312
-   │            660.7 MiB/s   │ 35.35 MiB/s   │ 601.4 MiB/s   │ 598.1 MiB/s   │         │
-   ├─ 1024      416.3 ns      │ 9.119 µs      │ 452.8 ns      │ 455.8 ns      │ 274029  │ 2192232
-   │            2.29 GiB/s    │ 107 MiB/s     │ 2.106 GiB/s   │ 2.092 GiB/s   │         │
-   ├─ 16384     1.312 µs      │ 51.74 µs      │ 1.395 µs      │ 1.406 µs      │ 355539  │ 711078
-   │            11.62 GiB/s   │ 301.9 MiB/s   │ 10.93 GiB/s   │ 10.85 GiB/s   │         │
-   ╰─ 1048576   64.83 µs      │ 107.6 µs      │ 66.83 µs      │ 66.44 µs      │ 15050   │ 15050
-                15.06 GiB/s   │ 9.07 GiB/s    │ 14.61 GiB/s   │ 14.69 GiB/s   │         │
+aead/16                 time:   [403.48 ns 403.80 ns 404.20 ns]
+                        thrpt:  [37.751 MiB/s 37.788 MiB/s 37.818 MiB/s]
+aead/256                time:   [424.29 ns 425.82 ns 427.39 ns]
+                        thrpt:  [571.23 MiB/s 573.34 MiB/s 575.41 MiB/s]
+aead/1024               time:   [480.71 ns 482.15 ns 483.55 ns]
+                        thrpt:  [1.9722 GiB/s 1.9779 GiB/s 1.9839 GiB/s]
+aead/16384              time:   [1.4643 µs 1.4722 µs 1.4794 µs]
+                        thrpt:  [10.314 GiB/s 10.365 GiB/s 10.421 GiB/s]
+aead/1048576            time:   [69.095 µs 69.245 µs 69.397 µs]
+                        thrpt:  [14.072 GiB/s 14.103 GiB/s 14.134 GiB/s]
+
+hash/16                 time:   [267.40 ns 267.75 ns 268.10 ns]
+                        thrpt:  [56.916 MiB/s 56.988 MiB/s 57.064 MiB/s]
+hash/256                time:   [336.75 ns 338.00 ns 339.17 ns]
+                        thrpt:  [719.81 MiB/s 722.31 MiB/s 724.99 MiB/s]
+hash/1024               time:   [729.97 ns 730.33 ns 730.72 ns]
+                        thrpt:  [1.3051 GiB/s 1.3058 GiB/s 1.3065 GiB/s]
+hash/16384              time:   [7.7142 µs 7.7257 µs 7.7443 µs]
+                        thrpt:  [1.9703 GiB/s 1.9751 GiB/s 1.9780 GiB/s]
+hash/1048576            time:   [479.43 µs 479.67 µs 479.95 µs]
+                        thrpt:  [2.0347 GiB/s 2.0359 GiB/s 2.0369 GiB/s]
+
+prf/16                  time:   [266.94 ns 267.12 ns 267.32 ns]
+                        thrpt:  [57.080 MiB/s 57.122 MiB/s 57.162 MiB/s]
+prf/256                 time:   [344.46 ns 344.77 ns 345.12 ns]
+                        thrpt:  [707.41 MiB/s 708.12 MiB/s 708.77 MiB/s]
+prf/1024                time:   [736.48 ns 738.68 ns 740.98 ns]
+                        thrpt:  [1.2870 GiB/s 1.2910 GiB/s 1.2949 GiB/s]
+prf/16384               time:   [7.7370 µs 7.7699 µs 7.8031 µs]
+                        thrpt:  [1.9555 GiB/s 1.9638 GiB/s 1.9722 GiB/s]
+prf/1048576             time:   [481.83 µs 482.23 µs 482.61 µs]
+                        thrpt:  [2.0235 GiB/s 2.0251 GiB/s 2.0268 GiB/s]
+
+stream/16               time:   [400.60 ns 400.98 ns 401.50 ns]
+                        thrpt:  [38.005 MiB/s 38.054 MiB/s 38.089 MiB/s]
+stream/256              time:   [418.53 ns 424.72 ns 436.31 ns]
+                        thrpt:  [559.55 MiB/s 574.83 MiB/s 583.32 MiB/s]
+stream/1024             time:   [466.79 ns 467.82 ns 469.35 ns]
+                        thrpt:  [2.0319 GiB/s 2.0385 GiB/s 2.0430 GiB/s]
+stream/16384            time:   [1.4688 µs 1.4734 µs 1.4803 µs]
+                        thrpt:  [10.308 GiB/s 10.356 GiB/s 10.388 GiB/s]
+stream/1048576          time:   [68.990 µs 69.188 µs 69.437 µs]
+                        thrpt:  [14.064 GiB/s 14.115 GiB/s 14.155 GiB/s]
 ```

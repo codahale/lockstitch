@@ -8,12 +8,12 @@ const LENS: &[usize] = &[16, 256, 1024, 16 * 1024, 1024 * 1024];
 fn hash(c: &mut Criterion) {
     let mut g = c.benchmark_group("hash");
     for &len in LENS {
+        let input = vec![0u8; len];
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
-            let input = vec![0u8; len];
+        g.bench_with_input(BenchmarkId::from_parameter(len), &input, |b, input| {
             b.iter(|| {
                 let mut protocol = Protocol::new("hash");
-                protocol.mix("message", &input);
+                protocol.mix("message", input);
                 protocol.derive_array::<32>("digest")
             });
         });
@@ -26,12 +26,12 @@ fn hash_writer(c: &mut Criterion) {
     for &len in LENS {
         g.throughput(Throughput::Bytes(len as u64));
         g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
-            b.iter_batched_ref(
+            b.iter_batched(
                 || io::repeat(0u8).take(len as u64),
-                |input| {
+                |mut input| {
                     let protocol = Protocol::new("hash");
                     let mut writer = protocol.mix_writer("message", io::sink());
-                    io::copy(input, &mut writer).expect("should be infallible");
+                    io::copy(&mut input, &mut writer).expect("should be infallible");
                     let (mut protocol, _) = writer.into_inner();
                     protocol.derive_array::<32>("digest")
                 },
@@ -49,9 +49,8 @@ fn stream(c: &mut Criterion) {
     for &len in LENS {
         g.throughput(Throughput::Bytes(len as u64));
         g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
-            let input = vec![0u8; len];
             b.iter_batched_ref(
-                || input.clone(),
+                || vec![0u8; len],
                 |block| {
                     let mut protocol = Protocol::new("stream");
                     protocol.mix("key", &key);
@@ -73,9 +72,8 @@ fn aead(c: &mut Criterion) {
     for &len in LENS {
         g.throughput(Throughput::Bytes(len as u64));
         g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
-            let input = vec![0u8; len];
             b.iter_batched_ref(
-                || input.clone(),
+                || vec![0u8; len],
                 |block| {
                     let mut protocol = Protocol::new("aead");
                     protocol.mix("key", &key);
@@ -96,9 +94,8 @@ fn prf(c: &mut Criterion) {
     for &len in LENS {
         g.throughput(Throughput::Bytes(len as u64));
         g.bench_with_input(BenchmarkId::from_parameter(len), &len, |b, &len| {
-            let input = vec![0u8; len];
             b.iter_batched_ref(
-                || input.clone(),
+                || vec![0u8; len],
                 |block| {
                     let mut protocol = Protocol::new("aead");
                     protocol.mix("key", &key);

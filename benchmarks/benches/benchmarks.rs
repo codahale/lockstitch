@@ -48,9 +48,9 @@ fn stream(c: &mut Criterion) {
     let nonce = [0u8; 16];
     let mut g = c.benchmark_group("stream");
     for &(len, id) in LENS {
+        let input = vec![0u8; len];
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(id), &len, |b, &len| {
-            let input = vec![0u8; len];
+        g.bench_with_input(BenchmarkId::from_parameter(id), &input, |b, input| {
             b.iter_batched_ref(
                 || input.clone(),
                 |block| {
@@ -72,9 +72,9 @@ fn aead(c: &mut Criterion) {
     let ad = [0u8; 32];
     let mut g = c.benchmark_group("aead");
     for &(len, id) in LENS {
+        let input = vec![0u8; len];
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(BenchmarkId::from_parameter(id), &len, |b, &len| {
-            let input = vec![0u8; len];
+        g.bench_with_input(BenchmarkId::from_parameter(id), &input, |b, input| {
             b.iter_batched_ref(
                 || input.clone(),
                 |block| {

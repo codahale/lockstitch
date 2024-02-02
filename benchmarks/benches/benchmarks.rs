@@ -50,8 +50,9 @@ fn stream(c: &mut Criterion) {
     for &(len, id) in LENS {
         g.throughput(Throughput::Bytes(len as u64));
         g.bench_with_input(BenchmarkId::from_parameter(id), &len, |b, &len| {
+            let input = vec![0u8; len];
             b.iter_batched_ref(
-                || vec![0u8; len],
+                || input.clone(),
                 |block| {
                     let mut protocol = Protocol::new("stream");
                     protocol.mix("key", &key);
@@ -73,8 +74,9 @@ fn aead(c: &mut Criterion) {
     for &(len, id) in LENS {
         g.throughput(Throughput::Bytes(len as u64));
         g.bench_with_input(BenchmarkId::from_parameter(id), &len, |b, &len| {
+            let input = vec![0u8; len];
             b.iter_batched_ref(
-                || vec![0u8; len],
+                || input.clone(),
                 |block| {
                     let mut protocol = Protocol::new("aead");
                     protocol.mix("key", &key);
@@ -95,8 +97,9 @@ fn prf(c: &mut Criterion) {
     for &(len, id) in LENS {
         g.throughput(Throughput::Bytes(len as u64));
         g.bench_with_input(BenchmarkId::from_parameter(id), &len, |b, &len| {
+            let input = vec![0u8; len];
             b.iter_batched_ref(
-                || vec![0u8; len],
+                || input.clone(),
                 |block| {
                     let mut protocol = Protocol::new("aead");
                     protocol.mix("key", &key);

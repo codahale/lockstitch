@@ -23,6 +23,7 @@ default = ["std", "zeroize"]
 docs = []
 portable = ["aes"]
 std = []
+zeroize = ["dep:zeroize"]
 
 [workspace]
 members = ["benchmarks", "xtask"]

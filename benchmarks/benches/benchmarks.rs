@@ -11,10 +11,10 @@ fn hash(c: &mut Criterion) {
     for &(len, id) in LENS {
         let input = vec![0u8; len];
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(id, &input, |b, input| {
+        g.bench_function(id, |b| {
             b.iter(|| {
                 let mut protocol = Protocol::new("hash");
-                protocol.mix("message", input);
+                protocol.mix("message", &input);
                 protocol.derive_array::<32>("digest")
             });
         });
@@ -26,38 +26,35 @@ fn hash_writer(c: &mut Criterion) {
     let mut g = c.benchmark_group("hash-writer");
     for &(len, id) in LENS {
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(id, &len, |b, &len| {
-            b.iter_batched(
-                || io::repeat(0u8).take(len as u64),
-                |mut input| {
-                    let protocol = Protocol::new("hash");
-                    let mut writer = protocol.mix_writer("message", io::sink());
-                    io::copy(&mut input, &mut writer).expect("should be infallible");
-                    let (mut protocol, _) = writer.into_inner();
-                    protocol.derive_array::<32>("digest")
-                },
-                BatchSize::SmallInput,
-            );
+        g.bench_function(id, |b| {
+            b.iter(|| {
+                let protocol = Protocol::new("hash");
+                let mut writer = protocol.mix_writer("message", io::sink());
+                io::copy(&mut io::repeat(0u8).take(len as u64), &mut writer)
+                    .expect("should be infallible");
+                let (mut protocol, _) = writer.into_inner();
+                protocol.derive_array::<32>("digest")
+            });
         });
     }
     g.finish();
 }
 
 fn stream(c: &mut Criterion) {
-    let key = [0u8; 32];
-    let nonce = [0u8; 16];
     let mut g = c.benchmark_group("stream");
     for &(len, id) in LENS {
-        let input = vec![0u8; len];
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(id, &input, |b, input| {
+        g.bench_function(id, |b| {
+            let key = [0u8; 32];
+            let nonce = [0u8; 16];
+            let message = vec![0u8; len];
             b.iter_batched_ref(
-                || input.clone(),
-                |block| {
+                || message.clone(),
+                |message| {
                     let mut protocol = Protocol::new("stream");
                     protocol.mix("key", &key);
                     protocol.mix("nonce", &nonce);
-                    protocol.encrypt("message", block);
+                    protocol.encrypt("message", message);
                 },
                 BatchSize::SmallInput,
             );
@@ -67,22 +64,22 @@ fn stream(c: &mut Criterion) {
 }
 
 fn aead(c: &mut Criterion) {
-    let key = [0u8; 32];
-    let nonce = [0u8; 16];
-    let ad = [0u8; 32];
     let mut g = c.benchmark_group("aead");
     for &(len, id) in LENS {
-        let input = vec![0u8; len];
         g.throughput(Throughput::Bytes(len as u64));
-        g.bench_with_input(id, &input, |b, input| {
+        g.bench_function(id, |b| {
+            let key = [0u8; 32];
+            let nonce = [0u8; 16];
+            let ad = [0u8; 32];
+            let message = vec![0u8; len];
             b.iter_batched_ref(
-                || input.clone(),
-                |block| {
+                || message.clone(),
+                |message| {
                     let mut protocol = Protocol::new("aead");
                     protocol.mix("key", &key);
                     protocol.mix("nonce", &nonce);
                     protocol.mix("ad", &ad);
-                    protocol.seal("message", block);
+                    protocol.seal("message", message);
                 },
                 BatchSize::SmallInput,
             );
@@ -92,18 +89,18 @@ fn aead(c: &mut Criterion) {
 }
 
 fn prf(c: &mut Criterion) {
-    let key = [0u8; 32];
     let mut g = c.benchmark_group("prf");
     for &(len, id) in LENS {
         g.throughput(Throughput::Bytes(len as u64));
         g.bench_with_input(id, &len, |b, &len| {
-            let input = vec![0u8; len];
+            let key = [0u8; 32];
+            let output = vec![0u8; len];
             b.iter_batched_ref(
-                || input.clone(),
-                |block| {
+                || output.clone(),
+                |output| {
                     let mut protocol = Protocol::new("aead");
                     protocol.mix("key", &key);
-                    protocol.derive("output", block);
+                    protocol.derive("output", output);
                 },
                 BatchSize::SmallInput,
             );

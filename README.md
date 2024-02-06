@@ -7,7 +7,7 @@ transcripts, and Xoodyak's Cyclist mode, Lockstitch uses [TurboSHAKE128][], an e
 Function (XOF), and [AEGIS-128L][], an authenticated cipher, to provide 100+ Gb/sec performance on
 modern processors at a 128-bit security level.
 
-[TurboSHAKE128]: https://www.ietf.org/archive/id/draft-irtf-cfrg-kangarootwelve-12.html
+[TurboSHAKE128]: https://www.ietf.org/archive/id/draft-irtf-cfrg-kangarootwelve-13.html
 [AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-10.html
 
 ## CAUTION

@@ -13,7 +13,7 @@ readme = "README.md"
 include = ["src/**/*", "tests/**/*", "LICENSE", "README.md", "design.md", "perf.md"]
 
 [dependencies]
-aes = { version = "0.8.3", features = ["hazmat"], optional = true }
+aes = { version = "0.8.4", features = ["hazmat"], optional = true }
 cmov = "0.3.1"
 sha3 = { version = "0.10.8", default-features = false, features = ["asm"] }
 zeroize = { version = "1.7.0", features = ["aarch64"], optional = true }

@@ -120,4 +120,4 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - run: cargo bench -p benchmarks
+      - run: cargo bench -p benchmarks --bench benchmarks -- --quick

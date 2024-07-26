@@ -1,3 +1,5 @@
+use core::mem::size_of;
+
 /// An AES block.
 pub use aes::Block as AesBlock;
 
@@ -10,8 +12,8 @@ pub fn load(bytes: &[u8]) -> AesBlock {
 /// Loads an AES block from the two given u64 values as big-endian integers.
 #[inline]
 pub fn load_64x2(a: u64, b: u64) -> AesBlock {
-    let mut buf = [0u8; core::mem::size_of::<u64>() * 2];
-    let (a_block, b_block) = buf.split_at_mut(core::mem::size_of::<u64>());
+    let mut buf = [0u8; size_of::<u64>() * 2];
+    let (a_block, b_block) = buf.split_at_mut(size_of::<u64>());
     a_block.copy_from_slice(&a.to_le_bytes());
     b_block.copy_from_slice(&b.to_le_bytes());
     load(&buf)

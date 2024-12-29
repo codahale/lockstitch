@@ -1,6 +1,4 @@
 use core::arch::aarch64::{self, *};
-#[cfg(target_feature = "sha3")]
-use core::arch::asm;
 
 /// An AES block.
 pub use aarch64::uint8x16_t as AesBlock;
@@ -33,19 +31,6 @@ pub fn xor(a: AesBlock, b: AesBlock) -> AesBlock {
 #[inline]
 #[cfg(target_feature = "sha3")]
 pub fn xor3(a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
-    // TODO replace with veor3q_u8 intrinsic when that's stable
-    #[target_feature(enable = "sha3")]
-    unsafe fn veor3q_u8(mut a: AesBlock, b: AesBlock, c: AesBlock) -> AesBlock {
-        unsafe {
-            asm!(
-                "EOR3 {a:v}.16B, {a:v}.16B, {b:v}.16B, {c:v}.16B",
-                a = inlateout(vreg) a, b = in(vreg) b, c = in(vreg) c,
-                options(pure, nomem, nostack, preserves_flags)
-            );
-        };
-        a
-    }
-
     unsafe { veor3q_u8(a, b, c) }
 }
 

@@ -269,7 +269,7 @@ function stream_decrypt(key, nonce, ciphertext):
   stream ← mix(stream, "key", key)                            // Mix the key into the protocol.
   stream ← mix(stream, "nonce", nonce)                        // Mix the nonce into the protocol.
   (_, plaintext) ← decrypt(stream, "message", ciphertext)     // Decrypt the ciphertext.
-  plaintext 
+  plaintext
 ```
 
 This construction is IND-CPA-secure under the following assumptions:
@@ -338,13 +338,13 @@ That expands to the following sequence of primitive operations:
 
 ```text
 t0 ← 0x01 || 0x01, 0x80 || "com.example.aead"
-t1 ← t0 || 0x02 || "key" || 0x03, 0x01 || 0x06c47a03da9a2e6cdebdcafdfd62b57d || 0x80, 0x01 
-t2 ← t1 || 0x02 || "nonce" || 0x05, 0x01 || 0x3f4ac18bfa54206f5c6de81517618d43 || 0x80, 0x01 
-t3 ← t2 || 0x02 || "ad" || 0x02, 0x01 || "this is public" || 0x0e, 0x01 
+t1 ← t0 || 0x02 || "key" || 0x03, 0x01 || 0x06c47a03da9a2e6cdebdcafdfd62b57d || 0x80, 0x01
+t2 ← t1 || 0x02 || "nonce" || 0x05, 0x01 || 0x3f4ac18bfa54206f5c6de81517618d43 || 0x80, 0x01
+t3 ← t2 || 0x02 || "ad" || 0x02, 0x01 || "this is public" || 0x0e, 0x01
 t4 ← t3 || 0x05 || "message" || 0x07, 0x01
 t5 ← t4 || 0x03 || "key" || 0x03, 0x01
 t6 ← t5 || 0x02 || "len" || 0x03, 0x01 || 0x20, 0x01 || 0x02, 0x01
-kdk0 || ek0 ← turboshake128(0x22, t6, 64) 
+kdk0 || ek0 ← turboshake128(0x22, t6, 64)
 t7 ← 0x02 || "kdk" || 0x07, 0x01 || kdk0 || 0x20, 0x01
 (ciphertext, tag128, tag256) ← aegis128l::encrypt(ek0, "this is a secret")
 t8 ← t7 || 0x02 || "tag" || 0x03, 0x01 || tag256 || 0x20, 0x01

@@ -7,7 +7,7 @@ license = "MIT"
 description = "Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic operations in complex protocols. "
 homepage = "https://github.com/codahale/lockstitch"
 documentation = "https://docs.rs/lockstitch/"
-keywords = ["crypto", "aegis-128l", "turboshake128", "hazmat"]
+keywords = ["crypto", "aegis-128l", "sha-256", "hkdf", "hazmat"]
 categories = ["cryptography", "no-std"]
 readme = "README.md"
 include = ["src/**/*", "tests/**/*", "LICENSE", "README.md", "design.md", "perf.md"]
@@ -15,14 +15,16 @@ include = ["src/**/*", "tests/**/*", "LICENSE", "README.md", "design.md", "perf.
 [dependencies]
 aes = { version = "0.8.4", features = ["hazmat"], optional = true }
 cmov = "0.3.1"
-sha3 = { version = "0.10.8", default-features = false, features = ["asm"] }
+hkdf = "0.12.4"
+sha2 = { version = "0.10.8", default-features = false }
 zeroize = { version = "1.8.1", features = ["aarch64"], optional = true }
 
 [features]
-default = ["std", "zeroize"]
+asm = ["sha2/asm"]
+default = ["asm", "std", "zeroize"]
 docs = []
 portable = ["aes"]
-std = []
+std = ["sha2/std"]
 zeroize = ["dep:zeroize"]
 
 [workspace]

@@ -3,11 +3,11 @@
 Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption) in
 complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, Merlin
-transcripts, and Xoodyak's Cyclist mode, Lockstitch uses [TurboSHAKE128][], an eXtendable Output
-Function (XOF), and [AEGIS-128L][], an authenticated cipher, to provide 100+ Gb/sec performance on
-modern processors at a 128-bit security level.
+transcripts, and Xoodyak's Cyclist mode, Lockstitch uses [SHA-256][] and [AEGIS-128L][], an
+authenticated cipher, to provide 100+ Gb/sec performance on modern processors at a 128-bit security
+level.
 
-[TurboSHAKE128]: https://www.ietf.org/archive/id/draft-irtf-cfrg-kangarootwelve-16.html
+[SHA-256]: https://doi.org/10.6028/NIST.FIPS.180-4
 [AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-14.html
 
 ## CAUTION
@@ -25,12 +25,11 @@ In addition, there is absolutely no guarantee of backwards compatibility.
 A Lockstitch protocol is a stateful object which has five different operations:
 
 * `Init`: Initializes a protocol with a domain separation string.
-* `Mix`: Mixes a piece of data into the protocol's transcript, making all future outputs dependent
-  on it.
-* `Derive`: Outputs bytes of pseudo-random data dependent on the protocol's transcript.
-* `Encrypt`/`Decrypt`: Encrypts and decrypts data using the protocol's transcript as the key.
-* `Seal`/`Open`: Encrypts and decrypts data with authentication using the protocol's transcript as
-  the key.
+* `Mix`: Mixes a piece of data into the protocol's state, making all future outputs dependent on it.
+* `Derive`: Outputs bytes of pseudo-random data dependent on the protocol's state.
+* `Encrypt`/`Decrypt`: Encrypts and decrypts data using the protocol's state as the key.
+* `Seal`/`Open`: Encrypts and decrypts data with authentication using the protocol's state as the
+  key.
 
 Using these operations, one can construct a wide variety of symmetric-key constructions.
 
@@ -106,7 +105,7 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 
 ## Cargo Features
 
-* `asm`: Enables hand-coded assembly for TurboSHAKE128 for `aarch64`. Enabled by default.
+* `asm`: Enables hand-coded assembly for SHA-256 for `aarch64`. Enabled by default.
 * `docs`: Enables the docs-only `perf` and `design` modules.
 * `std`: Enables features based on the Rust standard library. Enabled by default.
 * `zeroize`: Enables support for zeroizing protocol state. Enabled by default.
@@ -153,7 +152,7 @@ For more information on performance, see [`perf.md`](perf.md).
 
 ## License
 
-Copyright © 2023 Coda Hale, Frank Denis
+Copyright © 2025 Coda Hale, Frank Denis
 
 AEGIS-128L implementation adapted from [rust-aegis](https://github.com/jedisct1/rust-aegis/).
 

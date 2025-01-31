@@ -2,13 +2,13 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
+use core::fmt::Debug;
+
 use crate::aegis_128l::Aegis128L;
 
 use cmov::CmovEq;
-use sha3::{
-    digest::{ExtendableOutputReset, Update, XofReader},
-    TurboShake128, TurboShake128Core,
-};
+use hkdf::{Hkdf, HkdfExtract};
+use sha2::Sha256;
 
 mod aegis_128l;
 mod intrinsics;
@@ -26,88 +26,83 @@ pub const TAG_LEN: usize = 16;
 
 /// A stateful object providing fine-grained symmetric-key cryptographic services like hashing,
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Protocol {
-    transcript: TurboShake128,
+    state: [u8; 32],
 }
 
 impl Protocol {
     /// Creates a new protocol with the given domain.
     #[inline]
     pub fn new(domain: &str) -> Protocol {
-        // Initialize a protocol with an empty transcript.
-        let mut protocol =
-            Protocol { transcript: TurboShake128::from_core(TurboShake128Core::new(0x22)) };
-
-        // Append the Init op header to the transcript with the domain as the label.
-        //
-        //   0x01 || domain || right_encode(|domain|)
-        protocol.op_header(OpCode::Init, domain);
-
-        protocol
+        // The initial state is derived directly from the domain separation string using a fixed
+        // salt.
+        let (state, _) = Hkdf::<Sha256>::extract(Some(SALT), domain.as_bytes());
+        Protocol { state: state.into() }
     }
 
     /// Mixes the given label and slice into the protocol state.
+    ///
+    /// The resulting protocol state is cryptographically dependent on both the prior state of the
+    /// protocol and the inputs to the mix operation. If either the prior state or the inputs are
+    /// secret, the resulting protocol state is secret, even if all remaining data is
+    /// attacker-controlled.
     #[inline]
     pub fn mix(&mut self, label: &str, input: &[u8]) {
-        // Append a Mix op header with the label to the transcript.
-        //
-        //   0x02 || label || right_encode(|label|)
-        self.op_header(OpCode::Mix, label);
-
-        // Append the input to the transcript with right-encoded length.
-        //
-        //   input || right_encode(|input|)
-        self.transcript.update(input);
-        self.transcript.update(right_encode(&mut [0u8; 9], input.len() as u64 * 8));
-    }
-
-    /// Mixes the given label and integer into the protocol state.
-    ///
-    /// `input` is encoded using `right_encode`, providing a short and unambiguous encoding.
-    #[inline]
-    pub fn mix_int(&mut self, label: &str, input: u64) {
-        self.mix(label, right_encode(&mut [0u8; 9], input));
+        // Extract a new protocol state using the protocol's prior state as the salt:
+        //      state' = HKDF-Extract(state, 0x01 || left_encode(|label|) || label || input)
+        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
+        hkdf.input_ikm(&[OpCode::Mix as u8]);
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        hkdf.input_ikm(label.as_bytes());
+        hkdf.input_ikm(input);
+        let (state_p, _) = hkdf.finalize();
+        self.state = state_p.into();
     }
 
     /// Moves the protocol into a [`std::io::Write`] implementation, mixing all written data in a
     /// single operation and passing all writes to `inner`.
     ///
+    /// Equivalent to buffering all written data in a slice and passing it to [`Protocol::mix`].
+    ///
     /// Use [`MixWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
     #[inline]
     #[cfg(feature = "std")]
-    pub fn mix_writer<W: std::io::Write>(mut self, label: &str, inner: W) -> MixWriter<W> {
-        // Append a Mix op header with the label to the transcript.
-        self.op_header(OpCode::Mix, label);
-
-        // Move the protocol to a MixWriter.
-        MixWriter { protocol: self, inner, len: 0 }
+    pub fn mix_writer<W: std::io::Write>(self, label: &str, inner: W) -> MixWriter<W> {
+        // Hash the initial prefix of the mix operation, then hand off to MixWriter.
+        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
+        hkdf.input_ikm(&[OpCode::Mix as u8]);
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        hkdf.input_ikm(label.as_bytes());
+        MixWriter { hkdf, inner }
     }
 
-    /// Derives output from the protocol's current state and fills the given slice with it.
+    /// Derives pseudorandom output from the protocol's current state.
     ///
-    /// The output is dependent on the protocol's prior transcript, the label, and the length of
-    /// `out`.
+    /// The output is dependent on the protocol's prior state, the label, and the length of `out`.
     #[inline]
     pub fn derive(&mut self, label: &str, out: &mut [u8]) {
-        // Append a Derive op header with the label to the transcript.
+        // Extract a PRK from the protocol's state, the operation code, the label, and the output
+        // length, using an unambiguous encoding to prevent collisions:
         //
-        //   0x03 || label || right_encode(|label|)
-        self.op_header(OpCode::Derive, label);
+        //     prk = HKDF-Extract(state, 0x02 || left_encode(|label|) || label || left_encode(|out|))
+        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
+        hkdf.input_ikm(&[OpCode::Derive as u8]);
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        hkdf.input_ikm(label.as_bytes());
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
+        let (prk, hkdf) = hkdf.finalize();
 
-        // Perform a Mix operation with the output length.
-        self.mix_int("len", out.len() as u64 * 8);
+        // Use the PRk to generate the requested output:
+        //
+        //     out = HKDF-Expand(prk, label, n)
+        hkdf.expand(label.as_bytes(), out).expect("should expand output");
 
-        // Hash the transcript with TurboSHAKE128 and reset it to the empty string.
-        let mut xof = self.transcript.finalize_xof_reset();
-
-        // Generate 32+N bytes of TurboSHAKE128 output.
-        let mut kdk = [0u8; 32];
-        xof.read(&mut kdk);
-        xof.read(out);
-
-        // Begin the new transcript with a Mix operation using the KDK as input.
-        self.mix("kdk", &kdk);
+        // Combine the protocol's state with the PRK to produce the protocol's new state.
+        //
+        //      state' = HKDF-Extract(state, prk)
+        let (state, _) = Hkdf::<Sha256>::extract(Some(&self.state), &prk);
+        self.state = state.into();
     }
 
     /// Derives output from the protocol's current state and returns it as an `N`-byte array.
@@ -121,53 +116,57 @@ impl Protocol {
     /// Encrypts the given slice in place.
     #[inline]
     pub fn encrypt(&mut self, label: &str, in_out: &mut [u8]) {
-        // Append a Crypt op header with the label to the transcript.
+        // Extract a data encryption key from the protocol's state, the operation code, the label,
+        // and the output length, using an unambiguous encoding to prevent collisions:
         //
-        //   0x04 || label || right_encode(|label|)
-        self.op_header(OpCode::Crypt, label);
+        //     dek = HKDF-Extract(state, 0x03 || left_encode(|label|) || label || left_encode(|out|))
+        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
+        hkdf.input_ikm(&[OpCode::Crypt as u8]);
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        hkdf.input_ikm(label.as_bytes());
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let (dek, _) = hkdf.finalize();
 
-        // Perform a Mix operation with the plaintext length.
-        self.mix_int("len", in_out.len() as u64 * 8);
-
-        // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>("key");
-        let (k, n) = kn.split_at(16);
+        // Split the DEK into two halves and use them as key and nonce to initialize an AEGIS-128L
+        // instance.
+        let (k, n) = dek.split_at(16);
         let mut aegis = Aegis128L::new(k, n);
 
-        // Encrypt the plaintext.
+        // Encrypt the plaintext and finalize the 256-bit tag.
         aegis.encrypt(in_out);
-
-        // Finalize the AEGIS-128L tags.
         let (_, tag256) = aegis.finalize();
 
-        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-        self.mix("tag", &tag256);
+        // Extract a new protocol state from protocol's old state and the 256-bit tag.
+        let (state, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
+        self.state = state.into();
     }
 
     /// Decrypts the given slice in place.
     #[inline]
     pub fn decrypt(&mut self, label: &str, in_out: &mut [u8]) {
-        // Append a Crypt op header with the label to the transcript.
+        // Extract a data encryption key from the protocol's state, the operation code, the label,
+        // and the output length, using an unambiguous encoding to prevent collisions:
         //
-        //   0x04 || label || right_encode(|label|)
-        self.op_header(OpCode::Crypt, label);
+        //     dek = HKDF-Extract(state, 0x03 || left_encode(|label|) || label || left_encode(|out|))
+        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
+        hkdf.input_ikm(&[OpCode::Crypt as u8]);
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        hkdf.input_ikm(label.as_bytes());
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let (dek, _) = hkdf.finalize();
 
-        // Perform a Mix operation with the plaintext length.
-        self.mix_int("len", in_out.len() as u64 * 8);
-
-        // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>("key");
-        let (k, n) = kn.split_at(16);
+        // Split the DEK into two halves and use them as key and nonce to initialize an AEGIS-128L
+        // instance.
+        let (k, n) = dek.split_at(16);
         let mut aegis = Aegis128L::new(k, n);
 
-        // Decrypt the ciphertext.
+        // Decrypt the ciphertext and finalize the 256-bit tag.
         aegis.decrypt(in_out);
-
-        // Finalize the AEGIS-128L tags.
         let (_, tag256) = aegis.finalize();
 
-        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-        self.mix("tag", &tag256);
+        // Extract a new protocol state from protocol's old state and the 256-bit tag.
+        let (prk, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
+        self.state = prk.into();
     }
 
     /// Seals the given mutable slice in place.
@@ -178,17 +177,20 @@ impl Protocol {
         // Split the buffer into plaintext and tag.
         let (in_out, tag128_out) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Append an AuthCrypt op header with the label to the transcript.
+        // Extract a data encryption key from the protocol's state, the operation code, the label,
+        // and the output length, using an unambiguous encoding to prevent collisions:
         //
-        //   0x05 || label || right_encode(|label|)
-        self.op_header(OpCode::AuthCrypt, label);
+        //     dek = HKDF-Extract(state, 0x04 || left_encode(|label|) || label || left_encode(|out|))
+        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
+        hkdf.input_ikm(&[OpCode::AuthCrypt as u8]);
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        hkdf.input_ikm(label.as_bytes());
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let (dek, _) = hkdf.finalize();
 
-        // Perform a Mix operation with the plaintext length.
-        self.mix_int("len", in_out.len() as u64 * 8);
-
-        // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>("key");
-        let (k, n) = kn.split_at(16);
+        // Split the DEK into two halves and use them as key and nonce to initialize an AEGIS-128L
+        // instance.
+        let (k, n) = dek.split_at(16);
         let mut aegis = Aegis128L::new(k, n);
 
         // Encrypt the plaintext.
@@ -200,8 +202,9 @@ impl Protocol {
         // Append the 128-bit AEGIS-128L tag to the ciphertext.
         tag128_out.copy_from_slice(&tag128);
 
-        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-        self.mix("tag", &tag256);
+        // Extract a new protocol state from protocol's old state and the 256-bit tag.
+        let (prk, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
+        self.state = prk.into();
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -212,17 +215,20 @@ impl Protocol {
         // Split the buffer into ciphertext and tag.
         let (in_out, tag128_in) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Append an AuthCrypt op header with the label to the transcript.
+        // Extract a data encryption key from the protocol's state, the operation code, the label,
+        // and the output length, using an unambiguous encoding to prevent collisions:
         //
-        //   0x05 || label || right_encode(|label|)
-        self.op_header(OpCode::AuthCrypt, label);
+        //     dek = HKDF-Extract(state, 0x04 || left_encode(|label|) || label || left_encode(|out|))
+        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
+        hkdf.input_ikm(&[OpCode::AuthCrypt as u8]);
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        hkdf.input_ikm(label.as_bytes());
+        hkdf.input_ikm(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let (dek, _) = hkdf.finalize();
 
-        // Perform a Mix operation with the plaintext length.
-        self.mix_int("len", in_out.len() as u64 * 8);
-
-        // Derive an AEGIS-128L key and nonce.
-        let kn = self.derive_array::<32>("key");
-        let (k, n) = kn.split_at(16);
+        // Split the DEK into two halves and use them as key and nonce to initialize an AEGIS-128L
+        // instance.
+        let (k, n) = dek.split_at(16);
         let mut aegis = Aegis128L::new(k, n);
 
         // Decrypt the ciphertext.
@@ -231,8 +237,9 @@ impl Protocol {
         // Finalize the AEGIS-128L tags.
         let (tag128, tag256) = aegis.finalize();
 
-        // Perform a Mix operation with the 256-bit AEGIS-128L tag.
-        self.mix("tag", &tag256);
+        // Extract a new protocol state from protocol's old state and the 256-bit tag.
+        let (prk, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
+        self.state = prk.into();
 
         // Check the tag against the counterfactual tag in constant time.
         if ct_eq(tag128_in, &tag128) {
@@ -247,52 +254,51 @@ impl Protocol {
             None
         }
     }
+}
 
-    /// Appends an operation header with an optional label to the protocol transcript.
-    #[inline]
-    fn op_header(&mut self, op_code: OpCode, label: &str) {
-        // Append the operation code and label to the transcript:
-        //
-        //   op_code || label || right_encode(|label|)
-        self.transcript.update(&[op_code as u8]);
-        self.transcript.update(label.as_bytes());
-        self.transcript.update(right_encode(&mut [0u8; 9], label.len() as u64 * 8));
+impl Debug for Protocol {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Protocol").finish_non_exhaustive()
     }
 }
+
+const SALT: &[u8; 32] = b"lockstitch lockstitch lockstitch";
 
 /// All Lockstitch operation types.
 #[derive(Debug, Clone, Copy)]
 enum OpCode {
-    /// Initialize a protocol with a domain separation string.
-    Init = 0x01,
-    /// Mix a labeled input into the protocol transcript.
-    Mix = 0x02,
-    /// Derive a labeled output from the protocol transcript.
-    Derive = 0x03,
-    /// Encrypt or decrypt a labeled input using the protocol transcript as a key.
-    Crypt = 0x04,
-    /// Seal or open a labeled input using the protocol transcript as a key.
-    AuthCrypt = 0x05,
+    /// Mix a labeled input into the protocol's state.
+    Mix = 0x01,
+    /// Derive a labeled output from the protocol's state.
+    Derive = 0x02,
+    /// Encrypt or decrypt a labeled input using the protocol's state as a key.
+    Crypt = 0x03,
+    /// Seal or open a labeled input using the protocol's state as a key.
+    AuthCrypt = 0x04,
 }
 
 /// A [`std::io::Write`] implementation which combines all written data into a single `Mix`
 /// operation and passes all writes to an inner writer.
 #[cfg(feature = "std")]
-#[derive(Debug)]
 pub struct MixWriter<W> {
-    protocol: Protocol,
+    hkdf: HkdfExtract<Sha256>,
     inner: W,
-    len: u64,
+}
+
+#[cfg(feature = "std")]
+impl<W: Debug> Debug for MixWriter<W> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("MixWriter").field("inner", &self.inner).finish_non_exhaustive()
+    }
 }
 
 #[cfg(feature = "std")]
 impl<W: std::io::Write> MixWriter<W> {
     /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
     #[inline]
-    pub fn into_inner(mut self) -> (Protocol, W) {
-        // Append the right-encoded length to the transcript.
-        self.protocol.transcript.update(right_encode(&mut [0u8; 9], self.len * 8));
-        (self.protocol, self.inner)
+    pub fn into_inner(self) -> (Protocol, W) {
+        let (prk, _) = self.hkdf.finalize();
+        (Protocol { state: prk.into() }, self.inner)
     }
 }
 
@@ -300,10 +306,8 @@ impl<W: std::io::Write> MixWriter<W> {
 impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        // Track the written length.
-        self.len += buf.len() as u64;
-        // Append the written slice to the protocol transcript.
-        self.protocol.transcript.update(buf);
+        // Hash the slice.
+        self.hkdf.input_ikm(buf);
         // Pass the slice to the inner writer and return the result.
         self.inner.write(buf)
     }
@@ -322,15 +326,15 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     res != 0
 }
 
-/// Encodes a value using [NIST SP 800-185][]'s `right_encode`.
+/// Encodes a value using [NIST SP 800-185][]'s `left_encode`.
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 #[inline]
-fn right_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
+fn left_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
     let len = buf.len();
-    buf[..len - 1].copy_from_slice(&value.to_be_bytes());
+    buf[1..].copy_from_slice(&value.to_be_bytes());
     let n = (len - 1 - value.leading_zeros() as usize / 8).max(1);
-    buf[len - 1] = n as u8;
+    buf[len - n - 1] = n as u8;
     &buf[len - n - 1..]
 }
 
@@ -348,21 +352,21 @@ mod tests {
         protocol.mix("first", b"one");
         protocol.mix("second", b"two");
 
-        expect!["9d741fc2d9c5cba0"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
+        expect!["7f6d007293967cfb"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
-        expect!["ec324ce127e09da0b60bf87199acd016969a"].assert_eq(&hex::encode(plaintext));
+        expect!["7c6861e2f45daddc97f1fd64afa794331590"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["9aec57dd29ad1dfd45ca56098e26bdbb928d39e23c9bf64a712a9d04adfab8803707"]
+        expect!["f848a305a96cdcc588f41d91a0ce72d0498517ded5638f5fc1f45331d6e636e3fbd3"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["21d58fc6560a5c49"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["819778c249931660"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]
@@ -401,30 +405,15 @@ mod tests {
     }
 
     #[test]
-    fn right_encode_injective() {
-        bolero::check!().with_type::<(u64, u64)>().cloned().for_each(|(a, b)| {
-            let mut buf_a = [0u8; 9];
-            let mut buf_b = [0u8; 9];
-
-            let a_e = right_encode(&mut buf_a, a);
-            let b_e = right_encode(&mut buf_b, b);
-
-            if a == b {
-                assert_eq!(a_e, b_e);
-            } else {
-                assert_ne!(a_e, b_e);
-            }
-        });
-    }
-
-    #[test]
     fn encoded_label_injective() {
         bolero::check!().with_type::<(Vec<u8>, Vec<u8>)>().cloned().for_each(|(a, b)| {
-            let mut a_e = a.clone();
-            a_e.extend_from_slice(right_encode(&mut [0u8; 9], a.len() as u64 * 8));
+            let mut a_e = Vec::new();
+            a_e.extend_from_slice(left_encode(&mut [0u8; 9], a.len() as u64 * 8));
+            a_e.extend_from_slice(&a);
 
-            let mut b_e = b.clone();
-            b_e.extend_from_slice(right_encode(&mut [0u8; 9], b.len() as u64 * 8));
+            let mut b_e = Vec::new();
+            b_e.extend_from_slice(left_encode(&mut [0u8; 9], b.len() as u64 * 8));
+            b_e.extend_from_slice(&b);
 
             if a == b {
                 assert_eq!(a_e, b_e, "equal labels must have equal encoded forms");
@@ -435,18 +424,39 @@ mod tests {
     }
 
     #[test]
-    fn right_encode_test_vectors() {
-        macro_rules! test {
-            ($in:expr,$exp:expr) => {
-                assert_eq!(right_encode(&mut [0u8; 9], $in), $exp);
-            };
-        }
+    fn left_encode_injective() {
+        bolero::check!().with_type::<(u64, u64)>().cloned().for_each(|(a, b)| {
+            let mut buf_a = [0u8; 9];
+            let mut buf_b = [0u8; 9];
 
-        test!(0, [0, 1]);
-        test!(128, [128, 1]);
-        test!(65536, [1, 0, 0, 3]);
-        test!(4096, [16, 0, 2]);
-        test!(18446744073709551615, [255, 255, 255, 255, 255, 255, 255, 255, 8]);
-        test!(12345, [48, 57, 2]);
+            let a_e = left_encode(&mut buf_a, a);
+            let b_e = left_encode(&mut buf_b, b);
+
+            if a == b {
+                assert_eq!(a_e, b_e);
+            } else {
+                assert_ne!(a_e, b_e);
+            }
+        });
+    }
+
+    #[test]
+    fn left_encode_test_vectors() {
+        let mut buf = [0; 9];
+
+        assert_eq!(left_encode(&mut buf, 0), [1, 0]);
+
+        assert_eq!(left_encode(&mut buf, 128), [1, 128]);
+
+        assert_eq!(left_encode(&mut buf, 65536), [3, 1, 0, 0]);
+
+        assert_eq!(left_encode(&mut buf, 4096), [2, 16, 0]);
+
+        assert_eq!(
+            left_encode(&mut buf, 18446744073709551615),
+            [8, 255, 255, 255, 255, 255, 255, 255, 255]
+        );
+
+        assert_eq!(left_encode(&mut buf, 12345), [2, 48, 57]);
     }
 }

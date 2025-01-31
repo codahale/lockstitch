@@ -176,10 +176,9 @@ function open(state, label, ciphertext, tag128):
   key ǁ nonce ← HKDF-Extract(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
   (plaintext, tag128′, tag256′) ← aegis128l::decrypt(key, nonce, ciphertext)
   state′ ← HKDF-Extract(state, tag256′)
-  if tag128 = tag128′:
-    (state′, plaintext)
-  else:
-    (state′, ⊥)
+  if tag128 ≠ tag128′:
+    return (state′, ⊥)
+  return (state′, plaintext)
 ```
 
 `Seal` and `Open` provide IND-CCA2 security as long as the protocol's state includes a probabilistic

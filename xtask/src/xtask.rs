@@ -93,13 +93,13 @@ fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
 }
 
 fn cloud_create(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute instances create lockstitch --zone=us-central1-a --machine-type=c3-standard-4 --min-cpu-platform 'Intel Sapphire Rapids' --image-project 'debian-cloud' --image-family 'debian-11'").run()?;
+    cmd!(sh, "gcloud compute instances create lockstitch --zone=us-central1-a --machine-type=c4-standard-4 --min-cpu-platform 'Intel Emerald Rapids' --image-project 'debian-cloud' --image-family 'debian-12'").run()?;
 
     Ok(())
 }
 
 fn cloud_setup(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'sudo apt-get install binutils-dev libunwind-dev build-essential git -y'").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'sudo apt-get install build-essential git -y'").run()?;
     cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
     cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'git clone https://github.com/codahale/lockstitch'").run()?;
 

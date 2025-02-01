@@ -50,6 +50,7 @@ impl Protocol {
     #[inline]
     pub fn mix(&mut self, label: &str, input: &[u8]) {
         // Extract a new protocol state using the protocol's prior state as the salt:
+        //
         //      state' = HKDF-Extract(state, 0x01 || left_encode(|label|) || label || input)
         let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
         hkdf.input_ikm(&[OpCode::Mix as u8]);
@@ -99,11 +100,9 @@ impl Protocol {
         //     out = HKDF-Expand(prk, label, n)
         hkdf.expand(label.as_bytes(), out).expect("should expand output");
 
-        // Combine the protocol's state with the PRK to produce the protocol's new state.
-        //
-        //      state' = HKDF-Extract(state, prk)
-        let (state, _) = Hkdf::<Sha256>::extract(Some(&self.state), &prk);
-        self.state = state.into();
+        // Extract a new protocol state from protocol's old state and the PRK.
+        let (state_p, _) = Hkdf::<Sha256>::extract(Some(&self.state), &prk);
+        self.state = state_p.into();
     }
 
     /// Derives output from the protocol's current state and returns it as an `N`-byte array.
@@ -138,8 +137,8 @@ impl Protocol {
         let (_, tag256) = aegis.finalize();
 
         // Extract a new protocol state from protocol's old state and the 256-bit tag.
-        let (state, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
-        self.state = state.into();
+        let (state_p, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
+        self.state = state_p.into();
     }
 
     /// Decrypts the given slice in place.
@@ -166,8 +165,8 @@ impl Protocol {
         let (_, tag256) = aegis.finalize();
 
         // Extract a new protocol state from protocol's old state and the 256-bit tag.
-        let (prk, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
-        self.state = prk.into();
+        let (state_p, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
+        self.state = state_p.into();
     }
 
     /// Seals the given mutable slice in place.
@@ -204,8 +203,8 @@ impl Protocol {
         tag128_out.copy_from_slice(&tag128);
 
         // Extract a new protocol state from protocol's old state and the 256-bit tag.
-        let (prk, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
-        self.state = prk.into();
+        let (state_p, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
+        self.state = state_p.into();
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -239,8 +238,8 @@ impl Protocol {
         let (tag128, tag256) = aegis.finalize();
 
         // Extract a new protocol state from protocol's old state and the 256-bit tag.
-        let (prk, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
-        self.state = prk.into();
+        let (state_p, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
+        self.state = state_p.into();
 
         // Check the tag against the counterfactual tag in constant time.
         if ct_eq(tag128_in, &tag128) {
@@ -298,8 +297,8 @@ impl<W: std::io::Write> MixWriter<W> {
     /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
     #[inline]
     pub fn into_inner(self) -> (Protocol, W) {
-        let (prk, _) = self.hkdf.finalize();
-        (Protocol { state: prk.into() }, self.inner)
+        let (state_p, _) = self.hkdf.finalize();
+        (Protocol { state: state_p.into() }, self.inner)
     }
 }
 

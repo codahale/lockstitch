@@ -40,7 +40,7 @@ separation string:
 
 ```text
 function init(domain):
-  state ← HKDF-Extract("lockstitch lockstitch lockstitch", domain)
+  state ← hkdf::extract("lockstitch lockstitch lockstitch", domain)
   return state
 ```
 
@@ -63,12 +63,12 @@ the label, and the input.
 
 ```text
 function mix(state, label, input):
-  state′ ← HKDF-Extract(state, 0x01 ǁ left_encode(|label|) ǁ label ǁ input)
+  state′ ← hkdf::extract(state, 0x01 ǁ left_encode(|label|) ǁ label ǁ input)
   return state′
 ```
 
-`Mix` uses `HKDF-Extract` with the protocol's state as the salt to derive a new state value from the
-given label and input.  `Mix` encodes the length of the label in bits using the `left_encode`
+`Mix` uses `hkdf::extract` with the protocol's state as the salt to derive a new state value from
+the given label and input.  `Mix` encodes the length of the label in bits using the `left_encode`
 function from [NIST SP 800-185][]. This ensures an unambiguous encoding for any combination of label
 and input, regardless of length.
 
@@ -82,16 +82,16 @@ cryptographically dependent on the protocol's prior state, the label, and the ou
 
 ```text
 function derive(state, label, n):
-  prk ← HKDF-Extract(state, 0x02 ǁ left_encode(|label|) ǁ label ǁ left_encode(n))
-  out ← HKDF-Expand(prk, label, n)
-  state′ ← HKDF-Extract(state, prk)
+  prk ← hkdf::extract(state, 0x02 ǁ left_encode(|label|) ǁ label ǁ left_encode(n))
+  out ← hkdf::expand(prk, label, n)
+  state′ ← hkdf::extract(state, prk)
   return (state′, out)
 ```
 
-`Derive` uses `HKDF-Extract` with the protocol's state as the salt to derive a pseudorandom key from
-the given label and input. It then uses `HKDF-Expand` and the pseudorandom key with the given label
-to generate the requested output. Finally, it uses `HKDF-Extract` with the protocol's state as the
-salt to derive a new state value from the pseudorandom key.
+`Derive` uses `hkdf::extract` with the protocol's state as the salt to derive a pseudorandom key
+from the given label and input. It then uses `hkdf::expand` and the pseudorandom key with the given
+label to generate the requested output. Finally, it uses `hkdf::extract` with the protocol's state
+as the salt to derive a new state value from the pseudorandom key.
 
 **IMPORTANT:** A `Derive` operation's output depends on both the label and the output length.
 
@@ -110,28 +110,28 @@ protocol form a [KDF chain][], giving Lockstitch protocols the following securit
 * **Break-in Recovery**: A protocol's future outputs will appear random to an adversary in
   possession of the protocol's state as long as one of the future inputs to the protocol is secret.
 
-`HKDF-Extract` is [a dual-PRF](https://eprint.iacr.org/2023/861) when used with fixed-length salts.
+`hkdf::extract` is [a dual-PRF](https://eprint.iacr.org/2023/861) when used with fixed-length salts.
 Consequently, the protocol's posterior state will be secret if either the protocol's prior state or
 the `Mix` operation's inputs are secret, even if the other values are attacker-controlled.
 
 ### `Encrypt`/`Decrypt`
 
 The `Encrypt` and `Decrypt` operation accepts a label and an input and encrypts or decrypts the
-input using a key derived from the protocol's state, the label, and the output length.  The
+input using a key derived from the protocol's state, the label, and the output length. The
 protocol's posterior state is cryptographically dependent on the protocol's prior state, the label,
 and the ciphertext version of the input.
 
 ```text
 function encrypt(state, label, plaintext):
-  key ǁ nonce ← HKDF-Extract(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
+  key ǁ nonce ← hkdf::extract(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
   (ciphertext, _, tag256) ← aegis128l::encrypt(key, nonce, plaintext)
-  state′ ← HKDF-Extract(state, tag256)
+  state′ ← hkdf::extract(state, tag256)
   return (state′, ciphertext)
 
 function decrypt(state, label, ciphertext):
-  key ǁ nonce ← HKDF-Extract(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
+  key ǁ nonce ← hkdf::extract(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
   (plaintext, _, tag256) ← aegis128l::decrypt(key, nonce, ciphertext)
-  state′ ← HKDF-Extract(state, tag256)
+  state′ ← hkdf::extract(state, tag256)
   return (state′, ciphertext)
 ```
 
@@ -141,8 +141,8 @@ Three points bear mentioning about `Encrypt` and `Decrypt`:
    after both encrypting and decrypting data.
 2. Despite not updating the protocol state with either the plaintext or ciphertext, the inclusion of
    the 256-bit tag ensures the protocol's state is dependent on both because AEGIS-128L is key
-   committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext which
-   produces the same authentication tag is negligible).
+   committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
+   which produces the same authentication tag is negligible).
 
    **IMPORTANT:** [AEGIS-128L by itself is not fully committing][Iso23], as tag collisions can be
    found if authenticated data is attacker-controlled. Lockstitch does not pass authenticated data
@@ -167,15 +167,15 @@ tag, returning an error if the tag is invalid.
 
 ```text
 function seal(state, label, plaintext):
-  key ǁ nonce ← HKDF-Extract(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
+  key ǁ nonce ← hkdf::extract(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
   (ciphertext, tag128, tag256) ← aegis128l::encrypt(key, nonce, plaintext)
-  state′ ← HKDF-Extract(state, tag256)
+  state′ ← hkdf::extract(state, tag256)
   return (state′, ciphertext ǁ tag128)
 
 function open(state, label, ciphertext, tag128):
-  key ǁ nonce ← HKDF-Extract(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
+  key ǁ nonce ← hkdf::extract(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
   (plaintext, tag128′, tag256′) ← aegis128l::decrypt(key, nonce, ciphertext)
-  state′ ← HKDF-Extract(state, tag256′)
+  state′ ← hkdf::extract(state, tag256′)
   if tag128 ≠ tag128′:
     return (state′, ⊥)
   return (state′, plaintext)

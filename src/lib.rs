@@ -86,7 +86,6 @@ impl Protocol {
     /// Derives pseudorandom output from the protocol's current state.
     ///
     /// The output is dependent on the protocol's prior state, the label, and the length of `out`.
-    /// This function is limited to 65,280 bytes of output.
     #[inline]
     pub fn derive(&mut self, label: &str, out: &mut [u8]) {
         // Extract a PRK from the protocol's state, the operation code, the label, and the output

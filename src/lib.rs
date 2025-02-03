@@ -7,7 +7,7 @@ use core::fmt::Debug;
 use crate::aegis_128l::Aegis128L;
 
 use cmov::CmovEq;
-use hkdf::{Hkdf, HkdfExtract};
+use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 mod aegis_128l;
@@ -37,8 +37,14 @@ impl Protocol {
     pub fn new(domain: &str) -> Protocol {
         // The initial state is derived directly from the domain separation string using a fixed
         // salt.
-        let (state, _) = Hkdf::<Sha256>::extract(Some(SALT), domain.as_bytes());
-        Protocol { state: state.into() }
+        Protocol {
+            state: Hmac::<Sha256>::new_from_slice(SALT)
+                .expect("should be valid HMAC key")
+                .chain_update(domain.as_bytes())
+                .finalize()
+                .into_bytes()
+                .into(),
+        }
     }
 
     /// Mixes the given label and slice into the protocol state.
@@ -49,16 +55,15 @@ impl Protocol {
     /// attacker-controlled.
     #[inline]
     pub fn mix(&mut self, label: &str, input: &[u8]) {
-        // Extract a new protocol state using the protocol's prior state as the salt:
+        // Extract a new protocol state using the protocol's prior state as the key:
         //
-        //      state' = HKDF-Extract(state, 0x01 || left_encode(|label|) || label || input)
-        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
-        hkdf.input_ikm(&[OpCode::Mix as u8]);
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        hkdf.input_ikm(label.as_bytes());
-        hkdf.input_ikm(input);
-        let (state_p, _) = hkdf.finalize();
-        self.state = state_p.into();
+        //      state' = HMAC(state, 0x01 || left_encode(|label|) || label || input)
+        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
+        h.update(&[OpCode::Mix as u8]);
+        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        h.update(label.as_bytes());
+        h.update(input);
+        self.state = h.finalize().into_bytes().into();
     }
 
     /// Moves the protocol into a [`std::io::Write`] implementation, mixing all written data in a
@@ -71,11 +76,11 @@ impl Protocol {
     #[cfg(feature = "std")]
     pub fn mix_writer<W: std::io::Write>(self, label: &str, inner: W) -> MixWriter<W> {
         // Hash the initial prefix of the mix operation, then hand off to MixWriter.
-        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
-        hkdf.input_ikm(&[OpCode::Mix as u8]);
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        hkdf.input_ikm(label.as_bytes());
-        MixWriter { hkdf, inner }
+        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
+        h.update(&[OpCode::Mix as u8]);
+        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        h.update(label.as_bytes());
+        MixWriter { h, inner }
     }
 
     /// Derives pseudorandom output from the protocol's current state.
@@ -87,22 +92,26 @@ impl Protocol {
         // Extract a PRK from the protocol's state, the operation code, the label, and the output
         // length, using an unambiguous encoding to prevent collisions:
         //
-        //     prk = HKDF-Extract(state, 0x02 || left_encode(|label|) || label || left_encode(|out|))
-        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
-        hkdf.input_ikm(&[OpCode::Derive as u8]);
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        hkdf.input_ikm(label.as_bytes());
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
-        let (prk, hkdf) = hkdf.finalize();
+        //     prk = HMAC(state, 0x02 || left_encode(|label|) || label || left_encode(|out|))
+        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
+        h.update(&[OpCode::Derive as u8]);
+        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        h.update(label.as_bytes());
+        h.update(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
+        let prk = h.finalize_reset().into_bytes();
 
-        // Use the PRk to generate the requested output:
-        //
-        //     out = HKDF-Expand(prk, label, n)
-        hkdf.expand(label.as_bytes(), out).expect("should expand output");
+        // Split the PRK into two halves and use them as key and nonce to initialize an AEGIS-128L
+        // instance.
+        let (k, n) = prk.split_at(16);
+        let mut aegis = Aegis128L::new(k, n);
+
+        // Encrypt all zeroes to produce the output.
+        out.fill(0);
+        aegis.encrypt(out);
 
         // Extract a new protocol state from protocol's old state and the PRK.
-        let (state_p, _) = Hkdf::<Sha256>::extract(Some(&self.state), &prk);
-        self.state = state_p.into();
+        h.update(&prk);
+        self.state = h.finalize().into_bytes().into();
     }
 
     /// Derives output from the protocol's current state and returns it as an `N`-byte array.
@@ -119,13 +128,13 @@ impl Protocol {
         // Extract a data encryption key from the protocol's state, the operation code, the label,
         // and the output length, using an unambiguous encoding to prevent collisions:
         //
-        //     dek = HKDF-Extract(state, 0x03 || left_encode(|label|) || label || left_encode(|out|))
-        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
-        hkdf.input_ikm(&[OpCode::Crypt as u8]);
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        hkdf.input_ikm(label.as_bytes());
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let (dek, _) = hkdf.finalize();
+        //     dek = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|out|))
+        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
+        h.update(&[OpCode::Crypt as u8]);
+        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        h.update(label.as_bytes());
+        h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let dek = h.finalize_reset().into_bytes();
 
         // Split the DEK into two halves and use them as key and nonce to initialize an AEGIS-128L
         // instance.
@@ -137,8 +146,8 @@ impl Protocol {
         let (_, tag256) = aegis.finalize();
 
         // Extract a new protocol state from protocol's old state and the 256-bit tag.
-        let (state_p, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
-        self.state = state_p.into();
+        h.update(&tag256);
+        self.state = h.finalize().into_bytes().into();
     }
 
     /// Decrypts the given slice in place.
@@ -147,13 +156,13 @@ impl Protocol {
         // Extract a data encryption key from the protocol's state, the operation code, the label,
         // and the output length, using an unambiguous encoding to prevent collisions:
         //
-        //     dek = HKDF-Extract(state, 0x03 || left_encode(|label|) || label || left_encode(|out|))
-        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
-        hkdf.input_ikm(&[OpCode::Crypt as u8]);
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        hkdf.input_ikm(label.as_bytes());
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let (dek, _) = hkdf.finalize();
+        //     dek = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|out|))
+        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
+        h.update(&[OpCode::Crypt as u8]);
+        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        h.update(label.as_bytes());
+        h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let dek = h.finalize_reset().into_bytes();
 
         // Split the DEK into two halves and use them as key and nonce to initialize an AEGIS-128L
         // instance.
@@ -165,8 +174,8 @@ impl Protocol {
         let (_, tag256) = aegis.finalize();
 
         // Extract a new protocol state from protocol's old state and the 256-bit tag.
-        let (state_p, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
-        self.state = state_p.into();
+        h.update(&tag256);
+        self.state = h.finalize().into_bytes().into();
     }
 
     /// Seals the given mutable slice in place.
@@ -180,13 +189,13 @@ impl Protocol {
         // Extract a data encryption key from the protocol's state, the operation code, the label,
         // and the output length, using an unambiguous encoding to prevent collisions:
         //
-        //     dek = HKDF-Extract(state, 0x04 || left_encode(|label|) || label || left_encode(|out|))
-        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
-        hkdf.input_ikm(&[OpCode::AuthCrypt as u8]);
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        hkdf.input_ikm(label.as_bytes());
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let (dek, _) = hkdf.finalize();
+        //     dek = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|out|))
+        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
+        h.update(&[OpCode::AuthCrypt as u8]);
+        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        h.update(label.as_bytes());
+        h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let dek = h.finalize_reset().into_bytes();
 
         // Split the DEK into two halves and use them as key and nonce to initialize an AEGIS-128L
         // instance.
@@ -203,8 +212,8 @@ impl Protocol {
         tag128_out.copy_from_slice(&tag128);
 
         // Extract a new protocol state from protocol's old state and the 256-bit tag.
-        let (state_p, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
-        self.state = state_p.into();
+        h.update(&tag256);
+        self.state = h.finalize().into_bytes().into();
     }
 
     /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
@@ -218,13 +227,13 @@ impl Protocol {
         // Extract a data encryption key from the protocol's state, the operation code, the label,
         // and the output length, using an unambiguous encoding to prevent collisions:
         //
-        //     dek = HKDF-Extract(state, 0x04 || left_encode(|label|) || label || left_encode(|out|))
-        let mut hkdf = HkdfExtract::<Sha256>::new(Some(&self.state));
-        hkdf.input_ikm(&[OpCode::AuthCrypt as u8]);
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        hkdf.input_ikm(label.as_bytes());
-        hkdf.input_ikm(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let (dek, _) = hkdf.finalize();
+        //     dek = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|out|))
+        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
+        h.update(&[OpCode::AuthCrypt as u8]);
+        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        h.update(label.as_bytes());
+        h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let dek = h.finalize_reset().into_bytes();
 
         // Split the DEK into two halves and use them as key and nonce to initialize an AEGIS-128L
         // instance.
@@ -238,8 +247,8 @@ impl Protocol {
         let (tag128, tag256) = aegis.finalize();
 
         // Extract a new protocol state from protocol's old state and the 256-bit tag.
-        let (state_p, _) = Hkdf::<Sha256>::extract(Some(&self.state), &tag256);
-        self.state = state_p.into();
+        h.update(&tag256);
+        self.state = h.finalize().into_bytes().into();
 
         // Check the tag against the counterfactual tag in constant time.
         if ct_eq(tag128_in, &tag128) {
@@ -281,7 +290,7 @@ enum OpCode {
 /// operation and passes all writes to an inner writer.
 #[cfg(feature = "std")]
 pub struct MixWriter<W> {
-    hkdf: HkdfExtract<Sha256>,
+    h: Hmac<Sha256>,
     inner: W,
 }
 
@@ -297,8 +306,7 @@ impl<W: std::io::Write> MixWriter<W> {
     /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
     #[inline]
     pub fn into_inner(self) -> (Protocol, W) {
-        let (state_p, _) = self.hkdf.finalize();
-        (Protocol { state: state_p.into() }, self.inner)
+        (Protocol { state: self.h.finalize().into_bytes().into() }, self.inner)
     }
 }
 
@@ -307,7 +315,7 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         // Hash the slice.
-        self.hkdf.input_ikm(buf);
+        self.h.update(buf);
         // Pass the slice to the inner writer and return the result.
         self.inner.write(buf)
     }
@@ -352,7 +360,7 @@ mod tests {
         protocol.mix("first", b"one");
         protocol.mix("second", b"two");
 
-        expect!["7f6d007293967cfb"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
+        expect!["eb55cdd9255671ef"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
@@ -366,7 +374,7 @@ mod tests {
         expect!["f848a305a96cdcc588f41d91a0ce72d0498517ded5638f5fc1f45331d6e636e3fbd3"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["819778c249931660"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["fdcefea851f8c560"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

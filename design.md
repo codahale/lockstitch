@@ -40,7 +40,7 @@ separation string:
 
 ```text
 function init(domain):
-  state ← hkdf::extract("lockstitch lockstitch lockstitch", domain)
+  state ← hmac::sha256("lockstitch lockstitch lockstitch", domain)
   return state
 ```
 
@@ -63,12 +63,12 @@ the label, and the input.
 
 ```text
 function mix(state, label, input):
-  state′ ← hkdf::extract(state, 0x01 ǁ left_encode(|label|) ǁ label ǁ input)
+  state′ ← hmac::sha256(state, 0x01 ǁ left_encode(|label|) ǁ label ǁ input)
   return state′
 ```
 
-`Mix` uses `hkdf::extract` with the protocol's state as the salt to derive a new state value from
-the given label and input.  `Mix` encodes the length of the label in bits using the `left_encode`
+`Mix` uses `hmac::sha256` with the protocol's state as the salt to derive a new state value from the
+given label and input.  `Mix` encodes the length of the label in bits using the `left_encode`
 function from [NIST SP 800-185][]. This ensures an unambiguous encoding for any combination of label
 and input, regardless of length.
 
@@ -82,16 +82,16 @@ cryptographically dependent on the protocol's prior state, the label, and the ou
 
 ```text
 function derive(state, label, n):
-  prk ← hkdf::extract(state, 0x02 ǁ left_encode(|label|) ǁ label ǁ left_encode(n))
-  out ← hkdf::expand(prk, label, n)
-  state′ ← hkdf::extract(state, prk)
+  prk ← hmac::sha256(state, 0x02 ǁ left_encode(|label|) ǁ label ǁ left_encode(n))
+  key ǁ nonce ← prk
+  (out, _, _) ← aegis128l::encrypt(key, nonce, [0x00; n])
   return (state′, out)
 ```
 
-`Derive` uses `hkdf::extract` with the protocol's state as the salt to derive a pseudorandom key
-from the given label and input. It then uses `hkdf::expand` and the pseudorandom key with the given
-label to generate the requested output. Finally, it uses `hkdf::extract` with the protocol's state
-as the salt to derive a new state value from the pseudorandom key.
+`Derive` uses `hmac::sha256` with the protocol's state as the salt to derive a pseudorandom key from
+the given label and input. It then splits that into an AEGIS-128L key and nonce and generates the
+requested output from the keystream.  Finally, it uses `hmac::sha256` with the protocol's state as
+the salt to derive a new state value from the pseudorandom key.
 
 **IMPORTANT:** A `Derive` operation's output depends on both the label and the output length.
 
@@ -110,7 +110,7 @@ protocol form a [KDF chain][], giving Lockstitch protocols the following securit
 * **Break-in Recovery**: A protocol's future outputs will appear random to an adversary in
   possession of the protocol's state as long as one of the future inputs to the protocol is secret.
 
-`hkdf::extract` is [a dual-PRF](https://eprint.iacr.org/2023/861) when used with fixed-length salts.
+HMAC is [a dual-PRF](https://eprint.iacr.org/2023/861) when used with fixed-length keys.
 Consequently, the protocol's posterior state will be secret if either the protocol's prior state or
 the `Mix` operation's inputs are secret, even if the other values are attacker-controlled.
 
@@ -123,15 +123,15 @@ and the ciphertext version of the input.
 
 ```text
 function encrypt(state, label, plaintext):
-  key ǁ nonce ← hkdf::extract(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
+  key ǁ nonce ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
   (ciphertext, _, tag256) ← aegis128l::encrypt(key, nonce, plaintext)
-  state′ ← hkdf::extract(state, tag256)
+  state′ ← hmac::sha256(state, tag256)
   return (state′, ciphertext)
 
 function decrypt(state, label, ciphertext):
-  key ǁ nonce ← hkdf::extract(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
+  key ǁ nonce ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
   (plaintext, _, tag256) ← aegis128l::decrypt(key, nonce, ciphertext)
-  state′ ← hkdf::extract(state, tag256)
+  state′ ← hmac::sha256(state, tag256)
   return (state′, ciphertext)
 ```
 
@@ -167,15 +167,15 @@ tag, returning an error if the tag is invalid.
 
 ```text
 function seal(state, label, plaintext):
-  key ǁ nonce ← hkdf::extract(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
+  key ǁ nonce ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
   (ciphertext, tag128, tag256) ← aegis128l::encrypt(key, nonce, plaintext)
-  state′ ← hkdf::extract(state, tag256)
+  state′ ← hmac::sha256(state, tag256)
   return (state′, ciphertext ǁ tag128)
 
 function open(state, label, ciphertext, tag128):
-  key ǁ nonce ← hkdf::extract(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
+  key ǁ nonce ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
   (plaintext, tag128′, tag256′) ← aegis128l::decrypt(key, nonce, ciphertext)
-  state′ ← hkdf::extract(state, tag256′)
+  state′ ← hmac::sha256(state, tag256′)
   if tag128 ≠ tag128′:
     return (state′, ⊥)
   return (state′, plaintext)
@@ -201,7 +201,7 @@ function message_digest(message):
   digest
 ```
 
-This construction is indistinguishable from a random oracle if HKDF-SHA-256 is indistinguishable
+This construction is indistinguishable from a random oracle if HMAC-SHA-256 is indistinguishable
 from a random oracle.
 
 ### Message Authentication Codes
@@ -243,8 +243,8 @@ function stream_decrypt(key, nonce, ciphertext):
 This construction is IND-CPA-secure under the following assumptions:
 
 1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
-2. HKDF-SHA-256 is indistinguishable from a random oracle.
-3. HKDF-SHA-256 is PRF-secure.
+2. HMAC-SHA-256 is indistinguishable from a random oracle.
+3. AEGIS-128L is PRF-secure.
 4. At least one of the inputs to the protocol is a nonce (i.e., not used for multiple messages).
 
 ### Authenticated Encryption And Data (AEAD)
@@ -265,7 +265,7 @@ The introduction of a nonce makes the scheme probabilistic (which is required fo
 
 Unlike many standard AEADs (e.g. AES-GCM and ChaCha20Poly1305), it is fully context-committing: the
 tag is a strong cryptographic commitment to all the inputs. AEGIS-128L is key-committing and both
-the key and the nonce are derived from the state using HKDF-SHA-256.
+the key and the nonce are derived from the state using HMAC-SHA-256.
 
 Also unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces
 of associated data without risk of ambiguous inputs.
@@ -284,8 +284,8 @@ This construction is IND-CCA2-secure (i.e. both IND-CPA and INT-CTXT) under the 
 assumptions:
 
 1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
-2. HKDF-SHA-256 is indistinguishable from a random oracle.
-3. HKDF-SHA-256's XOF is PRF-secure.
+2. HMAC-SHA-256 is indistinguishable from a random oracle.
+3. AEGIS-128L is PRF-secure.
 4. At least one of the inputs to the state is a nonce (i.e., not used for multiple messages).
 
 ## Complex Protocols

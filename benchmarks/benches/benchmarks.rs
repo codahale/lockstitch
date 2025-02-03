@@ -91,9 +91,6 @@ fn aead(c: &mut Criterion) {
 fn prf(c: &mut Criterion) {
     let mut g = c.benchmark_group("prf");
     for &(len, id) in LENS {
-        if len > 1024 {
-            continue;
-        }
         g.throughput(Throughput::Bytes(len as u64));
         g.bench_with_input(id, &len, |b, &len| {
             let key = [0u8; 32];

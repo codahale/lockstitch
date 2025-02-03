@@ -44,6 +44,9 @@ function init(domain):
   return state
 ```
 
+`Init` uses `hmac::sha256` to derive an initial state value from a constant 256-bit key and the
+domain separation string.
+
 **IMPORTANT:** The `Init` operation is only performed once, when a protocol is initialized.
 
 The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch protocol domains:
@@ -67,12 +70,19 @@ function mix(state, label, input):
   return state′
 ```
 
-`Mix` uses `hmac::sha256` with the protocol's state as the salt to derive a new state value from the
+`Mix` uses `hmac::sha256` with the protocol's state as the key to derive a new state value from the
 given label and input.  `Mix` encodes the length of the label in bits using the `left_encode`
 function from [NIST SP 800-185][]. This ensures an unambiguous encoding for any combination of label
 and input, regardless of length.
 
 [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
+
+The protocol's posterior state is derived from the protocol's prior state, the operation label, and
+the operation input. Because HMAC is a [dual-PRF][] when used with fixed-length keys, if either the
+posterior state or the input are secret, the protocol's posterior state will be secret, even if all
+other variables are attacker-controlled.
+
+[dual-PRF]: https://eprint.iacr.org/2023/861
 
 ### `Derive`
 
@@ -85,13 +95,15 @@ function derive(state, label, n):
   prk ← hmac::sha256(state, 0x02 ǁ left_encode(|label|) ǁ label ǁ left_encode(n))
   key ǁ nonce ← prk
   (out, _, _) ← aegis128l::encrypt(key, nonce, [0x00; n])
+  state′ ← hmac::sha256(state, prk)
   return (state′, out)
 ```
 
-`Derive` uses `hmac::sha256` with the protocol's state as the salt to derive a pseudorandom key from
-the given label and input. It then splits that into an AEGIS-128L key and nonce and generates the
-requested output from the keystream.  Finally, it uses `hmac::sha256` with the protocol's state as
-the salt to derive a new state value from the pseudorandom key.
+`Derive` uses `hmac::sha256` with the protocol's state as the key to derive a 256-bit pseudorandom
+key from the given label the output length in bits. It then splits the pseudorandom key into an
+AEGIS-128L key and nonce and generates the requested output from the keystream. Finally, it uses
+`hmac::sha256` with the protocol's state as the key to derive a new state value from the
+pseudorandom key.
 
 **IMPORTANT:** A `Derive` operation's output depends on both the label and the output length.
 
@@ -109,10 +121,6 @@ protocol form a [KDF chain][], giving Lockstitch protocols the following securit
   protocol's state is disclosed at some point.
 * **Break-in Recovery**: A protocol's future outputs will appear random to an adversary in
   possession of the protocol's state as long as one of the future inputs to the protocol is secret.
-
-HMAC is [a dual-PRF](https://eprint.iacr.org/2023/861) when used with fixed-length keys.
-Consequently, the protocol's posterior state will be secret if either the protocol's prior state or
-the `Mix` operation's inputs are secret, even if the other values are attacker-controlled.
 
 ### `Encrypt`/`Decrypt`
 

@@ -48,11 +48,6 @@ impl Protocol {
     }
 
     /// Mixes the given label and slice into the protocol state.
-    ///
-    /// The resulting protocol state is cryptographically dependent on both the prior state of the
-    /// protocol and the inputs to the mix operation. If either the prior state or the inputs are
-    /// secret, the resulting protocol state is secret, even if all remaining data is
-    /// attacker-controlled.
     #[inline]
     pub fn mix(&mut self, label: &str, input: &[u8]) {
         // Extract a new protocol state using the protocol's prior state as the key:
@@ -83,9 +78,8 @@ impl Protocol {
         MixWriter { h, inner }
     }
 
-    /// Derives pseudorandom output from the protocol's current state.
-    ///
-    /// The output is dependent on the protocol's prior state, the label, and the length of `out`.
+    /// Derives pseudorandom output from the protocol's current state, the label, and the output
+    /// length, then ratchets the protocol's state with the label and output length.
     #[inline]
     pub fn derive(&mut self, label: &str, out: &mut [u8]) {
         // Extract a PRK from the protocol's state, the operation code, the label, and the output
@@ -121,7 +115,8 @@ impl Protocol {
         out
     }
 
-    /// Encrypts the given slice in place.
+    /// Encrypts the given slice in place using the protocol's current state as the key, then
+    /// ratchets the protocol's state using the label and input.
     #[inline]
     pub fn encrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Extract a data encryption key from the protocol's state, the operation code, the label,
@@ -149,7 +144,8 @@ impl Protocol {
         self.state = h.finalize().into_bytes().into();
     }
 
-    /// Decrypts the given slice in place.
+    /// Decrypts the given slice in place using the protocol's current state as the key, then
+    /// ratchets the protocol's state using the label and input.
     #[inline]
     pub fn decrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Extract a data encryption key from the protocol's state, the operation code, the label,
@@ -177,9 +173,9 @@ impl Protocol {
         self.state = h.finalize().into_bytes().into();
     }
 
-    /// Seals the given mutable slice in place.
-    ///
-    /// The last [`TAG_LEN`] bytes of the slice will be overwritten with the authentication tag.
+    /// Encrypts the given slice in place using the protocol's current state as the key, appending
+    /// an authentication tag of [`TAG_LEN`] bytes, then ratchets the protocol's state using the
+    /// label and input.
     #[inline]
     pub fn seal(&mut self, label: &str, in_out: &mut [u8]) {
         // Split the buffer into plaintext and tag.
@@ -215,8 +211,11 @@ impl Protocol {
         self.state = h.finalize().into_bytes().into();
     }
 
-    /// Opens the given mutable slice in place. Returns the plaintext slice of `in_out` if the input
-    /// was authenticated. The last [`TAG_LEN`] bytes of the slice will be unmodified.
+    /// Decrypts the given slice in place using the protocol's current state as the key, verifying
+    /// the final [`TAG_LEN`] bytes as an authentication tag, then ratchets the protocol's state
+    /// using the label and input.
+    ///
+    /// Returns the plaintext slice of `in_out` if the input was authenticated.
     #[inline]
     #[must_use]
     pub fn open<'ct>(&mut self, label: &str, in_out: &'ct mut [u8]) -> Option<&'ct [u8]> {

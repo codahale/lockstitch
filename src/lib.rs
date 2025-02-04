@@ -377,21 +377,21 @@ mod tests {
         protocol.mix("first", b"one");
         protocol.mix("second", b"two");
 
-        expect!["a458ca7f32f089bb"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
+        expect!["aa6167910242b3da"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
-        expect!["261147eeaeb9eb513924c76e77fc5f53675e"].assert_eq(&hex::encode(plaintext));
+        expect!["90895fd71148d750fedbed8331c0f582f526"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["daa8eb3536808ee11fa9ec853ce46790946d22ed1f32115620bee4c9d649e7d4101b"]
+        expect!["20f0c227e9a9bbf36e9fcc0cde34e7957877adf56b8d1a985ed83af4f3caa9ef7d3c"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["7f97fc864ff7740f"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["5069bce9a1befaba"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

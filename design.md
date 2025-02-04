@@ -40,11 +40,11 @@ separation string:
 
 ```text
 function init(domain):
-  state ← hmac::sha256("lockstitch lockstitch lockstitch", domain)
+  state ← hmac::sha256(hmac::sha256("", "lockstitch lockstitch lockstitch"), domain)
   return state
 ```
 
-`Init` uses `hmac::sha256` to derive an initial state value from a constant 256-bit key and the
+`Init` uses HMAC-SHA-256 to derive an initial state value from a constant 256-bit key and the
 domain separation string.
 
 **IMPORTANT:** The `Init` operation is only performed once, when a protocol is initialized.
@@ -66,21 +66,24 @@ the label, and the input.
 
 ```text
 function mix(state, label, input):
-  state′ ← hmac::sha256(state, 0x01 ǁ left_encode(|label|) ǁ label ǁ input)
+  prk ← hmac::sha256(state, 0x01 ǁ left_encode(|label|) ǁ label ǁ input)
+  state′ ← hmac::sha256(state, prk)
   return state′
 ```
 
-`Mix` uses `hmac::sha256` with the protocol's state as the key to derive a new state value from the
-given label and input.  `Mix` encodes the length of the label in bits using the `left_encode`
+`Mix` uses HMAC-SHA-256 with the protocol's state as the key to extract a pseudorandom key from
+the given label and input. `Mix` encodes the length of the label in bits using the `left_encode`
 function from [NIST SP 800-185][]. This ensures an unambiguous encoding for any combination of label
 and input, regardless of length.
 
 [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 
-The protocol's posterior state is derived from the protocol's prior state, the operation label, and
-the operation input. Because HMAC is a [dual-PRF][] when used with fixed-length keys, if either the
-posterior state or the input are secret, the protocol's posterior state will be secret, even if all
-other variables are attacker-controlled.
+Finally, `Mix` uses HMAC-SHA-256 with the protocol's state as the key to extract a new state value
+from the pseudorandom key. The protocol's posterior state is derived from the protocol's prior
+state, the operation label, and the operation input. Because HMAC is a [dual-PRF][] when used with
+two fixed-length, uniformly random bitstrings, if either the posterior state or the input are
+secret, the protocol's posterior state will be secret, even if all other variables are
+attacker-controlled.
 
 [dual-PRF]: https://eprint.iacr.org/2023/861
 
@@ -99,10 +102,10 @@ function derive(state, label, n):
   return (state′, out)
 ```
 
-`Derive` uses `hmac::sha256` with the protocol's state as the key to derive a 256-bit pseudorandom
+`Derive` uses HMAC-SHA-256 with the protocol's state as the key to derive a 256-bit pseudorandom
 key from the given label the output length in bits. It then splits the pseudorandom key into an
 AEGIS-128L key and nonce and generates the requested output from the keystream. Finally, it uses
-`hmac::sha256` with the protocol's state as the key to derive a new state value from the
+HMAC-SHA-256 with the protocol's state as the key to derive a new state value from the
 pseudorandom key.
 
 **IMPORTANT:** A `Derive` operation's output depends on both the label and the output length.
@@ -133,13 +136,15 @@ and the ciphertext version of the input.
 function encrypt(state, label, plaintext):
   key ǁ nonce ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
   (ciphertext, _, tag256) ← aegis128l::encrypt(key, nonce, plaintext)
-  state′ ← hmac::sha256(state, tag256)
+  prk ← hmac::sha256(state, tag256)
+  state′ ← hmac::sha256(state, prk)
   return (state′, ciphertext)
 
 function decrypt(state, label, ciphertext):
   key ǁ nonce ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
   (plaintext, _, tag256) ← aegis128l::decrypt(key, nonce, ciphertext)
-  state′ ← hmac::sha256(state, tag256)
+  prk ← hmac::sha256(state, tag256)
+  state′ ← hmac::sha256(state, prk)
   return (state′, ciphertext)
 ```
 
@@ -177,13 +182,15 @@ tag, returning an error if the tag is invalid.
 function seal(state, label, plaintext):
   key ǁ nonce ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
   (ciphertext, tag128, tag256) ← aegis128l::encrypt(key, nonce, plaintext)
-  state′ ← hmac::sha256(state, tag256)
+  prk ← hmac::sha256(state, tag256)
+  state′ ← hmac::sha256(state, prk)
   return (state′, ciphertext ǁ tag128)
 
 function open(state, label, ciphertext, tag128):
   key ǁ nonce ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
   (plaintext, tag128′, tag256′) ← aegis128l::decrypt(key, nonce, ciphertext)
-  state′ ← hmac::sha256(state, tag256′)
+  prk ← hmac::sha256(state, tag256)
+  state′ ← hmac::sha256(state, prk)
   if tag128 ≠ tag128′:
     return (state′, ⊥)
   return (state′, plaintext)

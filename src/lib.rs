@@ -61,6 +61,9 @@ impl Protocol {
         // Extract a new state value from the protocol's old state and the PRK:
         //
         //     state′ = HMAC(state, prk)
+        //
+        // This preserves the invariant that the protocol state is the HMAC output of two uniform
+        // random keys.
         h.update(&prk);
         self.state = h.finalize().into_bytes().into();
     }
@@ -106,6 +109,9 @@ impl Protocol {
         // Extract a new state value from the protocol's old state and the PRK:
         //
         //     state′ = HMAC(state, prk)
+        //
+        // This preserves the invariant that the protocol state is the HMAC output of two uniform
+        // random keys.
         h.update(&prk);
         self.state = h.finalize().into_bytes().into();
     }
@@ -144,6 +150,9 @@ impl Protocol {
         //
         //     prk = HMAC(state, tag256)
         //     state′ = HMAC(state, prk)
+        //
+        // This preserves the invariant that the protocol state is the HMAC output of two uniform
+        // random keys.
         h.update(&tag256);
         let prk = h.finalize_reset().into_bytes();
         h.update(&prk);
@@ -176,6 +185,9 @@ impl Protocol {
         //
         //     prk = HMAC(state, tag256)
         //     state′ = HMAC(state, prk)
+        //
+        // This preserves the invariant that the protocol state is the HMAC output of two uniform
+        // random keys.
         h.update(&tag256);
         let prk = h.finalize_reset().into_bytes();
         h.update(&prk);
@@ -215,6 +227,9 @@ impl Protocol {
         //
         //     prk = HMAC(state, tag256)
         //     state′ = HMAC(state, prk)
+        //
+        // This preserves the invariant that the protocol state is the HMAC output of two uniform
+        // random keys.
         h.update(&tag256);
         let prk = h.finalize_reset().into_bytes();
         h.update(&prk);
@@ -254,6 +269,9 @@ impl Protocol {
         //
         //     prk = HMAC(state, tag256)
         //     state′ = HMAC(state, prk)
+        //
+        // This preserves the invariant that the protocol state is the HMAC output of two uniform
+        // random keys.
         h.update(&tag256);
         let prk = h.finalize_reset().into_bytes();
         h.update(&prk);

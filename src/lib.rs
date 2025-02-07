@@ -37,6 +37,8 @@ impl Protocol {
     pub fn new(domain: &str) -> Protocol {
         // The initial state is extracted directly from the domain separation string using a fixed
         // key.
+        //
+        //     state = HMAC(HMAC("", "lockstitch lockstitch lockstitch"), prk)
         let mut h = Hmac::<Sha256>::new_from_slice(SALT).expect("should be valid HMAC key");
         h.update(domain.as_bytes());
         Protocol { state: h.finalize().into_bytes().into() }
@@ -95,12 +97,9 @@ impl Protocol {
         h.update(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
         let prk = h.finalize_reset().into_bytes();
 
-        // Split the PRK into two halves and use them as key and nonce to initialize an AEGIS-128L
-        // instance.
+        // Use the PRK to encrypt all zeroes with AEGIS-128L.
         let (k, n) = prk.split_at(16);
         let mut aegis = Aegis128L::new(k, n);
-
-        // Encrypt all zeroes to produce the output.
         out.fill(0);
         aegis.encrypt(out);
 

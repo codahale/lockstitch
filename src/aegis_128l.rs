@@ -1,4 +1,4 @@
-use zeroize::{Zeroize as _, ZeroizeOnDrop};
+use zeroize::Zeroize as _;
 
 use crate::intrinsics::*;
 
@@ -17,18 +17,24 @@ impl Aegis128L {
         let (c0, c1) = load_2x(&C);
 
         // Initialize key and nonce blocks.
-        let key = load(key);
-        let nonce = load(nonce);
+        let mut key = load(key);
+        let mut nonce = load(nonce);
 
         // Initialize cipher state.
-        let key_nonce = xor(key, nonce);
-        let key_c0 = xor(key, c0);
+        let mut key_nonce = xor(key, nonce);
+        let mut key_c0 = xor(key, c0);
         let mut state = [key_nonce, c1, c0, c1, key_nonce, key_c0, xor(key, c1), key_c0];
 
         // Update the state with the nonce and key 10 times.
         for _ in 0..10 {
             update(&mut state, nonce, key);
         }
+
+        // Zeroize the intermediate values.
+        key.zeroize();
+        nonce.zeroize();
+        key_nonce.zeroize();
+        key_c0.zeroize();
 
         Aegis128L { state, ad_len: 0, msg_len: 0 }
     }
@@ -216,18 +222,6 @@ impl Aegis128L {
         update(&mut self.state, v0, v1);
     }
 }
-
-impl Drop for Aegis128L {
-    fn drop(&mut self) {
-        for s in self.state.iter_mut() {
-            s.zeroize();
-        }
-        self.ad_len.zeroize();
-        self.msg_len.zeroize();
-    }
-}
-
-impl ZeroizeOnDrop for Aegis128L {}
 
 /// The core AEGIS-128L update function.
 fn update(state: &mut [AesBlock; 8], m0: AesBlock, m1: AesBlock) {

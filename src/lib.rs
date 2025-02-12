@@ -99,7 +99,7 @@ impl Protocol {
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
-        let prk = h.finalize_reset().into_bytes();
+        let mut prk = h.finalize_reset().into_bytes();
 
         // Use the PRK to encrypt all zeroes with AEGIS-128L.
         let (k, n) = prk.split_at(16);
@@ -113,6 +113,7 @@ impl Protocol {
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
         h.update(&prk);
+        prk.zeroize();
         self.state = h.finalize().into_bytes().into();
     }
 
@@ -137,11 +138,12 @@ impl Protocol {
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let dek = h.finalize_reset().into_bytes();
+        let mut dek = h.finalize_reset().into_bytes();
 
         // Use the DEK to encrypt the plaintext with AEGIS-128L.
         let (k, n) = dek.split_at(16);
         let mut aegis = Aegis128L::new(k, n);
+        dek.zeroize();
         aegis.encrypt(in_out);
         let (_, tag256) = aegis.finalize();
 
@@ -172,11 +174,12 @@ impl Protocol {
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let dek = h.finalize_reset().into_bytes();
+        let mut dek = h.finalize_reset().into_bytes();
 
         // Use the DEK to decrypt the ciphertext with AEGIS-128L.
         let (k, n) = dek.split_at(16);
         let mut aegis = Aegis128L::new(k, n);
+        dek.zeroize();
         aegis.decrypt(in_out);
         let (_, tag256) = aegis.finalize();
 
@@ -211,11 +214,12 @@ impl Protocol {
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let dek = h.finalize_reset().into_bytes();
+        let mut dek = h.finalize_reset().into_bytes();
 
         // Use the DEK to encrypt the plaintext with AEGIS-128L.
         let (k, n) = dek.split_at(16);
         let mut aegis = Aegis128L::new(k, n);
+        dek.zeroize();
         aegis.encrypt(in_out);
         let (tag128, tag256) = aegis.finalize();
 
@@ -256,11 +260,12 @@ impl Protocol {
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let dek = h.finalize_reset().into_bytes();
+        let mut dek = h.finalize_reset().into_bytes();
 
         // Use the DEK to decrypt the ciphertext with AEGIS-128L.
         let (k, n) = dek.split_at(16);
         let mut aegis = Aegis128L::new(k, n);
+        dek.zeroize();
         aegis.decrypt(in_out);
         let (tag128, tag256) = aegis.finalize();
 

@@ -9,7 +9,7 @@ use crate::aegis_128l::Aegis128L;
 use cmov::CmovEq;
 use hmac::{Hmac, Mac as _};
 use sha2::Sha256;
-use zeroize::Zeroize as _;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 mod aegis_128l;
 mod intrinsics;
@@ -295,6 +295,20 @@ impl Protocol {
 impl Debug for Protocol {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Protocol").finish_non_exhaustive()
+    }
+}
+
+impl Zeroize for Protocol {
+    fn zeroize(&mut self) {
+        self.state.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for Protocol {}
+
+impl Drop for Protocol {
+    fn drop(&mut self) {
+        self.zeroize();
     }
 }
 

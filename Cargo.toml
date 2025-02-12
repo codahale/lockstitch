@@ -23,6 +23,7 @@ zeroize = { version = "1.8.1", features = ["aarch64"] }
 asm = ["sha2/asm"]
 default = ["asm", "std"]
 docs = []
+portable = ["aes"]
 std = ["sha2/std"]
 
 [workspace]

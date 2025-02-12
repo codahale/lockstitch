@@ -49,7 +49,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
-      - run: cargo build --target ${{ matrix.target }} --no-default-features
+      - run: cargo build --target ${{ matrix.target }} --no-default-features --features portable
 
   # x86/x86_64 tests
   x86:
@@ -81,7 +81,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
       - run: ${{ matrix.deps }}
-      - run: cargo test --no-default-features --features=asm,std
+      - run: cargo test --no-default-features --features=std
       - run: cargo test
  
   # aarch64 tests
@@ -106,7 +106,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
       - uses: RustCrypto/actions/cross-install@master
-      - run: cross test --target ${{ matrix.target }} --no-default-features --features=asm,std
+      - run: cross test --target ${{ matrix.target }} --no-default-features --features=std
         shell: bash
       - run: cross test --target ${{ matrix.target }}
         shell: bash

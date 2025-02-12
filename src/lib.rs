@@ -103,8 +103,7 @@ impl Protocol {
         // Use the PRK to encrypt all zeroes with AEGIS-128L.
         let (k, n) = prk.split_at(16);
         let mut aegis = Aegis128L::new(k, n);
-        out.fill(0);
-        aegis.encrypt(out);
+        aegis.prf(out);
 
         // Extract a new state value from the protocol's old state and the PRK:
         //

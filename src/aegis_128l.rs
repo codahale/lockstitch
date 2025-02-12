@@ -52,6 +52,24 @@ impl Aegis128L {
         self.ad_len += ad.len() as u64;
     }
 
+    /// Fill the given slice with keystream output. Equivalent to encrypting a message of equal
+    /// length consisting of all zeroes.
+    pub fn prf(&mut self, out: &mut [u8]) {
+        // Process whole blocks of output.
+        let mut chunks = out.chunks_exact_mut(BLOCK_LEN);
+        for chunk in chunks.by_ref() {
+            self.enc_zeroes(chunk);
+        }
+        // Process the remainder of the output, if any.
+        let chunk = chunks.into_remainder();
+        if !chunk.is_empty() {
+            let mut tmp = [0u8; BLOCK_LEN];
+            self.enc_zeroes(&mut tmp);
+            chunk.copy_from_slice(&tmp[..chunk.len()]);
+        }
+        self.msg_len += out.len() as u64;
+    }
+
     /// Encrypts the given slice in place.
     pub fn encrypt(&mut self, in_out: &mut [u8]) {
         // Process whole blocks of plaintext.
@@ -119,6 +137,17 @@ impl Aegis128L {
 
         // Update the cipher state with the two blocks.
         update(&mut self.state, t0, t1);
+    }
+
+    fn enc_zeroes(&mut self, ci: &mut [u8]) {
+        // Generate two blocks of keystream.
+        let z0 = xor3(self.state[6], self.state[1], and(self.state[2], self.state[3]));
+        let z1 = xor3(self.state[2], self.state[5], and(self.state[6], self.state[7]));
+        // Store the keystream blocks in the output.
+        store_2x(ci, z0, z1);
+        // Update the cipher state as if two all-zero blocks were encrypted.
+        let xi = zero();
+        update(&mut self.state, xi, xi);
     }
 
     fn enc(&mut self, xi: &mut [u8]) {
@@ -234,6 +263,8 @@ const C: [u8; 32] = [
 
 #[cfg(all(test, feature = "std"))]
 mod tests {
+    use core::num::NonZeroU16;
+
     use super::*;
 
     use expect_test::expect;
@@ -476,6 +507,22 @@ mod tests {
                 assert_eq!(tag_e, tag_d);
             },
         );
+    }
+
+    #[test]
+    fn prf_equivalence() {
+        bolero::check!().with_type::<([u8; 16], [u8; 16], NonZeroU16)>().for_each(|(k, n, len)| {
+            let mut in_out = vec![0u8; len.get() as usize];
+            let mut out = vec![0u8; len.get() as usize];
+
+            let mut a = Aegis128L::new(k, n);
+            a.encrypt(&mut in_out);
+
+            let mut b = Aegis128L::new(k, n);
+            b.prf(&mut out);
+
+            assert_eq!(in_out, out);
+        });
     }
 
     #[test]

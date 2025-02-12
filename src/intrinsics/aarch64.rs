@@ -3,6 +3,12 @@ use core::arch::aarch64::{self, *};
 /// An AES block.
 pub use aarch64::uint8x16_t as AesBlock;
 
+/// Create an all-zero AES block.
+#[inline]
+pub fn zero() -> AesBlock {
+    unsafe { vmovq_n_u8(0) }
+}
+
 /// Loads an AES block from the given slice.
 #[inline]
 pub fn load(bytes: &[u8]) -> AesBlock {

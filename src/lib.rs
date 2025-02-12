@@ -7,8 +7,9 @@ use core::fmt::Debug;
 use crate::aegis_128l::Aegis128L;
 
 use cmov::CmovEq;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, Mac as _};
 use sha2::Sha256;
+use zeroize::Zeroize as _;
 
 mod aegis_128l;
 mod intrinsics;
@@ -285,7 +286,7 @@ impl Protocol {
             // Otherwise, the ciphertext is inauthentic and we zero out the inauthentic plaintext to
             // avoid bugs where the caller forgets to check the return value of this function and
             // discloses inauthentic plaintext.
-            in_out.fill(0);
+            in_out.zeroize();
             None
         }
     }

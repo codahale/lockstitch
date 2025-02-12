@@ -1,3 +1,5 @@
+use zeroize::{Zeroize as _, ZeroizeOnDrop};
+
 use crate::intrinsics::*;
 
 /// An AEGIS-128L instance.
@@ -217,20 +219,15 @@ impl Aegis128L {
 
 impl Drop for Aegis128L {
     fn drop(&mut self) {
-        #[cfg(feature = "zeroize")]
-        {
-            use zeroize::Zeroize;
-            for s in self.state.iter_mut() {
-                s.zeroize();
-            }
-            self.ad_len.zeroize();
-            self.msg_len.zeroize();
+        for s in self.state.iter_mut() {
+            s.zeroize();
         }
+        self.ad_len.zeroize();
+        self.msg_len.zeroize();
     }
 }
 
-#[cfg(feature = "zeroize")]
-impl zeroize::ZeroizeOnDrop for Aegis128L {}
+impl ZeroizeOnDrop for Aegis128L {}
 
 /// The core AEGIS-128L update function.
 fn update(state: &mut [AesBlock; 8], m0: AesBlock, m1: AesBlock) {

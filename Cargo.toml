@@ -17,15 +17,14 @@ aes = { version = "0.8.4", features = ["hazmat"], optional = true }
 cmov = "0.3.1"
 hmac = { version = "0.12.1", features = ["reset"] }
 sha2 = { version = "0.10.8", default-features = false }
-zeroize = { version = "1.8.1", features = ["aarch64"], optional = true }
+zeroize = { version = "1.8.1", features = ["aarch64"] }
 
 [features]
 asm = ["sha2/asm"]
-default = ["asm", "std", "zeroize"]
+default = ["asm", "std"]
 docs = []
 portable = ["aes"]
 std = ["sha2/std"]
-zeroize = ["dep:zeroize"]
 
 [workspace]
 members = ["benchmarks", "xtask"]

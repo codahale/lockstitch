@@ -1,19 +1,19 @@
-#[cfg(all(target_arch = "aarch64", not(feature = "portable")))]
+#[cfg(all(target_arch = "aarch64", feature = "asm"))]
 pub use self::aarch64::*;
 
-#[cfg(feature = "portable")]
+#[cfg(not(feature = "asm"))]
 pub use self::portable::*;
 
-#[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "portable")))]
+#[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), feature = "asm"))]
 pub use self::x86_64::*;
 
-#[cfg(all(target_arch = "aarch64", not(feature = "portable")))]
+#[cfg(all(target_arch = "aarch64", feature = "asm"))]
 mod aarch64;
 
-#[cfg(feature = "portable")]
+#[cfg(not(feature = "asm"))]
 mod portable;
 
-#[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "portable")))]
+#[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), feature = "asm"))]
 mod x86_64;
 
 /// The length of an AES block.

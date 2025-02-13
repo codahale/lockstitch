@@ -105,7 +105,6 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 
 ## Cargo Features
 
-* `asm`: Enables hand-coded assembly for SHA-256 for `aarch64`. Enabled by default.
 * `docs`: Enables the docs-only `perf` and `design` modules.
 * `portable`: Disables the use of AES CPU instructions.
 * `std`: Enables features based on the Rust standard library. Enabled by default.

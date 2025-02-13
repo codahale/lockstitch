@@ -7,7 +7,7 @@ use core::fmt::Debug;
 use crate::aegis_128l::Aegis128L;
 
 use cmov::CmovEq;
-use hmac::{Hmac, Mac as _};
+use hmac::{Hmac, KeyInit as _, Mac as _};
 use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 

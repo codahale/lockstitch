@@ -6,9 +6,9 @@ use core::fmt::Debug;
 
 use crate::aegis_128l::Aegis128L;
 
-use cmov::CmovEq;
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use sha2::Sha256;
+use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 mod aegis_128l;
@@ -382,9 +382,7 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
 /// Compares two slices for equality in constant time.
 #[inline]
 pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
-    let mut res = 1;
-    a.cmovne(b, 0, &mut res);
-    res != 0
+    a.ct_eq(b).into()
 }
 
 /// Encodes a value using [NIST SP 800-185][]'s `left_encode`.

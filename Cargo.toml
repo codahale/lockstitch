@@ -14,16 +14,16 @@ include = ["src/**/*", "tests/**/*", "LICENSE", "README.md", "design.md", "perf.
 
 [dependencies]
 aes = { version = "0.8.4", features = ["hazmat"], optional = true }
-cmov = "0.3.1"
 hmac = { version = "0.13.0-pre.4", features = ["reset"] }
 sha2 = { version = "0.11.0-pre.4", default-features = false }
+subtle = { version = "2.6.1", default-features = false }
 zeroize = { version = "1.8.1", features = ["aarch64"] }
 
 [features]
 default = ["std"]
 docs = []
 portable = ["aes"]
-std = ["hmac/std", "zeroize/std", "sha2/std"]
+std = ["hmac/std", "sha2/std", "subtle/std", "zeroize/std"]
 
 [workspace]
 members = ["benchmarks", "xtask"]

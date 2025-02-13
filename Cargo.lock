@@ -344,12 +344,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
-name = "cmov"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b1dc960ba75d543267db9254da8ec1cb318a037beb3f8d2497520e410096fab"
-
-[[package]]
 name = "colorchoice"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -655,12 +649,12 @@ dependencies = [
  "aegis",
  "aes",
  "bolero",
- "cmov",
  "expect-test",
  "hex",
  "hex-literal",
  "hmac",
  "sha2",
+ "subtle",
  "wycheproof",
  "zeroize",
 ]

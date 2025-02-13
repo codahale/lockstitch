@@ -34,7 +34,6 @@ pub struct Protocol {
 
 impl Protocol {
     /// Creates a new protocol with the given domain.
-    #[inline]
     pub fn new(domain: &str) -> Protocol {
         // The initial state is extracted directly from the domain separation string using a fixed
         // key.
@@ -46,7 +45,6 @@ impl Protocol {
     }
 
     /// Mixes the given label and slice into the protocol state.
-    #[inline]
     pub fn mix(&mut self, label: &str, input: &[u8]) {
         // Extract a PRK from the protocol's state, the operation code, the label, and the input,
         // using an unambiguous encoding to prevent collisions:
@@ -75,7 +73,6 @@ impl Protocol {
     /// Equivalent to buffering all written data in a slice and passing it to [`Protocol::mix`].
     ///
     /// Use [`MixWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
-    #[inline]
     #[cfg(feature = "std")]
     pub fn mix_writer<W: std::io::Write>(self, label: &str, inner: W) -> MixWriter<W> {
         // Hash the initial prefix of the mix operation, then hand off to MixWriter.
@@ -88,7 +85,6 @@ impl Protocol {
 
     /// Derives pseudorandom output from the protocol's current state, the label, and the output
     /// length, then ratchets the protocol's state with the label and output length.
-    #[inline]
     pub fn derive(&mut self, label: &str, out: &mut [u8]) {
         // Extract a PRK from the protocol's state, the operation code, the label, and the output
         // length, using an unambiguous encoding to prevent collisions:
@@ -127,7 +123,6 @@ impl Protocol {
 
     /// Encrypts the given slice in place using the protocol's current state as the key, then
     /// ratchets the protocol's state using the label and input.
-    #[inline]
     pub fn encrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Extract a data encryption key from the protocol's state, the operation code, the label,
         // and the output length, using an unambiguous encoding to prevent collisions:
@@ -163,7 +158,6 @@ impl Protocol {
 
     /// Decrypts the given slice in place using the protocol's current state as the key, then
     /// ratchets the protocol's state using the label and input.
-    #[inline]
     pub fn decrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Extract a data encryption key from the protocol's state, the operation code, the label,
         // and the output length, using an unambiguous encoding to prevent collisions:
@@ -200,7 +194,6 @@ impl Protocol {
     /// Encrypts the given slice in place using the protocol's current state as the key, appending
     /// an authentication tag of [`TAG_LEN`] bytes, then ratchets the protocol's state using the
     /// label and input.
-    #[inline]
     pub fn seal(&mut self, label: &str, in_out: &mut [u8]) {
         // Split the buffer into plaintext and tag.
         let (in_out, tag128_out) = in_out.split_at_mut(in_out.len() - TAG_LEN);
@@ -245,7 +238,6 @@ impl Protocol {
     /// using the label and input.
     ///
     /// Returns the plaintext slice of `in_out` if the input was authenticated.
-    #[inline]
     #[must_use]
     pub fn open<'ct>(&mut self, label: &str, in_out: &'ct mut [u8]) -> Option<&'ct [u8]> {
         // Split the buffer into ciphertext and tag.

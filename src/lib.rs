@@ -275,7 +275,7 @@ impl Protocol {
         self.state = h.finalize().into_bytes().into();
 
         // Check the tag against the counterfactual tag in constant time.
-        if ct_eq(tag128_in, &tag128) {
+        if tag128_in.ct_eq(&tag128).into() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -369,12 +369,6 @@ impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     fn flush(&mut self) -> std::io::Result<()> {
         self.inner.flush()
     }
-}
-
-/// Compares two slices for equality in constant time.
-#[inline]
-pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
-    a.ct_eq(b).into()
 }
 
 /// Encodes a value using [NIST SP 800-185][]'s `left_encode`.

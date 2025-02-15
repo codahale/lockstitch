@@ -22,8 +22,8 @@ zeroize = { version = "1.8.1", features = ["aarch64"] }
 [features]
 default = ["std"]
 docs = []
-portable = ["aes"]
-std = ["hmac/std", "sha2/std", "subtle/std", "zeroize/std"]
+portable = ["dep:aes"]
+std = []
 
 [workspace]
 members = ["benchmarks", "xtask"]

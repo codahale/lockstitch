@@ -441,9 +441,7 @@ version = "0.2.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0b8ce8218c97789f16356e7896b3714f26c2ee1079b79c0b7ae7064bb9089fa"
 dependencies = [
- "getrandom",
  "hybrid-array",
- "rand_core",
 ]
 
 [[package]]

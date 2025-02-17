@@ -8,7 +8,7 @@ authenticated cipher, to provide 100+ Gb/sec performance on modern processors at
 level.
 
 [SHA-256]: https://doi.org/10.6028/NIST.FIPS.180-4
-[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-14.html
+[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-15.html
 
 ## CAUTION
 

@@ -4,12 +4,12 @@
 
 use core::fmt::Debug;
 
-use crate::aegis_128l::Aegis128L;
-
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+use crate::aegis_128l::Aegis128L;
 
 mod aegis_128l;
 mod intrinsics;

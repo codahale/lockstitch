@@ -256,14 +256,14 @@ const C: [u8; 32] = [
 mod tests {
     use core::num::NonZeroU16;
 
-    use super::*;
-
     use expect_test::expect;
     use hex_literal::hex;
     use wycheproof::{
         TestResult,
         aead::{TestName, TestSet},
     };
+
+    use super::*;
 
     fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> ([u8; 16], [u8; 32]) {
         let mut state = Aegis128L::new(key, nonce);

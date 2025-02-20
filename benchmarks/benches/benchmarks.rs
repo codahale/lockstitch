@@ -1,6 +1,6 @@
 use std::io::{self, Read};
 
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
+use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use lockstitch::Protocol;
 
 const LENS: &[(usize, &str)] =

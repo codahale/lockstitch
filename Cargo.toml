@@ -1,7 +1,7 @@
 [package]
 name = "lockstitch"
 version = "0.29.0"
-edition = "2021"
+edition = "2024"
 authors = ["Coda Hale <coda.hale@gmail.com>"]
 license = "MIT"
 description = "Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic operations in complex protocols."

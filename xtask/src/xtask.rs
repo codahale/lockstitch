@@ -3,9 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{ArgAction, Parser, Subcommand};
-use xshell::{cmd, Shell};
+use xshell::{Shell, cmd};
 
 #[derive(Debug, Parser)]
 struct XTask {
@@ -107,14 +107,18 @@ fn cloud_setup(sh: &Shell) -> Result<()> {
 }
 
 fn cloud_test(sh: &Shell, branch: &str) -> Result<()> {
-    let cmd = format!("source ~/.cargo/env && cd lockstitch && git fetch && git reset --hard origin/{branch} && cargo test");
+    let cmd = format!(
+        "source ~/.cargo/env && cd lockstitch && git fetch && git reset --hard origin/{branch} && cargo test"
+    );
     cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command {cmd}").run()?;
 
     Ok(())
 }
 
 fn cloud_bench(sh: &Shell, branch: &str) -> Result<()> {
-    let cmd = format!("source ~/.cargo/env && cd lockstitch && git fetch && git reset --hard origin/{branch} && cargo xtask bench -- --quiet 2> /dev/null");
+    let cmd = format!(
+        "source ~/.cargo/env && cd lockstitch && git fetch && git reset --hard origin/{branch} && cargo xtask bench -- --quiet 2> /dev/null"
+    );
     cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command {cmd}").run()?;
 
     Ok(())

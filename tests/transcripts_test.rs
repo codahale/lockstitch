@@ -16,14 +16,14 @@ enum Input {
 impl TypeGenerator for Input {
     fn generate<D: bolero::Driver>(driver: &mut D) -> Option<Self> {
         Some(match driver.gen_u8(Bound::Included(&0), Bound::Excluded(&5))? {
-            0 => Input::Mix(driver.gen()?, driver.gen()?),
+            0 => Input::Mix(driver.r#gen()?, driver.r#gen()?),
             1 => Input::Derive(
-                driver.gen()?,
+                driver.r#gen()?,
                 driver.gen_usize(Bound::Included(&1), Bound::Included(&1024))?,
             ),
-            2 => Input::Encrypt(driver.gen()?, driver.gen()?),
-            3 => Input::Decrypt(driver.gen()?, driver.gen()?),
-            4 => Input::Seal(driver.gen()?, driver.gen()?),
+            2 => Input::Encrypt(driver.r#gen()?, driver.r#gen()?),
+            3 => Input::Decrypt(driver.r#gen()?, driver.r#gen()?),
+            4 => Input::Seal(driver.r#gen()?, driver.r#gen()?),
             // No way to produce valid inputs for Open operations.
             _ => unreachable!(),
         })
@@ -47,7 +47,7 @@ struct Transcript {
 
 impl TypeGenerator for Transcript {
     fn generate<D: bolero::Driver>(driver: &mut D) -> Option<Self> {
-        let mut t = Transcript { domain: driver.gen()?, inputs: driver.gen()? };
+        let mut t = Transcript { domain: driver.r#gen()?, inputs: driver.r#gen()? };
 
         // All transcripts must end with a Derive operation to capture the final protocol state.
         t.inputs.push(Input::Derive("final".into(), 16));

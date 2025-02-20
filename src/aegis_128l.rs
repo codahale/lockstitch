@@ -261,8 +261,8 @@ mod tests {
     use expect_test::expect;
     use hex_literal::hex;
     use wycheproof::{
-        aead::{TestName, TestSet},
         TestResult,
+        aead::{TestName, TestSet},
     };
 
     fn encrypt(key: &[u8; 16], nonce: &[u8; 16], mc: &mut [u8], ad: &[u8]) -> ([u8; 16], [u8; 32]) {

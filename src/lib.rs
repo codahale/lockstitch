@@ -5,8 +5,12 @@
 use core::fmt::Debug;
 
 use aws_lc_rs::{
-    cipher::{self, AES_128, DecryptingKey, EncryptingKey, UnboundCipherKey},
-    constant_time, hmac,
+    cipher::{
+        AES_128, AES_128_KEY_LEN, DecryptingKey, DecryptionContext, EncryptingKey,
+        EncryptionContext, UnboundCipherKey,
+    },
+    constant_time::verify_slices_are_equal,
+    hmac::{Context as HmacContext, HMAC_SHA256, Key as HmacKey, sign as hmac},
 };
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -34,10 +38,9 @@ impl Protocol {
         // The initial state is extracted directly from the domain separation string using a fixed
         // key.
         //
-        //     state = HMAC(HMAC("", "lockstitch lockstitch lockstitch"), prk)
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, SALT));
-        h.update(domain.as_bytes());
-        Protocol { state: h.sign().as_ref().try_into().expect("should be 32 bytes") }
+        //     state = HMAC(HMAC("", "lockstitch"), domain)
+        let state = hmac(&HmacKey::new(HMAC_SHA256, SALT), domain.as_bytes());
+        Protocol { state: state.as_ref().try_into().expect("should be 32 bytes") }
     }
 
     /// Mixes the given label and slice into the protocol state.
@@ -46,7 +49,7 @@ impl Protocol {
         // using an unambiguous encoding to prevent collisions:
         //
         //     prk = HMAC(state, 0x01 || left_encode(|label|) || label || input)
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
+        let mut h = HmacContext::with_key(&HmacKey::new(HMAC_SHA256, &self.state));
         h.update(&[OpCode::Mix as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
@@ -59,9 +62,10 @@ impl Protocol {
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
-        h.update(prk.as_ref());
-        self.state = h.sign().as_ref().try_into().expect("should be 32 bytes");
+        self.state = hmac(&HmacKey::new(HMAC_SHA256, &self.state), prk.as_ref())
+            .as_ref()
+            .try_into()
+            .expect("should be 32 bytes");
     }
 
     /// Moves the protocol into a [`std::io::Write`] implementation, mixing all written data in a
@@ -73,8 +77,8 @@ impl Protocol {
     #[cfg(feature = "std")]
     pub fn mix_writer<W: std::io::Write>(self, label: &str, inner: W) -> MixWriter<W> {
         // Hash the initial prefix of the mix operation, then hand off to MixWriter.
-        let key = hmac::Key::new(hmac::HMAC_SHA256, &self.state);
-        let mut h = hmac::Context::with_key(&key);
+        let key = HmacKey::new(HMAC_SHA256, &self.state);
+        let mut h = HmacContext::with_key(&key);
         h.update(&[OpCode::Mix as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
@@ -88,20 +92,23 @@ impl Protocol {
         // length, using an unambiguous encoding to prevent collisions:
         //
         //     prk = HMAC(state, 0x02 || left_encode(|label|) || label || left_encode(|out|))
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
+        let mut h = HmacContext::with_key(&HmacKey::new(HMAC_SHA256, &self.state));
         h.update(&[OpCode::Derive as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
         let prk = h.sign();
 
-        // Use the PRK to encrypt all zeroes with AES-128.
+        // Use the PRK to encrypt all zeroes with AES-128:
+        //
+        //     k || n = prk
+        //     prf = AES-128-CTR(k, n, [0x00; N])
         out.zeroize();
-        let (k, n) = prk.as_ref().split_at(16);
-        let key = UnboundCipherKey::new(&AES_128, k).unwrap();
-        let key = EncryptingKey::ctr(key).unwrap();
-        key.less_safe_encrypt(out, cipher::EncryptionContext::Iv128(n.try_into().unwrap()))
-            .unwrap();
+        let (k, n) = prk.as_ref().split_at(AES_128_KEY_LEN);
+        let key = UnboundCipherKey::new(&AES_128, k).expect("should be valid AES-128 key");
+        let key = EncryptingKey::ctr(key).expect("should be valid CTR key");
+        let ctx = EncryptionContext::Iv128(n.try_into().expect("should be 16 bytes"));
+        key.less_safe_encrypt(out, ctx).expect("should encrypt");
 
         // Extract a new state value from the protocol's old state and the PRK:
         //
@@ -109,9 +116,10 @@ impl Protocol {
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
-        h.update(prk.as_ref());
-        self.state = h.sign().as_ref().try_into().expect("should be 32 bytes");
+        self.state = hmac(&HmacKey::new(HMAC_SHA256, &self.state), prk.as_ref())
+            .as_ref()
+            .try_into()
+            .expect("should be 32 bytes");
     }
 
     /// Derives output from the protocol's current state and returns it as an `N`-byte array.
@@ -130,27 +138,26 @@ impl Protocol {
         // prevent collisions:
         //
         //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|out|))
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
+        let mut h = HmacContext::with_key(&HmacKey::new(HMAC_SHA256, &self.state));
         h.update(&[OpCode::Crypt as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
         let prk = h.sign();
-        let (dek, dak) = prk.as_ref().split_at(16);
+        let (dek, dak) = prk.as_ref().split_at(AES_128_KEY_LEN);
 
         // Use the DEK to encrypt the plaintext with AES-128:
         //
         //     ciphertext = AES-128-CTR(dek, plaintext)
-        let key = UnboundCipherKey::new(&AES_128, dek).unwrap();
-        let key = EncryptingKey::ctr(key).unwrap();
-        key.less_safe_encrypt(in_out, cipher::EncryptionContext::Iv128([0u8; 16].into())).unwrap();
+        let key = UnboundCipherKey::new(&AES_128, dek).expect("should be valid AES-128 key");
+        let key = EncryptingKey::ctr(key).expect("should be valid CTR key");
+        key.less_safe_encrypt(in_out, EncryptionContext::Iv128([0u8; 16].into()))
+            .expect("should encrypt");
 
         // Use the DAK to extract a PRK from the ciphertext.
         //
         //     prk = HMAC-SHA-256(dak, ciphertext)
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, dak));
-        h.update(in_out);
-        let prk = h.sign();
+        let prk = hmac(&HmacKey::new(HMAC_SHA256, dak), in_out);
 
         // Use the PRK to extract a new protocol state:
         //
@@ -158,9 +165,10 @@ impl Protocol {
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
-        h.update(prk.as_ref());
-        self.state = h.sign().as_ref().try_into().expect("should be 32 bytes");
+        self.state = hmac(&HmacKey::new(HMAC_SHA256, &self.state), prk.as_ref())
+            .as_ref()
+            .try_into()
+            .expect("should be 32 bytes");
     }
 
     /// Decrypts the given slice in place using the protocol's current state as the key, then
@@ -171,20 +179,18 @@ impl Protocol {
         // prevent collisions:
         //
         //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|out|))
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
+        let mut h = HmacContext::with_key(&HmacKey::new(HMAC_SHA256, &self.state));
         h.update(&[OpCode::Crypt as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
         let prk = h.sign();
-        let (dek, dak) = prk.as_ref().split_at(16);
+        let (dek, dak) = prk.as_ref().split_at(AES_128_KEY_LEN);
 
         // Use the DAK to extract a PRK from the ciphertext.
         //
         //     prk = HMAC-SHA-256(dak, ciphertext)
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, dak));
-        h.update(in_out);
-        let prk = h.sign();
+        let prk = hmac(&HmacKey::new(HMAC_SHA256, dak), in_out);
 
         // Use the PRK to extract a new protocol state:
         //
@@ -192,14 +198,15 @@ impl Protocol {
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
-        h.update(prk.as_ref());
-        self.state = h.sign().as_ref().try_into().expect("should be 32 bytes");
+        self.state = hmac(&HmacKey::new(HMAC_SHA256, &self.state), prk.as_ref())
+            .as_ref()
+            .try_into()
+            .expect("should be 32 bytes");
 
         // Use the DEK to decrypt the ciphertext with AES-128.
-        let key = UnboundCipherKey::new(&AES_128, dek).unwrap();
-        let key = DecryptingKey::ctr(key).unwrap();
-        key.decrypt(in_out, cipher::DecryptionContext::Iv128([0u8; 16].into())).unwrap();
+        let key = UnboundCipherKey::new(&AES_128, dek).expect("should be valid AES-128 key");
+        let key = DecryptingKey::ctr(key).expect("should be valid CTR key");
+        key.decrypt(in_out, DecryptionContext::Iv128([0u8; 16].into())).expect("should decrypt");
     }
 
     /// Encrypts the given slice in place using the protocol's current state as the key, appending
@@ -214,27 +221,26 @@ impl Protocol {
         // prevent collisions:
         //
         //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|out|))
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
+        let mut h = HmacContext::with_key(&HmacKey::new(HMAC_SHA256, &self.state));
         h.update(&[OpCode::AuthCrypt as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
         let prk = h.sign();
-        let (dek, dak) = prk.as_ref().split_at(16);
+        let (dek, dak) = prk.as_ref().split_at(AES_128_KEY_LEN);
 
         // Use the DEK to encrypt the plaintext with AES-128:
         //
         //     ciphertext = AES-128-CTR(dek, plaintext)
-        let key = UnboundCipherKey::new(&AES_128, dek).unwrap();
-        let key = EncryptingKey::ctr(key).unwrap();
-        key.less_safe_encrypt(in_out, cipher::EncryptionContext::Iv128([0u8; 16].into())).unwrap();
+        let key = UnboundCipherKey::new(&AES_128, dek).expect("should be valid AES-128 key");
+        let key = EncryptingKey::ctr(key).expect("should be valid CTR key");
+        key.less_safe_encrypt(in_out, EncryptionContext::Iv128([0u8; 16].into()))
+            .expect("should encrypt");
 
         // Use the DAK to extract a PRK from the ciphertext.
         //
         //     prk = HMAC-SHA-256(dak, ciphertext)
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, dak));
-        h.update(in_out);
-        let prk = h.sign();
+        let prk = hmac(&HmacKey::new(HMAC_SHA256, dak), in_out);
 
         // Use the PRK to extract a new protocol state:
         //
@@ -242,9 +248,10 @@ impl Protocol {
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
-        h.update(prk.as_ref());
-        self.state = h.sign().as_ref().try_into().expect("should be 32 bytes");
+        self.state = hmac(&HmacKey::new(HMAC_SHA256, &self.state), prk.as_ref())
+            .as_ref()
+            .try_into()
+            .expect("should be 32 bytes");
 
         // Use the first half of the PRK as an authentication tag.
         tag128_out.copy_from_slice(&prk.as_ref()[..TAG_LEN]);
@@ -265,20 +272,18 @@ impl Protocol {
         // prevent collisions:
         //
         //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|out|))
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
+        let mut h = HmacContext::with_key(&HmacKey::new(HMAC_SHA256, &self.state));
         h.update(&[OpCode::AuthCrypt as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
         let prk = h.sign();
-        let (dek, dak) = prk.as_ref().split_at(16);
+        let (dek, dak) = prk.as_ref().split_at(AES_128_KEY_LEN);
 
         // Use the DAK to extract a PRK from the ciphertext.
         //
         //     prk = HMAC-SHA-256(dak, ciphertext)
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, dak));
-        h.update(in_out);
-        let prk = h.sign();
+        let prk = hmac(&HmacKey::new(HMAC_SHA256, dak), in_out);
 
         // Use the PRK to extract a new protocol state:
         //
@@ -286,17 +291,18 @@ impl Protocol {
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
-        let mut h = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &self.state));
-        h.update(prk.as_ref());
-        self.state = h.sign().as_ref().try_into().expect("should be 32 bytes");
+        self.state = hmac(&HmacKey::new(HMAC_SHA256, &self.state), prk.as_ref())
+            .as_ref()
+            .try_into()
+            .expect("should be 32 bytes");
 
         // Use the DEK to decrypt the ciphertext with AES-128.
-        let key = UnboundCipherKey::new(&AES_128, dek).unwrap();
-        let key = DecryptingKey::ctr(key).unwrap();
-        key.decrypt(in_out, cipher::DecryptionContext::Iv128([0u8; 16].into())).unwrap();
+        let key = UnboundCipherKey::new(&AES_128, dek).expect("should be valid AES-128 key");
+        let key = DecryptingKey::ctr(key).expect("should be valid CTR key");
+        key.decrypt(in_out, DecryptionContext::Iv128([0u8; 16].into())).expect("should decrypt");
 
         // Verify the authentication tag.
-        if constant_time::verify_slices_are_equal(tag128_in, &prk.as_ref()[..TAG_LEN]).is_ok() {
+        if verify_slices_are_equal(tag128_in, &prk.as_ref()[..TAG_LEN]).is_ok() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -353,8 +359,8 @@ enum OpCode {
 /// operation and passes all writes to an inner writer.
 #[cfg(feature = "std")]
 pub struct MixWriter<W> {
-    key: hmac::Key,
-    h: hmac::Context,
+    key: HmacKey,
+    h: HmacContext,
     inner: W,
 }
 
@@ -374,9 +380,9 @@ impl<W: std::io::Write> MixWriter<W> {
         let prk = self.h.sign();
 
         // Extract a new state value from the protocol's state and the PRK.
-        let state = hmac::sign(&self.key, prk.as_ref());
+        let state = hmac(&self.key, prk.as_ref());
 
-        (Protocol { state: state.as_ref().try_into().unwrap() }, self.inner)
+        (Protocol { state: state.as_ref().try_into().expect("should be 32 bytes") }, self.inner)
     }
 }
 
@@ -532,7 +538,7 @@ mod tests {
 
     #[test]
     fn check_salt() {
-        let salt = hmac::sign(&hmac::Key::new(hmac::HMAC_SHA256, b""), b"lockstitch");
+        let salt = hmac(&HmacKey::new(HMAC_SHA256, b""), b"lockstitch");
         assert_eq!(SALT, salt.as_ref());
     }
 }

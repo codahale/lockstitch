@@ -171,16 +171,16 @@ error if the tag is invalid.
 function seal(state, label, plaintext):
   dek ǁ dak ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
   ciphertext ← aes128ctr::encrypt(dek, [0x00; 16], plaintext)
-  prk ← hmac::sha256(dak, ciphertext)
-  state′ ← hmac::sha256(state, prk)
-  return (state′, ciphertext ǁ prk[..16])
+  prk₀ ǁ prk₁ ← hmac::sha256(dak, ciphertext)
+  state′ ← hmac::sha256(state, prk₀ ǁ prk₁)
+  return (state′, ciphertext ǁ prk₀)
 
 function open(state, label, ciphertext, tag128):
   dek ǁ dak ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
-  prk ← hmac::sha256(dak, ciphertext)
-  state′ ← hmac::sha256(state, prk)
+  prk₀ ǁ prk₁ ← hmac::sha256(dak, ciphertext)
+  state′ ← hmac::sha256(state, prk₀ ǁ prk₁)
   plaintext ← aes128ctr::decrypt(dek, [0x00; 16], ciphertext)
-  if tag128 ≠ prk[..16]:
+  if tag128 ≠ prk₀:
     return (state′, ⊥)
   return (state′, plaintext)
 ```

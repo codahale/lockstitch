@@ -3,12 +3,11 @@
 Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption) in
 complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, Merlin
-transcripts, and Xoodyak's Cyclist mode, Lockstitch uses [SHA-256][] and [AEGIS-128L][], an
-authenticated cipher, to provide 100+ Gb/sec performance on modern processors at a 128-bit security
-level.
+transcripts, and Xoodyak's Cyclist mode, Lockstitch uses [SHA-256][] and [AES-128][] to provide
+10+ Gb/sec performance on modern processors at a 128-bit security level.
 
 [SHA-256]: https://doi.org/10.6028/NIST.FIPS.180-4
-[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-15.html
+[AES-128]: https://doi.org/10.6028/NIST.FIPS.197-upd1
 
 ## Protocol
 
@@ -40,7 +39,7 @@ separation string:
 
 ```text
 function init(domain):
-  state ← hmac::sha256(hmac::sha256("", "lockstitch lockstitch lockstitch"), domain)
+  state ← hmac::sha256(hmac::sha256("", "lockstitch"), domain)
   return state
 ```
 
@@ -97,16 +96,16 @@ cryptographically dependent on the protocol's prior state, the label, and the ou
 function derive(state, label, n):
   prk ← hmac::sha256(state, 0x02 ǁ left_encode(|label|) ǁ label ǁ left_encode(n))
   key ǁ nonce ← prk
-  (out, _, _) ← aegis128l::encrypt(key, nonce, [0x00; n])
+  (out, _, _) ← aes128ctr::encrypt(key, nonce, [0x00; n])
   state′ ← hmac::sha256(state, prk)
   return (state′, out)
 ```
 
-`Derive` uses HMAC-SHA-256 with the protocol's state as the key to derive a 256-bit pseudorandom
-key from the given label the output length in bits. It then splits the pseudorandom key into an
-AEGIS-128L key and nonce and generates the requested output from the keystream. Finally, it uses
-HMAC-SHA-256 with the protocol's state as the key to derive a new state value from the
-pseudorandom key.
+`Derive` uses HMAC-SHA-256 with the protocol's state as the key to derive a 256-bit pseudorandom key
+from the given label the output length in bits. It then splits the pseudorandom key into an
+AES-128-CTR key and nonce and generates the requested output from the keystream. Finally, it uses
+HMAC-SHA-256 with the protocol's state as the key to derive a new state value from the pseudorandom
+key.
 
 **IMPORTANT:** A `Derive` operation's output depends on both the label and the output length.
 
@@ -134,33 +133,25 @@ and the ciphertext version of the input.
 
 ```text
 function encrypt(state, label, plaintext):
-  key ǁ nonce ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
-  (ciphertext, _, tag256) ← aegis128l::encrypt(key, nonce, plaintext)
-  prk ← hmac::sha256(state, tag256)
+  dek ǁ dak ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
+  ciphertext ← aes128ctr::encrypt(dek, [0x00; 16], plaintext)
+  prk ← hmac::sha256(dak, ciphertext)
   state′ ← hmac::sha256(state, prk)
   return (state′, ciphertext)
 
 function decrypt(state, label, ciphertext):
-  key ǁ nonce ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
-  (plaintext, _, tag256) ← aegis128l::decrypt(key, nonce, ciphertext)
-  prk ← hmac::sha256(state, tag256)
+  dek ǁ dak ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
+  prk ← hmac::sha256(dak, ciphertext)
   state′ ← hmac::sha256(state, prk)
+  plaintext ← aes128ctr::decrypt(dek, [0x00; 16], ciphertext)
   return (state′, ciphertext)
 ```
 
-Three points bear mentioning about `Encrypt` and `Decrypt`:
+Two points bear mentioning about `Encrypt` and `Decrypt`:
 
 1. Both `Encrypt` and `Decrypt` use the same operation code to ensure protocols have the same state
    after both encrypting and decrypting data.
-2. Despite not updating the protocol state with either the plaintext or ciphertext, the inclusion of
-   the 256-bit tag ensures the protocol's state is dependent on both because AEGIS-128L is key
-   committing (i.e. the probability of an attacker finding a different key, nonce, or plaintext
-   which produces the same authentication tag is negligible).
-
-   **IMPORTANT:** [AEGIS-128L by itself is not fully committing][Iso23], as tag collisions can be
-   found if authenticated data is attacker-controlled. Lockstitch does not pass authenticated data
-   to AEGIS-128L, however, mooting this type of attack.
-3. `Encrypt` operations provide no authentication by themselves. An attacker can modify a
+2. `Encrypt` operations provide no authentication by themselves. An attacker can modify a
    ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
    they are EAV secure (i.e. a passive adversary will not be able to read plaintext without knowing
    the protocol's prior state) but not IND-CPA secure (i.e. an active adversary with an encryption
@@ -170,28 +161,26 @@ Three points bear mentioning about `Encrypt` and `Decrypt`:
    For IND-CPA security, the protocol's state must include a probabilistic value (like a nonce) and
    for IND-CCA security, use [`Seal`/`Open`](#sealopen).
 
-[Iso23]: <https://eprint.iacr.org/2023/1495>
-
 ### `Seal`/`Open`
 
-`Seal` and `Open` operations extend the `Encrypt` and `Decrypt` operations with the inclusion of the
-128-bit AEGIS-128L tag with the ciphertext for authentication. The `Seal` operation verifies the
-tag, returning an error if the tag is invalid.
+`Seal` and `Open` operations extend the `Encrypt` and `Decrypt` operations with the inclusion of a
+128-bit authentication tag with the ciphertext. The `Seal` operation verifies the tag, returning an
+error if the tag is invalid.
 
 ```text
 function seal(state, label, plaintext):
-  key ǁ nonce ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
-  (ciphertext, tag128, tag256) ← aegis128l::encrypt(key, nonce, plaintext)
-  prk ← hmac::sha256(state, tag256)
+  dek ǁ dak ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
+  ciphertext ← aes128ctr::encrypt(dek, [0x00; 16], plaintext)
+  prk ← hmac::sha256(dak, ciphertext)
   state′ ← hmac::sha256(state, prk)
-  return (state′, ciphertext ǁ tag128)
+  return (state′, ciphertext ǁ prk[..16])
 
 function open(state, label, ciphertext, tag128):
-  key ǁ nonce ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
-  (plaintext, tag128′, tag256′) ← aegis128l::decrypt(key, nonce, ciphertext)
-  prk ← hmac::sha256(state, tag256)
+  dek ǁ dak ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
+  prk ← hmac::sha256(dak, ciphertext)
   state′ ← hmac::sha256(state, prk)
-  if tag128 ≠ tag128′:
+  plaintext ← aes128ctr::decrypt(dek, [0x00; 16], ciphertext)
+  if tag128 ≠ prk[..16]:
     return (state′, ⊥)
   return (state′, plaintext)
 ```
@@ -257,9 +246,9 @@ function stream_decrypt(key, nonce, ciphertext):
 
 This construction is IND-CPA-secure under the following assumptions:
 
-1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
+1. AES-128-CTR is IND-CPA-secure when used with a unique nonce.
 2. HMAC-SHA-256 is indistinguishable from a random oracle.
-3. AEGIS-128L is PRF-secure.
+3. AES-128-CTR is PRF-secure.
 4. At least one of the inputs to the protocol is a nonce (i.e., not used for multiple messages).
 
 ### Authenticated Encryption And Data (AEAD)
@@ -279,8 +268,7 @@ function aead_seal(key, nonce, ad, plaintext):
 The introduction of a nonce makes the scheme probabilistic (which is required for IND-CCA security).
 
 Unlike many standard AEADs (e.g. AES-GCM and ChaCha20Poly1305), it is fully context-committing: the
-tag is a strong cryptographic commitment to all the inputs. AEGIS-128L is key-committing and both
-the key and the nonce are derived from the state using HMAC-SHA-256.
+tag is a strong cryptographic commitment to all the inputs.
 
 Also unlike a standard AEAD, this can be easily extended to allow for multiple, independent pieces
 of associated data without risk of ambiguous inputs.
@@ -298,9 +286,9 @@ function aead_open(key, nonce, ad, ciphertext, tag):
 This construction is IND-CCA2-secure (i.e. both IND-CPA and INT-CTXT) under the following
 assumptions:
 
-1. AEGIS-128L is IND-CPA-secure when used with a unique nonce.
+1. AES-128-CTR is IND-CPA-secure when used with a unique nonce.
 2. HMAC-SHA-256 is indistinguishable from a random oracle.
-3. AEGIS-128L is PRF-secure.
+3. AES-128-CTR is PRF-secure.
 4. At least one of the inputs to the state is a nonce (i.e., not used for multiple messages).
 
 ## Complex Protocols

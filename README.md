@@ -3,12 +3,11 @@
 Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption) in
 complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, Merlin
-transcripts, and Xoodyak's Cyclist mode, Lockstitch uses [SHA-256][] and [AEGIS-128L][], an
-authenticated cipher, to provide 100+ Gb/sec performance on modern processors at a 128-bit security
-level.
+transcripts, and Xoodyak's Cyclist mode, Lockstitch uses [SHA-256][] and [AES-128][] to provide
+10+ Gb/sec performance on modern processors at a 128-bit security level.
 
 [SHA-256]: https://doi.org/10.6028/NIST.FIPS.180-4
-[AEGIS-128L]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aegis-aead-15.html
+[AES-128]: https://doi.org/10.6028/NIST.FIPS.197-upd1
 
 ## CAUTION
 
@@ -106,43 +105,7 @@ assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &bad_ciphertext), No
 ## Cargo Features
 
 * `docs`: Enables the docs-only `perf` and `design` modules.
-* `portable`: Disables the use of AES CPU instructions.
 * `std`: Enables features based on the Rust standard library. Enabled by default.
-
-## Performance
-
-Lockstitch's AEGIS-128L implementation benefit significantly from the use of specific CPU
-instructions.
-
-### `x86`/`x86_64`
-
-On `x86`/`x86_64` CPUs, Lockstitch achieves its best performance with the `aes` and `ssse3` target
-features enabled.
-
-To compile a binary with support for these features, create a `.cargo/config.toml` file with the
-following:
-
-```toml
-[build]
-rustflags = ["-C", "target-feature=+aes,+ssse3"]
-```
-
-Or use the following `RUSTFLAGS` environment variable:
-
-```sh
-export RUSTFLAGS="-C target-feature=+aes,+ssse3"
-```
-
-### `aarch64`
-
-On `aarch64-darwin-apple` (i.e. macOS), the ARMv8-A cryptography instructions and NEON vector
-instructions are enabled by default. On other targets (e.g. `aarch64-unknown-linux-gnu`), the `sha3`
-and `aes` target features should be enabled.
-
-### Other
-
-For other platforms, the `portable` crate feature provides a very slow but fully portable AES
-implementation.
 
 ## Additional Information
 
@@ -151,8 +114,6 @@ For more information on performance, see [`perf.md`](perf.md).
 
 ## License
 
-Copyright © 2025 Coda Hale, Frank Denis
+Copyright © 2025 Coda Hale
 
-AEGIS-128L implementation adapted from [rust-aegis](https://github.com/jedisct1/rust-aegis/).
-
-Distributed under the MIT License.
+Distributed under the Apache License 2.0 or MIT License.

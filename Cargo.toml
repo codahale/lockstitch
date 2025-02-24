@@ -3,38 +3,31 @@ name = "lockstitch"
 version = "0.29.0"
 edition = "2024"
 authors = ["Coda Hale <coda.hale@gmail.com>"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
 description = "Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic operations in complex protocols."
 homepage = "https://github.com/codahale/lockstitch"
 documentation = "https://docs.rs/lockstitch/"
-keywords = ["crypto", "aegis-128l", "sha-256", "hmac", "hazmat"]
+keywords = ["crypto", "aes-128", "sha-256", "hmac", "hazmat"]
 categories = ["cryptography", "no-std"]
 readme = "README.md"
-include = ["src/**/*", "tests/**/*", "LICENSE", "README.md", "design.md", "perf.md"]
+include = ["src/**/*", "tests/**/*", "LICENSE-*", "README.md", "design.md", "perf.md"]
 
 [dependencies]
-aes = { version = "0.8.4", features = ["hazmat"], optional = true }
-hmac = { version = "0.13.0-pre.4", features = ["reset"] }
-sha2 = { version = "0.11.0-pre.4", default-features = false }
-subtle = { version = "2.6.1", default-features = false }
+aws-lc-rs = { version = "1.12.4", default-features = false, features = ["alloc", "aws-lc-sys"] }
 zeroize = "1.8.1"
 
 [features]
 default = ["std"]
 docs = []
-portable = ["dep:aes"]
 std = []
 
 [workspace]
 members = ["benchmarks", "xtask"]
 
 [dev-dependencies]
-aegis = { version = "0.9.0", features = ["pure-rust"] }
 bolero = "0.12.0"
 expect-test = "1.5.1"
 hex = "0.4.3"
-hex-literal = "0.4.1"
-wycheproof = "0.6.0"
 
 [package.metadata.docs.rs]
 all-features = true

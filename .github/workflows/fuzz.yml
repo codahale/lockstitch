@@ -8,8 +8,6 @@ jobs:
     strategy:
       matrix:
         target:
-            - aegis_128l::tests::round_trip
-            - aegis_128l::tests::interop
             - tests::encoded_label_injective 
             - tests::left_encode_injective 
             - aead
@@ -22,8 +20,6 @@ jobs:
             - divergence
             - invertible
     runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: "-C target-feature=+aes,+ssse3"
     steps:
       - uses: actions/checkout@v4
       - uses: RustCrypto/actions/cargo-cache@master

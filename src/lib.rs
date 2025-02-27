@@ -99,10 +99,10 @@ impl Protocol {
         h.update(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
         let prk = h.sign();
 
-        // Use the PRK to encrypt all zeroes with AES-128:
+        // Use the PRK to encrypt all zeroes with AES:
         //
         //     k || n = prk
-        //     prf = AES-128-CTR(k, n, [0x00; N])
+        //     prf = AES-CTR(k, n, [0x00; N])
         out.zeroize();
         let (k, n) = prk.as_ref().split_at(AES_128_KEY_LEN);
         let key = UnboundCipherKey::new(&AES_128, k).expect("should be valid AES-128 key");
@@ -146,17 +146,17 @@ impl Protocol {
         let prk = h.sign();
         let (dek, dak) = prk.as_ref().split_at(AES_128_KEY_LEN);
 
-        // Use the DEK to encrypt the plaintext with AES-128:
+        // Use the DEK to encrypt the plaintext with AES-128-CTR:
         //
-        //     ciphertext = AES-128-CTR(dek, plaintext)
+        //     ciphertext = AES-CTR(dek, plaintext)
         let key = UnboundCipherKey::new(&AES_128, dek).expect("should be valid AES-128 key");
         let key = EncryptingKey::ctr(key).expect("should be valid CTR key");
         key.less_safe_encrypt(in_out, EncryptionContext::Iv128([0u8; 16].into()))
             .expect("should encrypt");
 
-        // Use the DAK to extract a PRK from the ciphertext.
+        // Use the DAK to extract a PRK from the ciphertext with HMAC-SHA-256:
         //
-        //     prk = HMAC-SHA-256(dak, ciphertext)
+        //     prk = HMAC(dak, ciphertext)
         let prk = hmac(&HmacKey::new(HMAC_SHA256, dak), in_out);
 
         // Use the PRK to extract a new protocol state:
@@ -187,9 +187,9 @@ impl Protocol {
         let prk = h.sign();
         let (dek, dak) = prk.as_ref().split_at(AES_128_KEY_LEN);
 
-        // Use the DAK to extract a PRK from the ciphertext.
+        // Use the DAK to extract a PRK from the ciphertext with HMAC-SHA-256:
         //
-        //     prk = HMAC-SHA-256(dak, ciphertext)
+        //     prk = HMAC(dak, ciphertext)
         let prk = hmac(&HmacKey::new(HMAC_SHA256, dak), in_out);
 
         // Use the PRK to extract a new protocol state:
@@ -203,7 +203,9 @@ impl Protocol {
             .try_into()
             .expect("should be 32 bytes");
 
-        // Use the DEK to decrypt the ciphertext with AES-128.
+        // Use the DEK to decrypt the ciphertext with AES.
+        //
+        //     plaintext = AES-CTR(dek, ciphertext)
         let key = UnboundCipherKey::new(&AES_128, dek).expect("should be valid AES-128 key");
         let key = DecryptingKey::ctr(key).expect("should be valid CTR key");
         key.decrypt(in_out, DecryptionContext::Iv128([0u8; 16].into())).expect("should decrypt");
@@ -214,7 +216,7 @@ impl Protocol {
     /// label and input.
     pub fn seal(&mut self, label: &str, in_out: &mut [u8]) {
         // Split the buffer into plaintext and tag.
-        let (in_out, tag128_out) = in_out.split_at_mut(in_out.len() - TAG_LEN);
+        let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Extract a data encryption key and data authentication key from the protocol's state, the
         // operation code, the label, and the output length, using an unambiguous encoding to
@@ -229,22 +231,27 @@ impl Protocol {
         let prk = h.sign();
         let (dek, dak) = prk.as_ref().split_at(AES_128_KEY_LEN);
 
-        // Use the DEK to encrypt the plaintext with AES-128:
+        // Use the DAK to extract a PRK from the plaintext with HMAC-SHA-256:
         //
-        //     ciphertext = AES-128-CTR(dek, plaintext)
+        //     prk_0 || prk_1 = HMAC(dak, plaintext)
+        let prk = hmac(&HmacKey::new(HMAC_SHA256, dak), in_out);
+        tag.copy_from_slice(&prk.as_ref()[..TAG_LEN]);
+
+        // Use the DEK and tag to encrypt the plaintext with AES-128, using the first 16 bytes of
+        // the PRK as the nonce:
+        //
+        //     ciphertext = AES-CTR(dek, prk_0, plaintext)
         let key = UnboundCipherKey::new(&AES_128, dek).expect("should be valid AES-128 key");
         let key = EncryptingKey::ctr(key).expect("should be valid CTR key");
-        key.less_safe_encrypt(in_out, EncryptionContext::Iv128([0u8; 16].into()))
-            .expect("should encrypt");
-
-        // Use the DAK to extract a PRK from the ciphertext.
-        //
-        //     prk = HMAC-SHA-256(dak, ciphertext)
-        let prk = hmac(&HmacKey::new(HMAC_SHA256, dak), in_out);
+        key.less_safe_encrypt(
+            in_out,
+            EncryptionContext::Iv128(tag.as_ref().try_into().expect("should be 16 bytes")),
+        )
+        .expect("should encrypt");
 
         // Use the PRK to extract a new protocol state:
         //
-        //     state′ = HMAC(state, prk)
+        //     state′ = HMAC(state, prk_0 || prk_1)
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
@@ -252,9 +259,6 @@ impl Protocol {
             .as_ref()
             .try_into()
             .expect("should be 32 bytes");
-
-        // Use the first half of the PRK as an authentication tag.
-        tag128_out.copy_from_slice(&prk.as_ref()[..TAG_LEN]);
     }
 
     /// Decrypts the given slice in place using the protocol's current state as the key, verifying
@@ -265,7 +269,7 @@ impl Protocol {
     #[must_use]
     pub fn open<'ct>(&mut self, label: &str, in_out: &'ct mut [u8]) -> Option<&'ct [u8]> {
         // Split the buffer into ciphertext and tag.
-        let (in_out, tag128_in) = in_out.split_at_mut(in_out.len() - TAG_LEN);
+        let (in_out, tag_in) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Extract a data encryption key and data authentication key from the protocol's state, the
         // operation code, the label, and the output length, using an unambiguous encoding to
@@ -280,14 +284,25 @@ impl Protocol {
         let prk = h.sign();
         let (dek, dak) = prk.as_ref().split_at(AES_128_KEY_LEN);
 
-        // Use the DAK to extract a PRK from the ciphertext.
+        // Use the DEK and the tag to decrypt the plaintext with AES-128:
         //
-        //     prk = HMAC-SHA-256(dak, ciphertext)
+        //     ciphertext = AES-CTR(dek, tag, plaintext)
+        let key = UnboundCipherKey::new(&AES_128, dek).expect("should be valid AES-128 key");
+        let key = DecryptingKey::ctr(key).expect("should be valid CTR key");
+        key.decrypt(
+            in_out,
+            DecryptionContext::Iv128(tag_in.as_ref().try_into().expect("should be 16 bytes")),
+        )
+        .expect("should decrypt");
+
+        // Use the DAK to extract a PRK from the plaintext:
+        //
+        //     prk_0 || prk_1 = HMAC(dak, plaintext)
         let prk = hmac(&HmacKey::new(HMAC_SHA256, dak), in_out);
 
         // Use the PRK to extract a new protocol state:
         //
-        //     state′ = HMAC(state, prk)
+        //     state′ = HMAC(state, prk_0 || prk_1)
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
@@ -296,13 +311,10 @@ impl Protocol {
             .try_into()
             .expect("should be 32 bytes");
 
-        // Use the DEK to decrypt the ciphertext with AES-128.
-        let key = UnboundCipherKey::new(&AES_128, dek).expect("should be valid AES-128 key");
-        let key = DecryptingKey::ctr(key).expect("should be valid CTR key");
-        key.decrypt(in_out, DecryptionContext::Iv128([0u8; 16].into())).expect("should decrypt");
-
-        // Verify the authentication tag.
-        if verify_slices_are_equal(tag128_in, &prk.as_ref()[..TAG_LEN]).is_ok() {
+        // Verify the authentication tag:
+        //
+        //     tag = prk_0
+        if verify_slices_are_equal(tag_in, &prk.as_ref()[..TAG_LEN]).is_ok() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -439,10 +451,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["d528450958cc411155822bf18cc8fce4293d8e7997a5f1cc86bbf3d8a91aaf17a462"]
+        expect!["94a54f24929bc03442d3f9945a34777dfff76ed2bb4e0e9b3e15608fefde7ef9fc51"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["6ad071b6d832594a"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["61e6981b6849c5e6"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

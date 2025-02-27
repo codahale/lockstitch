@@ -3,8 +3,8 @@
 Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
 operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption) in
 complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, Merlin
-transcripts, and Xoodyak's Cyclist mode, Lockstitch uses [SHA-256][] and [AES-128][] to provide
-10+ Gb/sec performance on modern processors at a 128-bit security level.
+transcripts, and Xoodyak's Cyclist mode, Lockstitch uses [SHA-256][] and [AES-128][] to provide 10+
+Gb/sec performance on modern processors at a 128-bit security level.
 
 [SHA-256]: https://doi.org/10.6028/NIST.FIPS.180-4
 [AES-128]: https://doi.org/10.6028/NIST.FIPS.197-upd1
@@ -20,7 +20,7 @@ A Lockstitch protocol supports the following operations:
 * `Mix`: Mix a labeled input into the protocol's state, making all future outputs cryptographically
   dependent on it.
 * `Derive`: Generate a pseudo-random bitstring of arbitrary length that is cryptographically
-  dependent on the protocol's prior state.
+  dependent on the protocol's state.
 * `Encrypt`/`Decrypt`: Encrypt and decrypt a message, adding an authenticator tag of the ciphertext
   to the protocol state.
 * `Seal`/`Open`: Encrypt and decrypt a message, using an authenticator tag to ensure the ciphertext
@@ -34,7 +34,7 @@ intended use of the output. `server-p256-public-key` is a good label; `step-3a` 
 
 ### `Init`
 
-An `Init` operation initializes a Lockstitch protocol with a state value derived from a domain
+An `Init` operation initializes a Lockstitch protocol with a state value extracted from a domain
 separation string:
 
 ```text
@@ -43,7 +43,7 @@ function init(domain):
   return state
 ```
 
-`Init` uses HMAC-SHA-256 to derive an initial state value from a constant 256-bit key and the
+`Init` uses HMAC-SHA-256 to extract an initial state value from a constant 256-bit key and the
 domain separation string.
 
 **IMPORTANT:** The `Init` operation is only performed once, when a protocol is initialized.
@@ -60,8 +60,8 @@ The BLAKE3 recommendations for KDF context strings apply equally to Lockstitch p
 ### `Mix`
 
 A `Mix` operation accepts a label and an input, encodes them, and mixes them into the protocol's
-state. The protocol's posterior state is cryptographically dependent on the protocol's prior state,
-the label, and the input.
+state. The protocol's new state is cryptographically dependent on the protocol's state, the label,
+and the input.
 
 ```text
 function mix(state, label, input):
@@ -78,19 +78,18 @@ and input, regardless of length.
 [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 
 Finally, `Mix` uses HMAC-SHA-256 with the protocol's state as the key to extract a new state value
-from the pseudorandom key. The protocol's posterior state is derived from the protocol's prior
-state, the operation label, and the operation input. Because HMAC is a [dual-PRF][] when used with
-two fixed-length, uniformly random bitstrings, if either the posterior state or the input are
-secret, the protocol's posterior state will be secret, even if all other variables are
-attacker-controlled.
+from the pseudorandom key. The protocol's new state is extracted from the protocol's old state,
+the operation label, and the operation input. Because HMAC is a [dual-PRF][] when used with two
+fixed-length, uniformly random bitstrings, if either the new state or the input are secret, the
+protocol's new state will be secret, even if all other variables are attacker-controlled.
 
 [dual-PRF]: https://eprint.iacr.org/2023/861
 
 ### `Derive`
 
 A `Derive` operation accepts a label and an output length and returns pseudorandom data derived from
-the protocol's state, the label, and the output length. The protocol's posterior state is
-cryptographically dependent on the protocol's prior state, the label, and the output length.
+the protocol's state, the label, and the output length. The protocol's new state is
+cryptographically dependent on the protocol's state, the label, and the output length.
 
 ```text
 function derive(state, label, n):
@@ -101,10 +100,10 @@ function derive(state, label, n):
   return (state′, out)
 ```
 
-`Derive` uses HMAC-SHA-256 with the protocol's state as the key to derive a 256-bit pseudorandom key
-from the given label the output length in bits. It then splits the pseudorandom key into an
+`Derive` uses HMAC-SHA-256 with the protocol's state as the key to extract a 256-bit pseudorandom
+key from the given label the output length in bits. It then splits the pseudorandom key into an
 AES-128-CTR key and nonce and generates the requested output from the keystream. Finally, it uses
-HMAC-SHA-256 with the protocol's state as the key to derive a new state value from the pseudorandom
+HMAC-SHA-256 with the protocol's state as the key to extract a new state value from the pseudorandom
 key.
 
 **IMPORTANT:** A `Derive` operation's output depends on both the label and the output length.
@@ -127,9 +126,9 @@ protocol form a [KDF chain][], giving Lockstitch protocols the following securit
 ### `Encrypt`/`Decrypt`
 
 The `Encrypt` and `Decrypt` operation accepts a label and an input and encrypts or decrypts the
-input using a key derived from the protocol's state, the label, and the output length. The
-protocol's posterior state is cryptographically dependent on the protocol's prior state, the label,
-and the ciphertext version of the input.
+input using a key extracted from the protocol's state, the label, and the output length. The
+protocol's new state is cryptographically dependent on the protocol's old state, the label, and the
+ciphertext version of the input.
 
 ```text
 function encrypt(state, label, plaintext):
@@ -147,16 +146,21 @@ function decrypt(state, label, ciphertext):
   return (state′, ciphertext)
 ```
 
+`Encrypt` extracts a data encryption key and data authentication key from the protocol's state, an
+operation code, the label, and the length of the input. The plaintext is encrypted with AES-128-CTR
+using the data encryption key. A PRK is extracted from the data authentication key and the
+ciphertext, and finally a new protocol state is extracted from the old protocol state and the PRK.
+
 Two points bear mentioning about `Encrypt` and `Decrypt`:
 
 1. Both `Encrypt` and `Decrypt` use the same operation code to ensure protocols have the same state
    after both encrypting and decrypting data.
-2. `Encrypt` operations provide no authentication by themselves. An attacker can modify a
-   ciphertext and the `Decrypt` operation will return a plaintext which was never encrypted. Alone,
-   they are EAV secure (i.e. a passive adversary will not be able to read plaintext without knowing
-   the protocol's prior state) but not IND-CPA secure (i.e. an active adversary with an encryption
-   oracle will be able to detect duplicate plaintexts) or IND-CCA secure (i.e. an active adversary
-   can produce modified ciphertexts which successfully decrypt).
+2. `Encrypt` operations provide no authentication by themselves. An attacker can modify a ciphertext
+   and the `Decrypt` operation will return a plaintext which was never encrypted. Alone, they are
+   EAV secure (i.e. a passive adversary will not be able to read plaintext without knowing the
+   protocol's state) but not IND-CPA secure (i.e. an active adversary with an encryption oracle will
+   be able to detect duplicate plaintexts) or IND-CCA secure (i.e. an active adversary can produce
+   modified ciphertexts which successfully decrypt).
 
    For IND-CPA security, the protocol's state must include a probabilistic value (like a nonce) and
    for IND-CCA security, use [`Seal`/`Open`](#sealopen).
@@ -170,23 +174,28 @@ error if the tag is invalid.
 ```text
 function seal(state, label, plaintext):
   dek ǁ dak ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
-  ciphertext ← aes128ctr::encrypt(dek, [0x00; 16], plaintext)
-  prk₀ ǁ prk₁ ← hmac::sha256(dak, ciphertext)
+  prk₀ ǁ prk₁ ← hmac::sha256(dak, plaintext)
+  ciphertext ← aes128ctr::encrypt(dek, prk₀, plaintext)
   state′ ← hmac::sha256(state, prk₀ ǁ prk₁)
-  return (state′, ciphertext ǁ prk₀)
+  return (state′, (ciphertext, prk₀))
 
-function open(state, label, ciphertext, tag128):
+function open(state, label, (ciphertext, tag)):
   dek ǁ dak ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
-  prk₀ ǁ prk₁ ← hmac::sha256(dak, ciphertext)
+  plaintext ← aes128ctr::decrypt(dek, tag, ciphertext)
+  prk₀ ǁ prk₁ ← hmac::sha256(dak, plaintext)
   state′ ← hmac::sha256(state, prk₀ ǁ prk₁)
-  plaintext ← aes128ctr::decrypt(dek, [0x00; 16], ciphertext)
-  if tag128 ≠ prk₀:
+  if tag ≠ prk₀:
     return (state′, ⊥)
   return (state′, plaintext)
 ```
 
-`Seal` and `Open` provide IND-CCA2 security as long as the protocol's state includes a probabilistic
-value, like a nonce.
+This uses the [synthetic IV construction][SIV] to provide nonce-misuse resistant encryption, with
+HMAC-SHA-256 serving as the PRF used to derive the IV from the plaintext.
+
+[SIV]: https://www.iacr.org/archive/eurocrypt2006/40040377/40040377.pdf
+
+`Seal` and `Open` provide IND-CCA2 security if the protocol's state includes a probabilistic value,
+like a nonce. Without a nonce, they provide DAE security as long as the protocol's state is secret.
 
 ## Basic Protocols
 
@@ -290,6 +299,8 @@ assumptions:
 2. HMAC-SHA-256 is indistinguishable from a random oracle.
 3. AES-128-CTR is PRF-secure.
 4. At least one of the inputs to the state is a nonce (i.e., not used for multiple messages).
+
+If none of the inputs is a nonce, this construction is still DAE secure.
 
 ## Complex Protocols
 

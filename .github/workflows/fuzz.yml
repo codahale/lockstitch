@@ -11,7 +11,6 @@ jobs:
             - tests::encoded_label_injective 
             - tests::left_encode_injective 
             - aead
-            - daead
             - tuple_hash
             - stream_cipher
             - hash

@@ -190,9 +190,13 @@ function open(state, label, (ciphertext, tag)):
 ```
 
 This uses the [synthetic IV construction][SIV] to provide nonce-misuse resistant encryption, with
-HMAC-SHA-256 serving as the PRF used to derive the IV from the plaintext.
+HMAC-SHA-256 serving as the PRF used to derive the IV from the plaintext. Because HMAC-SHA-256 is
+collision resistant, this construction (unlike e.g. [AES-SIV][AES-SIV]) is key-committing, and
+because the key is derived from the protocol state (again with HMAC-SHA-256), this construction is
+therefore context-committing.
 
 [SIV]: https://www.iacr.org/archive/eurocrypt2006/40040377/40040377.pdf
+[AES-SIV]: https://eprint.iacr.org/2023/526
 
 `Seal` and `Open` provide IND-CCA2 security if the protocol's state includes a probabilistic value,
 like a nonce. Without a nonce, they provide DAE security as long as the protocol's state is secret.

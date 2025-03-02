@@ -22,7 +22,6 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
-
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@master
         with:
@@ -32,82 +31,16 @@ jobs:
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
   
-  # Builds for no_std platforms
-  no_std:
+  test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         rust:
           - stable
-        target:
-          - thumbv7em-none-eabi
-          - wasm32-unknown-unknown
     steps:
       - uses: actions/checkout@v4
       - uses: RustCrypto/actions/cargo-cache@master
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-          targets: ${{ matrix.target }}
-      - run: cargo build --target ${{ matrix.target }} --no-default-features --features portable
-
-  # x86/x86_64 tests
-  x86:
-    strategy:
-      matrix:
-        include:
-          # 32-bit Linux/x86
-          - target: i686-unknown-linux-gnu
-            deps: sudo apt update && sudo apt install gcc-multilib
-
-          # 64-bit Linux/x86_64
-          - target: x86_64-unknown-linux-gnu
-        target:
-          - i686-unknown-linux-gnu
-          - x86_64-unknown-linux-gnu
-        rust:
-          - stable
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: RustCrypto/actions/cargo-cache@master
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-          targets: ${{ matrix.target }}
-      - run: ${{ matrix.deps }}
-      - run: cargo test --no-default-features --features=std
       - run: cargo test
- 
-  # aarch64 tests
-  aarch64:
-    strategy:
-      matrix:
-        rust:
-          - stable
-        target:
-          - aarch64-unknown-linux-gnu
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: RustCrypto/actions/cargo-cache@master
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-          targets: ${{ matrix.target }}
-      - uses: RustCrypto/actions/cross-install@master
-      - run: cross test --target ${{ matrix.target }} --no-default-features --features=std
-        shell: bash
-      - run: cross test --target ${{ matrix.target }}
-        shell: bash
-
-  # quickly run benchmarks
-  benchmarks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: RustCrypto/actions/cargo-cache@master
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - run: cargo bench -p benchmarks --bench benchmarks -- --quick

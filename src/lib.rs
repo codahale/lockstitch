@@ -1,3 +1,4 @@
+#![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
@@ -69,6 +70,7 @@ impl Protocol {
     /// Equivalent to buffering all written data in a slice and passing it to [`Protocol::mix`].
     ///
     /// Use [`MixWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
+    #[cfg(feature = "std")]
     pub fn mix_writer<W: std::io::Write>(self, label: &str, inner: W) -> MixWriter<W> {
         // Hash the initial prefix of the mix operation, then hand off to MixWriter.
         let mut h = HmacContext::with_key(&HmacKey::new(HMAC_SHA256, &self.state));
@@ -327,18 +329,21 @@ enum OpCode {
 
 /// A [`std::io::Write`] implementation which combines all written data into a single `Mix`
 /// operation and passes all writes to an inner writer.
+#[cfg(feature = "std")]
 pub struct MixWriter<W> {
     state: [u8; 32],
     h: HmacContext,
     inner: W,
 }
 
+#[cfg(feature = "std")]
 impl<W: Debug> Debug for MixWriter<W> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("MixWriter").field("inner", &self.inner).finish_non_exhaustive()
     }
 }
 
+#[cfg(feature = "std")]
 impl<W: std::io::Write> MixWriter<W> {
     /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
     #[inline]
@@ -356,6 +361,7 @@ impl<W: std::io::Write> MixWriter<W> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<W: std::io::Write> std::io::Write for MixWriter<W> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -402,7 +408,7 @@ fn hmac(key: &[u8], data: &[u8]) -> [u8; 32] {
     h.sign().as_ref().try_into().expect("should be 32 bytes")
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests {
     use std::io::{self, Cursor};
 

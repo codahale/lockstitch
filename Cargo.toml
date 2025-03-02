@@ -17,8 +17,9 @@ aws-lc-rs = { version = "1.12.4", default-features = false, features = ["alloc",
 zeroize = "1.8.1"
 
 [features]
-default = []
+default = ["std"]
 docs = []
+std = []
 
 [workspace]
 members = ["benchmarks", "xtask"]

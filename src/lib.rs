@@ -102,7 +102,7 @@ impl Protocol {
 
         // Extract a new state value from the protocol's old state and the PRK:
         //
-        //     state′ = HMAC(state, prk)
+        //     state' = HMAC(state, prk)
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
@@ -124,7 +124,7 @@ impl Protocol {
         // operation code, the label, and the output length, using an unambiguous encoding to
         // prevent collisions:
         //
-        //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|out|))
+        //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|plaintext|))
         let mut h = HmacContext::with_key(&HmacKey::new(HMAC_SHA256, &self.state));
         h.update(&[OpCode::Crypt as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
@@ -145,7 +145,7 @@ impl Protocol {
 
         // Use the PRK to extract a new protocol state:
         //
-        //     state′ = HMAC(state, prk)
+        //     state' = HMAC(state, prk)
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
@@ -159,7 +159,7 @@ impl Protocol {
         // operation code, the label, and the output length, using an unambiguous encoding to
         // prevent collisions:
         //
-        //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|out|))
+        //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|ciphertext|))
         let mut h = HmacContext::with_key(&HmacKey::new(HMAC_SHA256, &self.state));
         h.update(&[OpCode::Crypt as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
@@ -175,7 +175,7 @@ impl Protocol {
 
         // Use the PRK to extract a new protocol state:
         //
-        //     state′ = HMAC(state, prk)
+        //     state' = HMAC(state, prk)
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
@@ -198,7 +198,7 @@ impl Protocol {
         // operation code, the label, and the output length, using an unambiguous encoding to
         // prevent collisions:
         //
-        //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|out|))
+        //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|plaintext|))
         let mut h = HmacContext::with_key(&HmacKey::new(HMAC_SHA256, &self.state));
         h.update(&[OpCode::AuthCrypt as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
@@ -221,7 +221,7 @@ impl Protocol {
 
         // Use the PRK to extract a new protocol state:
         //
-        //     state′ = HMAC(state, prk_0 || prk_1)
+        //     state' = HMAC(state, prk_0 || prk_1)
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
@@ -242,7 +242,7 @@ impl Protocol {
         // operation code, the label, and the output length, using an unambiguous encoding to
         // prevent collisions:
         //
-        //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|out|))
+        //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|ciphertext|-TAG_LEN))
         let mut h = HmacContext::with_key(&HmacKey::new(HMAC_SHA256, &self.state));
         h.update(&[OpCode::AuthCrypt as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
@@ -251,9 +251,9 @@ impl Protocol {
         let prk = h.sign();
         let (dek, dak) = prk.as_ref().split_at(AES_128_KEY_LEN);
 
-        // Use the DEK and the tag to decrypt the plaintext with AES-128:
+        // Use the DEK and the tag to decrypt the ciphertext with AES-128:
         //
-        //     ciphertext = AES-CTR(dek, tag, plaintext)
+        //     plaintext = AES-CTR(dek, tag, ciphertext)
         aes_ctr(dek, tag, in_out);
 
         // Use the DAK to extract a PRK from the plaintext:
@@ -263,7 +263,7 @@ impl Protocol {
 
         // Use the PRK to extract a new protocol state:
         //
-        //     state′ = HMAC(state, prk_0 || prk_1)
+        //     state' = HMAC(state, prk_0 || prk_1)
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.

@@ -81,7 +81,10 @@ fn ci(sh: &Shell) -> Result<()> {
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
 const RUSTFLAGS: &str = "-C target-cpu=native";
 
-#[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+#[cfg(target_arch = "aarch64")]
+const RUSTFLAGS: &str = "--cfg aes_armv8";
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "x86", target_arch = "aarch64")))]
 const RUSTFLAGS: &str = "";
 
 fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {

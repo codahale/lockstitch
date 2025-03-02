@@ -1,7 +1,7 @@
 use std::io::{self, Read};
 
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
-use lockstitch::Protocol;
+use lockstitch::{Protocol, TAG_LEN};
 
 const LENS: &[(usize, &str)] =
     &[(16, "16B"), (256, "256B"), (1024, "1KiB"), (16 * 1024, "16KiB"), (1024 * 1024, "1MiB")];
@@ -71,7 +71,7 @@ fn aead(c: &mut Criterion) {
             let key = [0u8; 32];
             let nonce = [0u8; 16];
             let ad = [0u8; 32];
-            let message = vec![0u8; len];
+            let message = vec![0u8; len + TAG_LEN];
             b.iter_batched_ref(
                 || message.clone(),
                 |message| {
@@ -98,7 +98,7 @@ fn prf(c: &mut Criterion) {
             b.iter_batched_ref(
                 || output.clone(),
                 |output| {
-                    let mut protocol = Protocol::new("aead");
+                    let mut protocol = Protocol::new("prf");
                     protocol.mix("key", &key);
                     protocol.derive("output", output);
                 },

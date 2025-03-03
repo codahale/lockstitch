@@ -180,7 +180,7 @@ function seal(state, label, plaintext):
   return (state′, (ciphertext, prk₀))
 
 function open(state, label, (ciphertext, tag)):
-  dek ǁ dak ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
+  dek ǁ dak ← hmac::sha256(state, 0x04 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
   plaintext ← aes128ctr::decrypt(dek, tag, ciphertext)
   prk₀ ǁ prk₁ ← hmac::sha256(dak, plaintext)
   state′ ← hmac::sha256(state, prk₀ ǁ prk₁)

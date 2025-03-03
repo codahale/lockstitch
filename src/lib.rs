@@ -161,7 +161,7 @@ impl Protocol {
         // operation code, the label, and the output length, using an unambiguous encoding to
         // prevent collisions:
         //
-        //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|ciphertext|))
+        //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|plaintext|))
         let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
         h.update(&[OpCode::Crypt as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
@@ -246,7 +246,7 @@ impl Protocol {
         // operation code, the label, and the output length, using an unambiguous encoding to
         // prevent collisions:
         //
-        //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|ciphertext|-TAG_LEN))
+        //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|plaintext|))
         let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
         h.update(&[OpCode::AuthCrypt as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));

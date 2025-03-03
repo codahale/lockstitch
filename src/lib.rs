@@ -46,24 +46,24 @@ impl Protocol {
 
     /// Mixes the given label and slice into the protocol state.
     pub fn mix(&mut self, label: &str, input: &[u8]) {
-        // Extract a PRK from the protocol's state, the operation code, the label, and the input,
-        // using an unambiguous encoding to prevent collisions:
+        // Extract an operation key from the protocol's state, the operation code, the label, and
+        // the input, using an unambiguous encoding to prevent collisions:
         //
-        //     prk = HMAC(state, 0x01 || left_encode(|label|) || label || input)
+        //     opk = HMAC(state, 0x01 || left_encode(|label|) || label || input)
         let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
         h.update(&[OpCode::Mix as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(input);
-        let prk = h.finalize_reset().into_bytes();
+        let opk = h.finalize_reset().into_bytes();
 
-        // Extract a new state value from the protocol's old state and the PRK:
+        // Extract a new state value from the protocol's old state and the operation key:
         //
-        //     state′ = HMAC(state, prk)
+        //     state′ = HMAC(state, opk)
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
-        h.update(&prk);
+        h.update(&opk);
         self.state = h.finalize().into_bytes().into();
     }
 
@@ -86,32 +86,31 @@ impl Protocol {
     /// Derives pseudorandom output from the protocol's current state, the label, and the output
     /// length, then ratchets the protocol's state with the label and output length.
     pub fn derive(&mut self, label: &str, out: &mut [u8]) {
-        // Extract a PRK from the protocol's state, the operation code, the label, and the output
-        // length, using an unambiguous encoding to prevent collisions:
+        // Extract an operation key from the protocol's state, the operation code, the label, and
+        // the output length, using an unambiguous encoding to prevent collisions:
         //
-        //     prk = HMAC(state, 0x02 || left_encode(|label|) || label || left_encode(|out|))
+        //     opk = HMAC(state, 0x02 || left_encode(|label|) || label || left_encode(|out|))
         let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
         h.update(&[OpCode::Derive as u8]);
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
-        let prk = h.finalize_reset().into_bytes();
+        let opk = h.finalize_reset().into_bytes();
 
-        // Use the PRK to encrypt all zeroes with AES:
+        // Use the operation key to encrypt all zeroes with AES:
         //
-        //     k || n = prk
-        //     prf = AES-CTR(k, n, [0x00; N])
+        //     prf = AES-CTR(opk[..16], opk[16..], [0x00; N])
         out.zeroize();
-        let (k, n) = prk.split_at(16);
+        let (k, n) = opk.split_at(16);
         aes_ctr(k, n, out);
 
-        // Extract a new state value from the protocol's old state and the PRK:
+        // Extract a new state value from the protocol's old state and the operation key:
         //
-        //     state' = HMAC(state, prk)
+        //     state' = HMAC(state, opk)
         //
         // This preserves the invariant that the protocol state is the HMAC output of two uniform
         // random keys.
-        h.update(&prk);
+        h.update(&opk);
         self.state = h.finalize().into_bytes().into();
     }
 
@@ -136,8 +135,8 @@ impl Protocol {
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let prk = h.finalize_reset().into_bytes();
-        let (dek, dak) = prk.split_at(16);
+        let opk = h.finalize_reset().into_bytes();
+        let (dek, dak) = opk.split_at(16);
 
         // Use the DEK to encrypt the plaintext with AES-128-CTR:
         //
@@ -172,8 +171,8 @@ impl Protocol {
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let prk = h.finalize_reset().into_bytes();
-        let (dek, dak) = prk.split_at(16);
+        let opk = h.finalize_reset().into_bytes();
+        let (dek, dak) = opk.split_at(16);
 
         // Use the DAK to extract a PRK from the ciphertext with HMAC-SHA-256:
         //
@@ -212,8 +211,8 @@ impl Protocol {
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let prk = h.finalize_reset().into_bytes();
-        let (dek, dak) = prk.split_at(16);
+        let opk = h.finalize_reset().into_bytes();
+        let (dek, dak) = opk.split_at(16);
 
         // Use the DAK to extract a PRK from the plaintext with HMAC-SHA-256:
         //
@@ -257,8 +256,8 @@ impl Protocol {
         h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
         h.update(label.as_bytes());
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let prk = h.finalize_reset().into_bytes();
-        let (dek, dak) = prk.split_at(16);
+        let opk = h.finalize_reset().into_bytes();
+        let (dek, dak) = opk.split_at(16);
 
         // Use the DEK and the tag to decrypt the ciphertext with AES-128:
         //
@@ -355,11 +354,11 @@ impl<W: std::io::Write> MixWriter<W> {
     /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
     #[inline]
     pub fn into_inner(mut self) -> (Protocol, W) {
-        // Finalize the hasher into a PRK.
-        let prk = self.h.finalize_reset().into_bytes();
+        // Finalize the hasher into an operation key.
+        let opk = self.h.finalize_reset().into_bytes();
 
-        // Extract a new state value from the protocol's state and the PRK.
-        self.h.update(&prk);
+        // Extract a new state value from the protocol's state and the operation key.
+        self.h.update(&opk);
         let state = self.h.finalize().into_bytes().into();
 
         (Protocol { state }, self.inner)

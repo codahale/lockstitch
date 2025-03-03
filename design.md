@@ -65,21 +65,21 @@ and the input.
 
 ```text
 function mix(state, label, input):
-  prk ← hmac::sha256(state, 0x01 ǁ left_encode(|label|) ǁ label ǁ input)
-  state′ ← hmac::sha256(state, prk)
+  opk ← hmac::sha256(state, 0x01 ǁ left_encode(|label|) ǁ label ǁ input)
+  state′ ← hmac::sha256(state, opk)
   return state′
 ```
 
-`Mix` uses HMAC-SHA-256 with the protocol's state as the key to extract a pseudorandom key from
-the given label and input. `Mix` encodes the length of the label in bits using the `left_encode`
+`Mix` uses HMAC-SHA-256 with the protocol's state as the key to extract an operation key from the
+given label and input. `Mix` encodes the length of the label in bits using the `left_encode`
 function from [NIST SP 800-185][]. This ensures an unambiguous encoding for any combination of label
 and input, regardless of length.
 
 [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
 
 Finally, `Mix` uses HMAC-SHA-256 with the protocol's state as the key to extract a new state value
-from the pseudorandom key. The protocol's new state is extracted from the protocol's old state,
-the operation label, and the operation input. Because HMAC is a [dual-PRF][] when used with two
+from the operation key. The protocol's new state is extracted from the protocol's old state, the
+operation label, and the operation input. Because HMAC is a [dual-PRF][] when used with two
 fixed-length, uniformly random bitstrings, if either the new state or the input are secret, the
 protocol's new state will be secret, even if all other variables are attacker-controlled.
 
@@ -93,17 +93,17 @@ cryptographically dependent on the protocol's state, the label, and the output l
 
 ```text
 function derive(state, label, n):
-  prk ← hmac::sha256(state, 0x02 ǁ left_encode(|label|) ǁ label ǁ left_encode(n))
-  key ǁ nonce ← prk
+  opk ← hmac::sha256(state, 0x02 ǁ left_encode(|label|) ǁ label ǁ left_encode(n))
+  key ǁ nonce ← opk
   (out, _, _) ← aes128ctr::encrypt(key, nonce, [0x00; n])
-  state′ ← hmac::sha256(state, prk)
+  state′ ← hmac::sha256(state, opk)
   return (state′, out)
 ```
 
-`Derive` uses HMAC-SHA-256 with the protocol's state as the key to extract a 256-bit pseudorandom
-key from the given label the output length in bits. It then splits the pseudorandom key into an
+`Derive` uses HMAC-SHA-256 with the protocol's state as the key to extract a 256-bit operation key
+from the given label the output length in bits. It then splits the operation key into an
 AES-128-CTR key and nonce and generates the requested output from the keystream. Finally, it uses
-HMAC-SHA-256 with the protocol's state as the key to extract a new state value from the pseudorandom
+HMAC-SHA-256 with the protocol's state as the key to extract a new state value from the operation
 key.
 
 **IMPORTANT:** A `Derive` operation's output depends on both the label and the output length.
@@ -139,7 +139,7 @@ function encrypt(state, label, plaintext):
   return (state′, ciphertext)
 
 function decrypt(state, label, ciphertext):
-  dek ǁ dak ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|ciphertext|))
+  dek ǁ dak ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
   prk ← hmac::sha256(dak, ciphertext)
   state′ ← hmac::sha256(state, prk)
   plaintext ← aes128ctr::decrypt(dek, [0x00; 16], ciphertext)

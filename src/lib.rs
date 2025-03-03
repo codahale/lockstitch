@@ -4,9 +4,14 @@
 
 use core::fmt::Debug;
 
-use hmac::{Hmac, Mac};
+use aes::{
+    Aes128,
+    cipher::{KeyIvInit as _, StreamCipher as _},
+};
+use ctr::Ctr128BE;
+use hmac::{Hmac, Mac as _};
 use sha2::Sha256;
-use subtle::ConstantTimeEq;
+use subtle::ConstantTimeEq as _;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[cfg(feature = "docs")]
@@ -392,8 +397,7 @@ fn left_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
 /// Encrypts (or decrypts) an input with AES-128-CTR.
 #[inline]
 fn aes_ctr(key: &[u8], nonce: &[u8], in_out: &mut [u8]) {
-    use aes::cipher::{KeyIvInit, StreamCipher};
-    let mut ctr = ctr::Ctr128BE::<aes::Aes128>::new_from_slices(key, nonce)
+    let mut ctr = Ctr128BE::<Aes128>::new_from_slices(key, nonce)
         .expect("should be valid AES-128-CTR key and nonce");
     ctr.apply_keystream(in_out);
 }

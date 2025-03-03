@@ -179,6 +179,11 @@ impl Protocol {
         //     prk = HMAC(dak, ciphertext)
         let prk = hmac(dak, in_out);
 
+        // Use the DEK to decrypt the ciphertext with AES.
+        //
+        //     plaintext = AES-CTR(dek, [0x00; 16], ciphertext)
+        aes_ctr(dek, &[0; 16], in_out);
+
         // Use the PRK to extract a new protocol state:
         //
         //     state' = HMAC(state, prk)
@@ -187,11 +192,6 @@ impl Protocol {
         // random keys.
         h.update(&prk);
         self.state = h.finalize().into_bytes().into();
-
-        // Use the DEK to decrypt the ciphertext with AES.
-        //
-        //     plaintext = AES-CTR(dek, [0x00; 16], ciphertext)
-        aes_ctr(dek, &[0; 16], in_out);
     }
 
     /// Encrypts the given slice in place using the protocol's current state as the key, appending

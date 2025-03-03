@@ -133,23 +133,24 @@ ciphertext version of the input.
 ```text
 function encrypt(state, label, plaintext):
   dek ǁ dak ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
+  prk ← hmac::sha256(dak, plaintext)
   ciphertext ← aes128ctr::encrypt(dek, [0x00; 16], plaintext)
-  prk ← hmac::sha256(dak, ciphertext)
   state′ ← hmac::sha256(state, prk)
   return (state′, ciphertext)
 
 function decrypt(state, label, ciphertext):
   dek ǁ dak ← hmac::sha256(state, 0x03 ǁ left_encode(|label|) ǁ label ǁ left_encode(|plaintext|))
-  prk ← hmac::sha256(dak, ciphertext)
-  state′ ← hmac::sha256(state, prk)
   plaintext ← aes128ctr::decrypt(dek, [0x00; 16], ciphertext)
+  prk ← hmac::sha256(dak, plaintext)
+  state′ ← hmac::sha256(state, prk)
   return (state′, ciphertext)
 ```
 
 `Encrypt` extracts a data encryption key and data authentication key from the protocol's state, an
-operation code, the label, and the length of the input. The plaintext is encrypted with AES-128-CTR
-using the data encryption key. A PRK is extracted from the data authentication key and the
-ciphertext, and finally a new protocol state is extracted from the old protocol state and the PRK.
+operation code, the label, and the length of the input. A PRK is extracted from the data
+authentication key and the plaintext, the plaintext is encrypted with AES-128-CTR using the data
+encryption key, and finally a new protocol state is extracted from the old protocol state and the
+PRK.
 
 Two points bear mentioning about `Encrypt` and `Decrypt`:
 

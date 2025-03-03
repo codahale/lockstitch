@@ -138,15 +138,15 @@ impl Protocol {
         let opk = h.finalize_reset().into_bytes();
         let (dek, dak) = opk.split_at(16);
 
+        // Use the DAK to extract a PRK from the plaintext with HMAC-SHA-256:
+        //
+        //     prk = HMAC(dak, plaintext)
+        let prk = hmac(dak, in_out);
+
         // Use the DEK to encrypt the plaintext with AES-128-CTR:
         //
         //     ciphertext = AES-CTR(dek, [0x00; 16], plaintext)
         aes_ctr(dek, &[0; 16], in_out);
-
-        // Use the DAK to extract a PRK from the ciphertext with HMAC-SHA-256:
-        //
-        //     prk = HMAC(dak, ciphertext)
-        let prk = hmac(dak, in_out);
 
         // Use the PRK to extract a new protocol state:
         //
@@ -174,15 +174,15 @@ impl Protocol {
         let opk = h.finalize_reset().into_bytes();
         let (dek, dak) = opk.split_at(16);
 
-        // Use the DAK to extract a PRK from the ciphertext with HMAC-SHA-256:
-        //
-        //     prk = HMAC(dak, ciphertext)
-        let prk = hmac(dak, in_out);
-
         // Use the DEK to decrypt the ciphertext with AES.
         //
         //     plaintext = AES-CTR(dek, [0x00; 16], ciphertext)
         aes_ctr(dek, &[0; 16], in_out);
+
+        // Use the DAK to extract a PRK from the plaintext with HMAC-SHA-256:
+        //
+        //     prk = HMAC(dak, plaintext)
+        let prk = hmac(dak, in_out);
 
         // Use the PRK to extract a new protocol state:
         //
@@ -433,10 +433,10 @@ mod tests {
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["94a54f24929bc03442d3f9945a34777dfff76ed2bb4e0e9b3e15608fefde7ef9fc51"]
+        expect!["b965f961fb66a2e03287c1517e6ae3d1fb273e136cafca4382f78752f19717571087"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["61e6981b6849c5e6"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["e11c63100f03f2bb"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

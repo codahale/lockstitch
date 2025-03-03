@@ -341,7 +341,7 @@ pub struct MixWriter<W> {
 #[cfg(feature = "std")]
 impl<W: Debug> Debug for MixWriter<W> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("MixWriter").field("inner", &self.inner).finish_non_exhaustive()
+        f.debug_struct("MixWriter").field("h", &self.h).field("inner", &self.inner).finish()
     }
 }
 

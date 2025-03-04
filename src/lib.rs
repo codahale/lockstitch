@@ -50,10 +50,7 @@ impl Protocol {
         // the input, using an unambiguous encoding to prevent collisions:
         //
         //     opk = HMAC(state, 0x01 || left_encode(|label|) || label || input)
-        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
-        h.update(&[OpCode::Mix as u8]);
-        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        h.update(label.as_bytes());
+        let mut h = self.start_op(OpCode::Mix, label);
         h.update(input);
         let opk = h.finalize_reset().into_bytes();
 
@@ -74,12 +71,9 @@ impl Protocol {
     ///
     /// Use [`MixWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
     #[cfg(feature = "std")]
-    pub fn mix_writer<W: std::io::Write>(self, label: &str, inner: W) -> MixWriter<W> {
+    pub fn mix_writer<W: std::io::Write>(mut self, label: &str, inner: W) -> MixWriter<W> {
         // Hash the initial prefix of the mix operation, then hand off to MixWriter.
-        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
-        h.update(&[OpCode::Mix as u8]);
-        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        h.update(label.as_bytes());
+        let h = self.start_op(OpCode::Mix, label);
         MixWriter { h, inner }
     }
 
@@ -90,10 +84,7 @@ impl Protocol {
         // the output length, using an unambiguous encoding to prevent collisions:
         //
         //     opk = HMAC(state, 0x02 || left_encode(|label|) || label || left_encode(|out|))
-        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
-        h.update(&[OpCode::Derive as u8]);
-        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        h.update(label.as_bytes());
+        let mut h = self.start_op(OpCode::Derive, label);
         h.update(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
         let opk = h.finalize_reset().into_bytes();
 
@@ -130,10 +121,7 @@ impl Protocol {
         // prevent collisions:
         //
         //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|plaintext|))
-        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
-        h.update(&[OpCode::Crypt as u8]);
-        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        h.update(label.as_bytes());
+        let mut h = self.start_op(OpCode::Crypt, label);
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
         let opk = h.finalize_reset().into_bytes();
         let (dek, dak) = opk.split_at(16);
@@ -166,10 +154,7 @@ impl Protocol {
         // prevent collisions:
         //
         //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|plaintext|))
-        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
-        h.update(&[OpCode::Crypt as u8]);
-        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        h.update(label.as_bytes());
+        let mut h = self.start_op(OpCode::Crypt, label);
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
         let opk = h.finalize_reset().into_bytes();
         let (dek, dak) = opk.split_at(16);
@@ -206,10 +191,7 @@ impl Protocol {
         // prevent collisions:
         //
         //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|plaintext|))
-        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
-        h.update(&[OpCode::AuthCrypt as u8]);
-        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        h.update(label.as_bytes());
+        let mut h = self.start_op(OpCode::AuthCrypt, label);
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
         let opk = h.finalize_reset().into_bytes();
         let (dek, dak) = opk.split_at(16);
@@ -251,10 +233,7 @@ impl Protocol {
         // prevent collisions:
         //
         //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|plaintext|))
-        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
-        h.update(&[OpCode::AuthCrypt as u8]);
-        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        h.update(label.as_bytes());
+        let mut h = self.start_op(OpCode::AuthCrypt, label);
         h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
         let opk = h.finalize_reset().into_bytes();
         let (dek, dak) = opk.split_at(16);
@@ -292,6 +271,15 @@ impl Protocol {
             in_out.zeroize();
             None
         }
+    }
+
+    #[inline]
+    fn start_op(&mut self, op_code: OpCode, label: &str) -> Hmac<Sha256> {
+        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
+        h.update(&[op_code as u8]);
+        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        h.update(label.as_bytes());
+        h
     }
 }
 

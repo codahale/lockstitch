@@ -29,7 +29,7 @@ std = ["ctr/std", "hmac/std", "sha2/std", "subtle/std", "zeroize/std"]
 members = ["benchmarks", "xtask"]
 
 [dev-dependencies]
-bolero = "0.13.3"
+bolero = "0.13.4"
 expect-test = "1.5.1"
 hex = "0.4.3"
 

@@ -1,4 +1,3 @@
-#![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
@@ -6,9 +5,8 @@ use core::fmt::Debug;
 
 use openssl::cipher::Cipher;
 use openssl::cipher_ctx::CipherCtx;
+use openssl::hash::{Hasher, MessageDigest};
 use openssl::memcmp;
-use sha2::{Digest as _, Sha512_256};
-use zeroize::Zeroize;
 
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
@@ -17,35 +15,46 @@ pub const TAG_LEN: usize = 16;
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
 #[derive(Clone)]
 pub struct Protocol {
-    transcript: Sha512_256,
+    transcript: Hasher,
 }
 
 impl Protocol {
     /// Creates a new protocol with the given domain.
     pub fn new(domain: &str) -> Protocol {
-        let mut transcript = Sha512_256::new();
-        transcript.update([OpCode::Init as u8]);
-        transcript.update(left_encode(&mut [0u8; 9], domain.len() as u64 * 8));
-        transcript.update(domain.as_bytes());
+        let mut transcript =
+            Hasher::new(MessageDigest::sha512()).expect("should implement SHA-512");
+        transcript.update(&[OpCode::Init as u8]).expect("should update");
+        transcript
+            .update(left_encode(&mut [0u8; 9], domain.len() as u64 * 8))
+            .expect("should update");
+        transcript.update(domain.as_bytes()).expect("should update");
         Protocol { transcript }
     }
 
     /// Mixes the given label and slice into the protocol state.
     pub fn mix(&mut self, label: &str, input: &[u8]) {
-        self.transcript.update([OpCode::Mix as u8]);
-        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        self.transcript.update(label.as_bytes());
-        self.transcript.update(left_encode(&mut [0u8; 9], input.len() as u64 * 8));
-        self.transcript.update(input);
+        self.transcript.update(&[OpCode::Mix as u8]).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], label.len() as u64 * 8))
+            .expect("should update");
+        self.transcript.update(label.as_bytes()).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], input.len() as u64 * 8))
+            .expect("should update");
+        self.transcript.update(input).expect("should update");
     }
 
     /// Derives pseudorandom output from the protocol's current state, the label, and the output
     /// length, then ratchets the protocol's state with the label and output length.
     pub fn derive(&mut self, label: &str, out: &mut [u8]) {
-        self.transcript.update([OpCode::Derive as u8]);
-        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        self.transcript.update(label.as_bytes());
-        self.transcript.update(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
+        self.transcript.update(&[OpCode::Derive as u8]).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], label.len() as u64 * 8))
+            .expect("should update");
+        self.transcript.update(label.as_bytes()).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], out.len() as u64 * 8))
+            .expect("should update");
 
         let mut prf_key = [0u8; 32];
         self.expand("prf key", &mut prf_key);
@@ -67,10 +76,14 @@ impl Protocol {
     /// Encrypts the given slice in place using the protocol's current state as the key, then
     /// ratchets the protocol's state using the label and input.
     pub fn encrypt(&mut self, label: &str, in_out: &mut [u8]) {
-        self.transcript.update([OpCode::Crypt as u8]);
-        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        self.transcript.update(label.as_bytes());
-        self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        self.transcript.update(&[OpCode::Crypt as u8]).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], label.len() as u64 * 8))
+            .expect("should update");
+        self.transcript.update(label.as_bytes()).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8))
+            .expect("should update");
 
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
         self.expand("data encryption key", &mut dek);
@@ -78,7 +91,7 @@ impl Protocol {
 
         let auth = aes_gmac(&dak, in_out);
 
-        self.transcript.update(auth);
+        self.transcript.update(&auth).expect("should update");
 
         aes_ctr(&dek, &[0u8; 16], in_out);
 
@@ -88,10 +101,14 @@ impl Protocol {
     /// Decrypts the given slice in place using the protocol's current state as the key, then
     /// ratchets the protocol's state using the label and input.
     pub fn decrypt(&mut self, label: &str, in_out: &mut [u8]) {
-        self.transcript.update([OpCode::Crypt as u8]);
-        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        self.transcript.update(label.as_bytes());
-        self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        self.transcript.update(&[OpCode::Crypt as u8]).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], label.len() as u64 * 8))
+            .expect("should update");
+        self.transcript.update(label.as_bytes()).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8))
+            .expect("should update");
 
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
         self.expand("data encryption key", &mut dek);
@@ -101,7 +118,7 @@ impl Protocol {
 
         let auth = aes_gmac(&dak, in_out);
 
-        self.transcript.update(auth);
+        self.transcript.update(&auth).expect("should update");
 
         self.ratchet();
     }
@@ -112,10 +129,14 @@ impl Protocol {
     pub fn seal(&mut self, label: &str, in_out: &mut [u8]) {
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        self.transcript.update([OpCode::AuthCrypt as u8]);
-        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        self.transcript.update(label.as_bytes());
-        self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        self.transcript.update(&[OpCode::AuthCrypt as u8]).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], label.len() as u64 * 8))
+            .expect("should update");
+        self.transcript.update(label.as_bytes()).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8))
+            .expect("should update");
 
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
         self.expand("data encryption key", &mut dek);
@@ -123,7 +144,7 @@ impl Protocol {
 
         let auth = aes_gmac(&dak, in_out);
 
-        self.transcript.update(auth);
+        self.transcript.update(&auth).expect("should update");
 
         self.expand("authentication tag", tag);
 
@@ -141,10 +162,14 @@ impl Protocol {
     pub fn open<'ct>(&mut self, label: &str, in_out: &'ct mut [u8]) -> Option<&'ct [u8]> {
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        self.transcript.update([OpCode::AuthCrypt as u8]);
-        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        self.transcript.update(label.as_bytes());
-        self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        self.transcript.update(&[OpCode::AuthCrypt as u8]).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], label.len() as u64 * 8))
+            .expect("should update");
+        self.transcript.update(label.as_bytes()).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8))
+            .expect("should update");
 
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
         self.expand("data encryption key", &mut dek);
@@ -154,7 +179,7 @@ impl Protocol {
 
         let auth = aes_gmac(&dak, in_out);
 
-        self.transcript.update(auth);
+        self.transcript.update(&auth).expect("should update");
 
         let mut tag_p = [0u8; TAG_LEN];
         self.expand("authentication tag", &mut tag_p);
@@ -169,7 +194,7 @@ impl Protocol {
             // Otherwise, the ciphertext is inauthentic, and we zero out the inauthentic plaintext
             // to avoid bugs where the caller forgets to check the return value of this function and
             // discloses inauthentic plaintext.
-            in_out.zeroize();
+            in_out.fill(0);
             None
         }
     }
@@ -178,24 +203,26 @@ impl Protocol {
         let mut rak = [0u8; 32];
         self.expand("ratchet key", &mut rak);
 
-        self.transcript.reset();
+        self.transcript = Hasher::new(MessageDigest::sha512()).expect("should implement SHA-512");
 
-        self.transcript.update([OpCode::Ratchet as u8]);
-        self.transcript.update(left_encode(&mut [0u8; 9], rak.len() as u64 * 8));
-        self.transcript.update(rak);
+        self.transcript.update(&[OpCode::Ratchet as u8]).expect("should update");
+        self.transcript
+            .update(left_encode(&mut [0u8; 9], rak.len() as u64 * 8))
+            .expect("should update");
+        self.transcript.update(&rak).expect("should update");
     }
 
     fn expand(&self, label: &str, out: &mut [u8]) {
         debug_assert!(out.len() <= 32);
 
         let mut clone = self.transcript.clone();
-        clone.update([OpCode::Expand as u8]);
-        clone.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        clone.update(label.as_bytes());
-        clone.update(right_encode(&mut [0u8; 9], out.len() as u64 * 8));
+        clone.update(&[OpCode::Expand as u8]).expect("should update");
+        clone.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8)).expect("should update");
+        clone.update(label.as_bytes()).expect("should update");
+        clone.update(right_encode(&mut [0u8; 9], out.len() as u64 * 8)).expect("should update");
 
-        let h = clone.finalize();
-        out.copy_from_slice(&h[..out.iter().len()]);
+        let h = clone.finish().expect("should finish");
+        out.copy_from_slice(&h[..out.len()]);
     }
 }
 
@@ -269,7 +296,7 @@ fn aes_gmac(key: &[u8], input: &[u8]) -> [u8; 16] {
     tag
 }
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(test)]
 mod tests {
     use expect_test::expect;
 
@@ -281,21 +308,21 @@ mod tests {
         protocol.mix("first", b"one");
         protocol.mix("second", b"two");
 
-        expect!["94817feeb041f907"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
+        expect!["49639b877ddea480"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
-        expect!["cd7a6d51699ae237dc2ef5a91d3a39639b34"].assert_eq(&hex::encode(plaintext));
+        expect!["34830931d97c14b4b4a5dd2093429347aeb6"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["659ef429e2680fbaf02a0702928d9600f10efcb90a124c2e040ea52901c8f8650634"]
+        expect!["76bef04c2d274072f84e52867c347783aa489041b8936ca27e0f30b5181f1def3879"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["cb0ec90e45f6eeff"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["d95ee73d86687616"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

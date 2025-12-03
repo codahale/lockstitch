@@ -7,20 +7,13 @@ license = "MIT OR Apache-2.0"
 description = "Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic operations in complex protocols."
 homepage = "https://github.com/codahale/lockstitch"
 documentation = "https://docs.rs/lockstitch/"
-keywords = ["crypto", "aes-128", "sha-256", "hmac", "hazmat"]
+keywords = ["crypto", "aes-256", "sha-512", "gmac", "hazmat"]
 categories = ["cryptography", "no-std"]
 readme = "README.md"
-include = ["src/**/*", "tests/**/*", "LICENSE-*", "README.md", "design.md", "perf.md"]
+include = ["src/**/*", "tests/**/*", "LICENSE-*", "README.md"]
 
 [dependencies]
 openssl = "0.10.75"
-sha2 = { version = "0.10.9", default-features = false, features = ["asm"] }
-zeroize = "1.8.2"
-
-[features]
-default = ["std"]
-docs = []
-std = ["sha2/std"]
 
 [workspace]
 members = ["benchmarks", "xtask"]

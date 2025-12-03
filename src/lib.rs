@@ -252,14 +252,16 @@ fn right_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
 #[inline]
 fn aes_ctr(key: &[u8], nonce: &[u8], in_out: &mut [u8]) {
     let mut ctx = CipherCtx::new().expect("should create a cipher context");
-    ctx.encrypt_init(Some(Cipher::aes_256_ctr()), Some(key), Some(nonce)).expect("should be a valid AES-256-CTR key and nonce");
+    ctx.encrypt_init(Some(Cipher::aes_256_ctr()), Some(key), Some(nonce))
+        .expect("should be a valid AES-256-CTR key and nonce");
     ctx.cipher_update_inplace(in_out, in_out.len()).expect("should perform AES-256-CTR");
 }
 
 #[inline]
 fn aes_gmac(key: &[u8], input: &[u8]) -> [u8; 16] {
     let mut ctx = CipherCtx::new().expect("should create a cipher context");
-    ctx.encrypt_init(Some(Cipher::aes_256_gcm()), Some(key), Some(&[0u8; 12])).expect("should be a valid AES-256-GCM key and nonce");
+    ctx.encrypt_init(Some(Cipher::aes_256_gcm()), Some(key), Some(&[0u8; 12]))
+        .expect("should be a valid AES-256-GCM key and nonce");
     ctx.cipher_update(input, None).expect("should process authenticated data");
     ctx.cipher_final(&mut []).expect("should finalize GCM context");
     let mut tag = [0u8; 16];

@@ -1,13 +1,16 @@
 # Lockstitch
 
-Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic
-operations (e.g. hashing, encryption, message authentication codes, and authenticated encryption) in
-complex protocols. Inspired by TupleHash, STROBE, Noise Protocol's stateful objects, Merlin
-transcripts, and Xoodyak's Cyclist mode, Lockstitch uses [SHA-256][] and [AES-128][] to provide
-10+ Gb/sec performance on modern processors at a 128-bit security level.
+Lockstitch is an incremental, stateful cryptographic primitive for symmetric-key cryptographic operations (e.g.,
+hashing, encryption, message authentication codes, and authenticated encryption) in complex protocols. Inspired by
+TupleHash, STROBE, Noise Protocol's stateful objects, Merlin transcripts, and Xoodyak's Cyclist mode, Lockstitch
+uses [SHA-512/256], [AES-256], and [GMAC] to provide 10+ Gb/sec performance on modern processors at a 128-bit security
+level.
 
-[SHA-256]: https://doi.org/10.6028/NIST.FIPS.180-4
-[AES-128]: https://doi.org/10.6028/NIST.FIPS.197-upd1
+[SHA-512/256]: https://doi.org/10.6028/NIST.FIPS.180-4
+
+[AES-256]: https://doi.org/10.6028/NIST.FIPS.197-upd1
+
+[GMAC]: https://doi.org/10.6028/NIST.SP.800-38D
 
 ## CAUTION
 
@@ -40,9 +43,9 @@ For example, we can create message digests:
 
 ```rust
 fn digest(message: &[u8]) -> [u8; 32] {
-  let mut md = lockstitch::Protocol::new("com.example.md");
-  md.mix("message", message);
-  md.derive_array("digest")
+    let mut md = lockstitch::Protocol::new("com.example.md");
+    md.mix("message", message);
+    md.derive_array("digest")
 }
 
 assert_eq!(digest(b"this is a message"), digest(b"this is a message"));
@@ -53,10 +56,10 @@ We can create message authentication codes:
 
 ```rust
 fn mac(key: &[u8], message: &[u8]) -> [u8; 16] {
-  let mut mac = lockstitch::Protocol::new("com.example.mac");
-  mac.mix("key", key);
-  mac.mix("message", message);
-  mac.derive_array("tag")
+    let mut mac = lockstitch::Protocol::new("com.example.mac");
+    mac.mix("key", key);
+    mac.mix("message", message);
+    mac.derive_array("tag")
 }
 
 assert_eq!(mac(b"a key", b"a message"), mac(b"a key", b"a message"));
@@ -68,30 +71,30 @@ We can even create authenticated encryption:
 
 ```rust
 fn aead_encrypt(key: &[u8], nonce: &[u8], ad: &[u8], plaintext: &[u8]) -> Vec<u8> {
-  let mut out = vec![0u8; plaintext.len() + lockstitch::TAG_LEN];
-  out[..plaintext.len()].copy_from_slice(plaintext);
+    let mut out = vec![0u8; plaintext.len() + lockstitch::TAG_LEN];
+    out[..plaintext.len()].copy_from_slice(plaintext);
 
-  let mut aead = lockstitch::Protocol::new("com.example.aead");
-  aead.mix("key", key);
-  aead.mix("nonce", nonce);
-  aead.mix("ad", ad);
-  aead.seal("message", &mut out);
+    let mut aead = lockstitch::Protocol::new("com.example.aead");
+    aead.mix("key", key);
+    aead.mix("nonce", nonce);
+    aead.mix("ad", ad);
+    aead.seal("message", &mut out);
 
-  out
+    out
 }
 
 fn aead_decrypt(key: &[u8], nonce: &[u8], ad: &[u8], ciphertext: &[u8]) -> Option<Vec<u8>> {
-  let mut ciphertext = ciphertext.to_vec();
+    let mut ciphertext = ciphertext.to_vec();
 
-  let mut aead = lockstitch::Protocol::new("com.example.aead");
-  aead.mix("key", key);
-  aead.mix("nonce", nonce);
-  aead.mix("ad", ad);
-  aead.open("message", &mut ciphertext).map(|p| p.to_vec())
+    let mut aead = lockstitch::Protocol::new("com.example.aead");
+    aead.mix("key", key);
+    aead.mix("nonce", nonce);
+    aead.mix("ad", ad);
+    aead.open("message", &mut ciphertext).map(|p| p.to_vec())
 }
 
 let plaintext = b"a message".to_vec();
-let ciphertext = aead_encrypt(b"a key", b"a nonce", b"some data", &plaintext);
+let ciphertext = aead_encrypt(b"a key", b"a nonce", b"some data", & plaintext);
 assert_eq!(aead_decrypt(b"a key", b"a nonce", b"some data", &ciphertext), Some(plaintext));
 assert_eq!(aead_decrypt(b"another key", b"a nonce", b"some data", &ciphertext), None);
 assert_eq!(aead_decrypt(b"a key", b"another nonce", b"some data", &ciphertext), None);

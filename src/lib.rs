@@ -4,23 +4,11 @@
 
 use core::fmt::Debug;
 
-use aes::{
-    Aes128,
-    cipher::{KeyIvInit as _, StreamCipher as _},
-};
-use ctr::Ctr128BE;
-use hmac::{Hmac, Mac as _};
-use sha2::Sha256;
-use subtle::ConstantTimeEq as _;
-use zeroize::{Zeroize, ZeroizeOnDrop};
-
-#[cfg(feature = "docs")]
-#[doc = include_str!("../design.md")]
-pub mod design {}
-
-#[cfg(feature = "docs")]
-#[doc = include_str!("../perf.md")]
-pub mod perf {}
+use openssl::cipher::Cipher;
+use openssl::cipher_ctx::CipherCtx;
+use openssl::memcmp;
+use sha2::{Digest as _, Sha512_256};
+use zeroize::Zeroize;
 
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
@@ -29,80 +17,43 @@ pub const TAG_LEN: usize = 16;
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
 #[derive(Clone)]
 pub struct Protocol {
-    state: [u8; 32],
+    transcript: Sha512_256,
 }
 
 impl Protocol {
     /// Creates a new protocol with the given domain.
     pub fn new(domain: &str) -> Protocol {
-        // The initial state is extracted directly from the domain separation string using a fixed
-        // key.
-        //
-        //     state = HMAC(HMAC("", "lockstitch"), domain)
-        let mut h = Hmac::<Sha256>::new_from_slice(SALT).expect("should be valid HMAC key");
-        h.update(domain.as_bytes());
-        Protocol { state: h.finalize().into_bytes().into() }
+        let mut transcript = Sha512_256::new();
+        transcript.update([OpCode::Init as u8]);
+        transcript.update(left_encode(&mut [0u8; 9], domain.len() as u64 * 8));
+        transcript.update(domain.as_bytes());
+        Protocol { transcript }
     }
 
     /// Mixes the given label and slice into the protocol state.
     pub fn mix(&mut self, label: &str, input: &[u8]) {
-        // Extract an operation key from the protocol's state, the operation code, the label, and
-        // the input, using an unambiguous encoding to prevent collisions:
-        //
-        //     opk = HMAC(state, 0x01 || left_encode(|label|) || label || input)
-        let mut h = self.start_op(OpCode::Mix, label);
-        h.update(input);
-        let opk = h.finalize_reset().into_bytes();
-
-        // Extract a new state value from the protocol's old state and the operation key:
-        //
-        //     state′ = HMAC(state, opk)
-        //
-        // This preserves the invariant that the protocol state is the HMAC output of two uniform
-        // random keys.
-        h.update(&opk);
-        self.state = h.finalize().into_bytes().into();
-    }
-
-    /// Moves the protocol into a [`std::io::Write`] implementation, mixing all written data in a
-    /// single operation and passing all writes to `inner`.
-    ///
-    /// Equivalent to buffering all written data in a slice and passing it to [`Protocol::mix`].
-    ///
-    /// Use [`MixWriter::into_inner`] to finish the operation and recover the protocol and `inner`.
-    #[cfg(feature = "std")]
-    pub fn mix_writer<W: std::io::Write>(mut self, label: &str, inner: W) -> MixWriter<W> {
-        // Hash the initial prefix of the mix operation, then hand off to MixWriter.
-        let h = self.start_op(OpCode::Mix, label);
-        MixWriter { h, inner }
+        self.transcript.update([OpCode::Mix as u8]);
+        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(&mut [0u8; 9], input.len() as u64 * 8));
+        self.transcript.update(input);
     }
 
     /// Derives pseudorandom output from the protocol's current state, the label, and the output
     /// length, then ratchets the protocol's state with the label and output length.
     pub fn derive(&mut self, label: &str, out: &mut [u8]) {
-        // Extract an operation key from the protocol's state, the operation code, the label, and
-        // the output length, using an unambiguous encoding to prevent collisions:
-        //
-        //     opk = HMAC(state, 0x02 || left_encode(|label|) || label || left_encode(|out|))
-        let mut h = self.start_op(OpCode::Derive, label);
-        h.update(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
-        let opk = h.finalize_reset().into_bytes();
+        self.transcript.update([OpCode::Derive as u8]);
+        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
 
-        // Use the operation key to encrypt all zeroes with AES:
-        //
-        //     prf = AES-CTR(opk[..16], opk[16..], [0x00; N])
-        out.zeroize();
-        let (k, n) = opk.split_at(16);
-        aes_ctr(k, n, out);
+        let mut prf_key = [0u8; 32];
+        self.expand("prf key", &mut prf_key);
 
-        // Extract a new state value from the protocol's old state and the operation key:
-        //
-        //     state' = HMAC(state, opk)
-        //
-        // This preserves the invariant that the protocol state is the HMAC output of two uniform
-        // random keys.
-        h.update(&opk);
-        self.state = h.finalize().into_bytes().into();
+        out.fill(0);
+        aes_ctr(&prf_key, &[0u8; 16], out);
+
+        self.ratchet();
     }
 
     /// Derives output from the protocol's current state and returns it as an `N`-byte array.
@@ -116,106 +67,69 @@ impl Protocol {
     /// Encrypts the given slice in place using the protocol's current state as the key, then
     /// ratchets the protocol's state using the label and input.
     pub fn encrypt(&mut self, label: &str, in_out: &mut [u8]) {
-        // Extract a data encryption key and data authentication key from the protocol's state, the
-        // operation code, the label, and the output length, using an unambiguous encoding to
-        // prevent collisions:
-        //
-        //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|plaintext|))
-        let mut h = self.start_op(OpCode::Crypt, label);
-        h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let opk = h.finalize_reset().into_bytes();
-        let (dek, dak) = opk.split_at(16);
+        self.transcript.update([OpCode::Crypt as u8]);
+        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
 
-        // Use the DAK to extract a PRK from the plaintext with HMAC-SHA-256:
-        //
-        //     prk = HMAC(dak, plaintext)
-        let prk = hmac(dak, in_out);
+        let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
+        self.expand("data encryption key", &mut dek);
+        self.expand("data authentication key", &mut dak);
 
-        // Use the DEK to encrypt the plaintext with AES-128-CTR:
-        //
-        //     ciphertext = AES-CTR(dek, [0x00; 16], plaintext)
-        aes_ctr(dek, &[0; 16], in_out);
+        let auth = aes_gmac(&dak, in_out);
 
-        // Use the PRK to extract a new protocol state:
-        //
-        //     state' = HMAC(state, prk)
-        //
-        // This preserves the invariant that the protocol state is the HMAC output of two uniform
-        // random keys.
-        h.update(&prk);
-        self.state = h.finalize().into_bytes().into();
+        self.transcript.update(auth);
+
+        aes_ctr(&dek, &[0u8; 16], in_out);
+
+        self.ratchet();
     }
 
     /// Decrypts the given slice in place using the protocol's current state as the key, then
     /// ratchets the protocol's state using the label and input.
     pub fn decrypt(&mut self, label: &str, in_out: &mut [u8]) {
-        // Extract a data encryption key and data authentication key from the protocol's state, the
-        // operation code, the label, and the output length, using an unambiguous encoding to
-        // prevent collisions:
-        //
-        //     dek || dak = HMAC(state, 0x03 || left_encode(|label|) || label || left_encode(|plaintext|))
-        let mut h = self.start_op(OpCode::Crypt, label);
-        h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let opk = h.finalize_reset().into_bytes();
-        let (dek, dak) = opk.split_at(16);
+        self.transcript.update([OpCode::Crypt as u8]);
+        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
 
-        // Use the DEK to decrypt the ciphertext with AES.
-        //
-        //     plaintext = AES-CTR(dek, [0x00; 16], ciphertext)
-        aes_ctr(dek, &[0; 16], in_out);
+        let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
+        self.expand("data encryption key", &mut dek);
+        self.expand("data authentication key", &mut dak);
 
-        // Use the DAK to extract a PRK from the plaintext with HMAC-SHA-256:
-        //
-        //     prk = HMAC(dak, plaintext)
-        let prk = hmac(dak, in_out);
+        aes_ctr(&dek, &[0u8; 16], in_out);
 
-        // Use the PRK to extract a new protocol state:
-        //
-        //     state' = HMAC(state, prk)
-        //
-        // This preserves the invariant that the protocol state is the HMAC output of two uniform
-        // random keys.
-        h.update(&prk);
-        self.state = h.finalize().into_bytes().into();
+        let auth = aes_gmac(&dak, in_out);
+
+        self.transcript.update(auth);
+
+        self.ratchet();
     }
 
     /// Encrypts the given slice in place using the protocol's current state as the key, appending
     /// an authentication tag of [`TAG_LEN`] bytes, then ratchets the protocol's state using the
     /// label and input.
     pub fn seal(&mut self, label: &str, in_out: &mut [u8]) {
-        // Split the buffer into plaintext and tag.
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Extract a data encryption key and data authentication key from the protocol's state, the
-        // operation code, the label, and the output length, using an unambiguous encoding to
-        // prevent collisions:
-        //
-        //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|plaintext|))
-        let mut h = self.start_op(OpCode::AuthCrypt, label);
-        h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let opk = h.finalize_reset().into_bytes();
-        let (dek, dak) = opk.split_at(16);
+        self.transcript.update([OpCode::AuthCrypt as u8]);
+        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
 
-        // Use the DAK to extract a PRK from the plaintext with HMAC-SHA-256:
-        //
-        //     prk_0 || prk_1 = HMAC(dak, plaintext)
-        let prk = hmac(dak, in_out);
-        tag.copy_from_slice(&prk[..TAG_LEN]);
+        let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
+        self.expand("data encryption key", &mut dek);
+        self.expand("data authentication key", &mut dak);
 
-        // Use the DEK and tag to encrypt the plaintext with AES-128, using the first 16 bytes of
-        // the PRK as the nonce:
-        //
-        //     ciphertext = AES-CTR(dek, prk_0, plaintext)
-        aes_ctr(dek, tag, in_out);
+        let auth = aes_gmac(&dak, in_out);
 
-        // Use the PRK to extract a new protocol state:
-        //
-        //     state' = HMAC(state, prk_0 || prk_1)
-        //
-        // This preserves the invariant that the protocol state is the HMAC output of two uniform
-        // random keys.
-        h.update(&prk);
-        self.state = h.finalize().into_bytes().into();
+        self.transcript.update(auth);
+
+        self.expand("authentication tag", tag);
+
+        aes_ctr(&dek, tag, in_out);
+
+        self.ratchet();
     }
 
     /// Decrypts the given slice in place using the protocol's current state as the key, verifying
@@ -225,61 +139,63 @@ impl Protocol {
     /// Returns the plaintext slice of `in_out` if the input was authenticated.
     #[must_use]
     pub fn open<'ct>(&mut self, label: &str, in_out: &'ct mut [u8]) -> Option<&'ct [u8]> {
-        // Split the buffer into ciphertext and tag.
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
-        // Extract a data encryption key and data authentication key from the protocol's state, the
-        // operation code, the label, and the output length, using an unambiguous encoding to
-        // prevent collisions:
-        //
-        //     dek || dak = HMAC(state, 0x04 || left_encode(|label|) || label || left_encode(|plaintext|))
-        let mut h = self.start_op(OpCode::AuthCrypt, label);
-        h.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
-        let opk = h.finalize_reset().into_bytes();
-        let (dek, dak) = opk.split_at(16);
+        self.transcript.update([OpCode::AuthCrypt as u8]);
+        self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
 
-        // Use the DEK and the tag to decrypt the ciphertext with AES-128:
-        //
-        //     plaintext = AES-CTR(dek, tag, ciphertext)
-        aes_ctr(dek, tag, in_out);
+        let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
+        self.expand("data encryption key", &mut dek);
+        self.expand("data authentication key", &mut dak);
 
-        // Use the DAK to extract a PRK from the plaintext:
-        //
-        //     prk_0 || prk_1 = HMAC(dak, plaintext)
-        let prk = hmac(dak, in_out);
+        aes_ctr(&dek, tag, in_out);
 
-        // Use the PRK to extract a new protocol state:
-        //
-        //     state' = HMAC(state, prk_0 || prk_1)
-        //
-        // This preserves the invariant that the protocol state is the HMAC output of two uniform
-        // random keys.
-        h.update(&prk);
-        self.state = h.finalize().into_bytes().into();
+        let auth = aes_gmac(&dak, in_out);
 
-        // Verify the authentication tag:
-        //
-        //     tag = prk_0
-        if tag.ct_eq(&prk[..TAG_LEN]).into() {
+        self.transcript.update(auth);
+
+        let mut tag_p = [0u8; TAG_LEN];
+        self.expand("authentication tag", &mut tag_p);
+
+        self.ratchet();
+
+        if memcmp::eq(tag, &tag_p) {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
         } else {
-            // Otherwise, the ciphertext is inauthentic and we zero out the inauthentic plaintext to
-            // avoid bugs where the caller forgets to check the return value of this function and
+            // Otherwise, the ciphertext is inauthentic, and we zero out the inauthentic plaintext
+            // to avoid bugs where the caller forgets to check the return value of this function and
             // discloses inauthentic plaintext.
             in_out.zeroize();
             None
         }
     }
 
-    #[inline]
-    fn start_op(&mut self, op_code: OpCode, label: &str) -> Hmac<Sha256> {
-        let mut h = Hmac::<Sha256>::new_from_slice(&self.state).expect("should be valid HMAC key");
-        h.update(&[op_code as u8]);
-        h.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
-        h.update(label.as_bytes());
-        h
+    fn ratchet(&mut self) {
+        let mut rak = [0u8; 32];
+        self.expand("ratchet key", &mut rak);
+
+        self.transcript.reset();
+
+        self.transcript.update([OpCode::Ratchet as u8]);
+        self.transcript.update(left_encode(&mut [0u8; 9], rak.len() as u64 * 8));
+        self.transcript.update(rak);
+    }
+
+    fn expand(&self, label: &str, out: &mut [u8]) {
+        debug_assert!(out.len() <= 32);
+
+        let mut clone = self.transcript.clone();
+        clone.update([OpCode::Expand as u8]);
+        clone.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        clone.update(label.as_bytes());
+        clone.update(right_encode(&mut [0u8; 9], out.len() as u64 * 8));
+
+        let h = clone.finalize();
+        out.copy_from_slice(&h[..out.iter().len()]);
     }
 }
 
@@ -289,84 +205,23 @@ impl Debug for Protocol {
     }
 }
 
-impl Zeroize for Protocol {
-    fn zeroize(&mut self) {
-        self.state.zeroize();
-    }
-}
-
-impl ZeroizeOnDrop for Protocol {}
-
-impl Drop for Protocol {
-    fn drop(&mut self) {
-        self.zeroize();
-    }
-}
-
-// HMAC("", "lockstitch")
-const SALT: &[u8; 32] = &[
-    220, 87, 54, 63, 227, 165, 27, 245, 65, 144, 247, 188, 40, 15, 101, 174, 80, 197, 19, 248, 7,
-    216, 209, 168, 247, 171, 219, 147, 63, 135, 63, 1,
-];
-
 /// All Lockstitch operation types.
 #[derive(Debug, Clone, Copy)]
 enum OpCode {
-    /// Mix a labeled input into the protocol's state.
-    Mix = 0x01,
-    /// Derive a labeled output from the protocol's state.
-    Derive = 0x02,
-    /// Encrypt or decrypt a labeled input using the protocol's state as a key.
-    Crypt = 0x03,
-    /// Seal or open a labeled input using the protocol's state as a key.
-    AuthCrypt = 0x04,
-}
-
-/// A [`std::io::Write`] implementation which combines all written data into a single `Mix`
-/// operation and passes all writes to an inner writer.
-#[cfg(feature = "std")]
-pub struct MixWriter<W> {
-    h: Hmac<Sha256>,
-    inner: W,
-}
-
-#[cfg(feature = "std")]
-impl<W: Debug> Debug for MixWriter<W> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("MixWriter").field("h", &self.h).field("inner", &self.inner).finish()
-    }
-}
-
-#[cfg(feature = "std")]
-impl<W: std::io::Write> MixWriter<W> {
-    /// Finishes the `Mix` operation and returns the inner [`Protocol`] and writer.
-    #[inline]
-    pub fn into_inner(mut self) -> (Protocol, W) {
-        // Finalize the hasher into an operation key.
-        let opk = self.h.finalize_reset().into_bytes();
-
-        // Extract a new state value from the protocol's state and the operation key.
-        self.h.update(&opk);
-        let state = self.h.finalize().into_bytes().into();
-
-        (Protocol { state }, self.inner)
-    }
-}
-
-#[cfg(feature = "std")]
-impl<W: std::io::Write> std::io::Write for MixWriter<W> {
-    #[inline]
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        // Hash the slice.
-        self.h.update(buf);
-        // Pass the slice to the inner writer and return the result.
-        self.inner.write(buf)
-    }
-
-    #[inline]
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
-    }
+    /// Initialize a protocol with a domain separation string.
+    Init = 0x01,
+    /// Mix a labeled input into the protocol's transcript.
+    Mix = 0x02,
+    /// Derive a labeled output from the protocol's transcript.
+    Derive = 0x03,
+    /// Encrypt or decrypt a labeled input using the protocol's transcript as a key.
+    Crypt = 0x04,
+    /// Seal or open a labeled input using the protocol's transcript as a key.
+    AuthCrypt = 0x05,
+    /// Expand a pseudorandom bitstring from the protocol's transcript.
+    Expand = 0x06,
+    /// Ratchet the protocol's transcript.
+    Ratchet = 0x07,
 }
 
 /// Encodes a value using [NIST SP 800-185][]'s `left_encode`.
@@ -381,25 +236,39 @@ fn left_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
     &buf[len - n - 1..]
 }
 
-/// Encrypts (or decrypts) an input with AES-128-CTR.
+/// Encodes a value using [NIST SP 800-185][]'s `right_encode`.
+///
+/// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
+#[inline]
+fn right_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
+    let len = buf.len();
+    buf[..8].copy_from_slice(&value.to_be_bytes());
+    let n = (len - 1 - value.leading_zeros() as usize / 8).max(1);
+    buf[8] = n as u8;
+    &buf[len - n - 1..]
+}
+
+/// Encrypts (or decrypts) an input with AES-256-CTR.
 #[inline]
 fn aes_ctr(key: &[u8], nonce: &[u8], in_out: &mut [u8]) {
-    let mut ctr = Ctr128BE::<Aes128>::new_from_slices(key, nonce)
-        .expect("should be valid AES-128-CTR key and nonce");
-    ctr.apply_keystream(in_out);
+    let mut ctx = CipherCtx::new().expect("should create a cipher context");
+    ctx.encrypt_init(Some(Cipher::aes_256_ctr()), Some(key), Some(nonce)).expect("should be a valid AES-256-CTR key and nonce");
+    ctx.cipher_update_inplace(in_out, in_out.len()).expect("should perform AES-256-CTR");
 }
 
 #[inline]
-fn hmac(key: &[u8], data: &[u8]) -> [u8; 32] {
-    let mut h = Hmac::<Sha256>::new_from_slice(key).expect("should be valid HMAC key");
-    h.update(data);
-    h.finalize().into_bytes().into()
+fn aes_gmac(key: &[u8], input: &[u8]) -> [u8; 16] {
+    let mut ctx = CipherCtx::new().expect("should create a cipher context");
+    ctx.encrypt_init(Some(Cipher::aes_256_gcm()), Some(key), Some(&[0u8; 12])).expect("should be a valid AES-256-GCM key and nonce");
+    ctx.cipher_update(input, None).expect("should process authenticated data");
+    ctx.cipher_final(&mut []).expect("should finalize GCM context");
+    let mut tag = [0u8; 16];
+    ctx.tag(&mut tag).expect("should calculate authenticator");
+    tag
 }
 
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use std::io::{self, Cursor};
-
     use expect_test::expect;
 
     use super::*;
@@ -410,41 +279,21 @@ mod tests {
         protocol.mix("first", b"one");
         protocol.mix("second", b"two");
 
-        expect!["f30a3c4582cf74b5"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
+        expect!["94817feeb041f907"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
-        expect!["cbc0743dbcd23d85d16221fc94ae677d29d9"].assert_eq(&hex::encode(plaintext));
+        expect!["cd7a6d51699ae237dc2ef5a91d3a39639b34"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["b965f961fb66a2e03287c1517e6ae3d1fb273e136cafca4382f78752f19717571087"]
+        expect!["659ef429e2680fbaf02a0702928d9600f10efcb90a124c2e040ea52901c8f8650634"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["e11c63100f03f2bb"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
-    }
-
-    #[test]
-    fn readers() {
-        let mut slices = Protocol::new("com.example.streams");
-        slices.mix("first", b"one");
-        slices.mix("second", b"two");
-
-        let streams = Protocol::new("com.example.streams");
-        let mut streams_write = streams.mix_writer("first", io::sink());
-        io::copy(&mut Cursor::new(b"one"), &mut streams_write).expect("should be infallible");
-        let (streams, _) = streams_write.into_inner();
-
-        let mut output = Vec::new();
-        let mut streams_write = streams.mix_writer("second", &mut output);
-        io::copy(&mut Cursor::new(b"two"), &mut streams_write).expect("should be infallible");
-        let (mut streams, output) = streams_write.into_inner();
-
-        assert_eq!(slices.derive_array::<16>("third"), streams.derive_array::<16>("third"));
-        assert_eq!(b"two".as_slice(), output);
+        expect!["cb0ec90e45f6eeff"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]
@@ -519,8 +368,22 @@ mod tests {
     }
 
     #[test]
-    fn check_salt() {
-        let salt = hmac(b"", b"lockstitch");
-        assert_eq!(SALT, &salt);
+    fn right_encode_test_vectors() {
+        let mut buf = [0; 9];
+
+        assert_eq!(right_encode(&mut buf, 0), [0, 1]);
+
+        assert_eq!(right_encode(&mut buf, 128), [128, 1]);
+
+        assert_eq!(right_encode(&mut buf, 65536), [1, 0, 0, 3]);
+
+        assert_eq!(right_encode(&mut buf, 4096), [16, 0, 2]);
+
+        assert_eq!(
+            right_encode(&mut buf, 18446744073709551615),
+            [255, 255, 255, 255, 255, 255, 255, 255, 8]
+        );
+
+        assert_eq!(right_encode(&mut buf, 12345), [48, 57, 2]);
     }
 }

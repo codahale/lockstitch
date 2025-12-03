@@ -1,5 +1,3 @@
-use std::io::{self, Read};
-
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use lockstitch::{Protocol, TAG_LEN};
 
@@ -15,24 +13,6 @@ fn hash(c: &mut Criterion) {
             b.iter(|| {
                 let mut protocol = Protocol::new("hash");
                 protocol.mix("message", &input);
-                protocol.derive_array::<32>("digest")
-            });
-        });
-    }
-    g.finish();
-}
-
-fn hash_writer(c: &mut Criterion) {
-    let mut g = c.benchmark_group("hash-writer");
-    for &(len, id) in LENS {
-        g.throughput(Throughput::Bytes(len as u64));
-        g.bench_function(id, |b| {
-            b.iter(|| {
-                let protocol = Protocol::new("hash");
-                let mut writer = protocol.mix_writer("message", io::sink());
-                io::copy(&mut io::repeat(0u8).take(len as u64), &mut writer)
-                    .expect("should be infallible");
-                let (mut protocol, _) = writer.into_inner();
                 protocol.derive_array::<32>("digest")
             });
         });
@@ -109,5 +89,5 @@ fn prf(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, aead, hash, hash_writer, prf, stream,);
+criterion_group!(benches, aead, hash, prf, stream,);
 criterion_main!(benches);

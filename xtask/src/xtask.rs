@@ -102,7 +102,7 @@ fn cloud_create(sh: &Shell) -> Result<()> {
 }
 
 fn cloud_setup(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'sudo apt-get install build-essential git -y'").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'sudo apt-get install build-essential git libssl-dev pkg-config -y'").run()?;
     cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
     cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'git clone https://github.com/codahale/lockstitch'").run()?;
 

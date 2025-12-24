@@ -27,7 +27,7 @@ impl Protocol {
 
         // Append the operation metadata to the transcript.
         let _ = transcript.update(&[OpCode::Init as u8]);
-        let _ = transcript.update(left_encode(&mut [0u8; 9], domain.len() as u64 * 8));
+        let _ = transcript.update(left_encode(domain.len() as u64 * 8).as_ref());
         let _ = transcript.update(domain.as_bytes());
         Protocol { transcript }
     }
@@ -36,9 +36,9 @@ impl Protocol {
     pub fn mix(&mut self, label: &str, input: &[u8]) {
         // Append the operation metadata and data to the transcript.
         let _ = self.transcript.update(&[OpCode::Mix as u8]);
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
         let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], input.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(input.len() as u64 * 8).as_ref());
         let _ = self.transcript.update(input);
     }
 
@@ -50,9 +50,9 @@ impl Protocol {
 
         // Append the operation metadata to the transcript.
         let _ = self.transcript.update(&[OpCode::Derive as u8]);
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
         let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], out.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(out.len() as u64 * 8).as_ref());
 
         // Expand a PRF key.
         let mut prf_key = [0u8; 32];
@@ -79,9 +79,9 @@ impl Protocol {
     pub fn encrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Append the operation metadata to the transcript.
         let _ = self.transcript.update(&[OpCode::Crypt as u8]);
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
         let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
@@ -106,9 +106,9 @@ impl Protocol {
     pub fn decrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Append the operation metadata to the transcript.
         let _ = self.transcript.update(&[OpCode::Crypt as u8]);
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
         let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
@@ -136,9 +136,9 @@ impl Protocol {
 
         // Append the operation metadata to the transcript.
         let _ = self.transcript.update(&[OpCode::AuthCrypt as u8]);
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
         let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
@@ -172,9 +172,9 @@ impl Protocol {
 
         // Append the operation metadata to the transcript.
         let _ = self.transcript.update(&[OpCode::AuthCrypt as u8]);
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
         let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], in_out.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
@@ -223,7 +223,7 @@ impl Protocol {
 
         // Append the operation metadata and data to the transcript.
         let _ = self.transcript.update(&[OpCode::Ratchet as u8]);
-        let _ = self.transcript.update(left_encode(&mut [0u8; 9], rak.len() as u64 * 8));
+        let _ = self.transcript.update(left_encode(rak.len() as u64 * 8).as_ref());
         let _ = self.transcript.update(&rak);
     }
 
@@ -237,9 +237,9 @@ impl Protocol {
 
         // Append the operation metadata and data to the transcript copy.
         let _ = clone.update(&[OpCode::Expand as u8]);
-        let _ = clone.update(left_encode(&mut [0u8; 9], label.len() as u64 * 8));
+        let _ = clone.update(left_encode(label.len() as u64 * 8).as_ref());
         let _ = clone.update(label.as_bytes());
-        let _ = clone.update(right_encode(&mut [0u8; 9], out.len() as u64 * 8));
+        let _ = clone.update(right_encode(out.len() as u64 * 8).as_ref());
 
         // Generate up to 32 bytes of output.
         let h = clone.finish().expect("should finish");
@@ -275,25 +275,37 @@ enum OpCode {
 /// Encodes a value using [NIST SP 800-185]'s `left_encode`.
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
-#[inline]
-fn left_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
-    let len = buf.len();
-    buf[1..].copy_from_slice(&value.to_be_bytes());
-    let n = (len - 1 - value.leading_zeros() as usize / 8).max(1);
-    buf[len - n - 1] = n as u8;
-    &buf[len - n - 1..]
+fn left_encode(mut value: u64) -> EncodedLen {
+    let mut b = [0u8; 9];
+    let n = 8 - ((value | 1).leading_zeros() / 8) as usize;
+    value <<= (8 - n) * 8;
+    b[1..].copy_from_slice(&value.to_be_bytes());
+    b[0] = n as u8;
+    EncodedLen { b, n: (n + 1) }
 }
 
 /// Encodes a value using [NIST SP 800-185]'s `right_encode`.
 ///
 /// [NIST SP 800-185]: https://www.nist.gov/publications/sha-3-derived-functions-cshake-kmac-tuplehash-and-parallelhash
-#[inline]
-fn right_encode(buf: &mut [u8; 9], value: u64) -> &[u8] {
-    let len = buf.len();
-    buf[..8].copy_from_slice(&value.to_be_bytes());
-    let n = (len - 1 - value.leading_zeros() as usize / 8).max(1);
-    buf[8] = n as u8;
-    &buf[len - n - 1..]
+fn right_encode(mut value: u64) -> EncodedLen {
+    let mut b = [0u8; 9];
+    let n = 8 - ((value | 1).leading_zeros() / 8) as usize;
+    value <<= (8 - n) * 8;
+    b[..8].copy_from_slice(&value.to_be_bytes());
+    b[n] = n as u8;
+    EncodedLen { b, n: (n + 1) }
+}
+
+/// A length encoded with either [left_encode] or [right_encode].
+struct EncodedLen {
+    b: [u8; 9],
+    n: usize,
+}
+
+impl AsRef<[u8]> for EncodedLen {
+    fn as_ref(&self) -> &[u8] {
+        &self.b[..self.n]
+    }
 }
 
 /// Encrypts (or decrypts) an input with AES-256-CTR.
@@ -366,11 +378,11 @@ mod tests {
     fn encoded_label_injective() {
         bolero::check!().with_type::<(Vec<u8>, Vec<u8>)>().cloned().for_each(|(a, b)| {
             let mut a_e = Vec::new();
-            a_e.extend_from_slice(left_encode(&mut [0u8; 9], a.len() as u64 * 8));
+            a_e.extend_from_slice(left_encode(a.len() as u64 * 8).as_ref());
             a_e.extend_from_slice(&a);
 
             let mut b_e = Vec::new();
-            b_e.extend_from_slice(left_encode(&mut [0u8; 9], b.len() as u64 * 8));
+            b_e.extend_from_slice(left_encode(b.len() as u64 * 8).as_ref());
             b_e.extend_from_slice(&b);
 
             if a == b {
@@ -384,57 +396,50 @@ mod tests {
     #[test]
     fn left_encode_injective() {
         bolero::check!().with_type::<(u64, u64)>().cloned().for_each(|(a, b)| {
-            let mut buf_a = [0u8; 9];
-            let mut buf_b = [0u8; 9];
-
-            let a_e = left_encode(&mut buf_a, a);
-            let b_e = left_encode(&mut buf_b, b);
+            let a_e = left_encode(a);
+            let b_e = left_encode(b);
 
             if a == b {
-                assert_eq!(a_e, b_e);
+                assert_eq!(a_e.as_ref(), b_e.as_ref());
             } else {
-                assert_ne!(a_e, b_e);
+                assert_ne!(a_e.as_ref(), b_e.as_ref());
             }
         });
     }
 
     #[test]
     fn left_encode_test_vectors() {
-        let mut buf = [0; 9];
+        assert_eq!(left_encode(0).as_ref(), [1, 0]);
 
-        assert_eq!(left_encode(&mut buf, 0), [1, 0]);
+        assert_eq!(left_encode(128).as_ref(), [1, 128]);
 
-        assert_eq!(left_encode(&mut buf, 128), [1, 128]);
+        assert_eq!(left_encode(65536).as_ref(), [3, 1, 0, 0]);
 
-        assert_eq!(left_encode(&mut buf, 65536), [3, 1, 0, 0]);
-
-        assert_eq!(left_encode(&mut buf, 4096), [2, 16, 0]);
+        assert_eq!(left_encode(4096).as_ref(), [2, 16, 0]);
 
         assert_eq!(
-            left_encode(&mut buf, 18446744073709551615),
+            left_encode(18446744073709551615).as_ref(),
             [8, 255, 255, 255, 255, 255, 255, 255, 255]
         );
 
-        assert_eq!(left_encode(&mut buf, 12345), [2, 48, 57]);
+        assert_eq!(left_encode(12345).as_ref(), [2, 48, 57]);
     }
 
     #[test]
     fn right_encode_test_vectors() {
-        let mut buf = [0; 9];
+        assert_eq!(right_encode(0).as_ref(), [0, 1]);
 
-        assert_eq!(right_encode(&mut buf, 0), [0, 1]);
+        assert_eq!(right_encode(128).as_ref(), [128, 1]);
 
-        assert_eq!(right_encode(&mut buf, 128), [128, 1]);
+        assert_eq!(right_encode(65536).as_ref(), [1, 0, 0, 3]);
 
-        assert_eq!(right_encode(&mut buf, 65536), [1, 0, 0, 3]);
-
-        assert_eq!(right_encode(&mut buf, 4096), [16, 0, 2]);
+        assert_eq!(right_encode(4096).as_ref(), [16, 0, 2]);
 
         assert_eq!(
-            right_encode(&mut buf, 18446744073709551615),
+            right_encode(18446744073709551615).as_ref(),
             [255, 255, 255, 255, 255, 255, 255, 255, 8]
         );
 
-        assert_eq!(right_encode(&mut buf, 12345), [48, 57, 2]);
+        assert_eq!(right_encode(12345).as_ref(), [48, 57, 2]);
     }
 }

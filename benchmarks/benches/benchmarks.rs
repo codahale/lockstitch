@@ -89,5 +89,15 @@ fn prf(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, aead, hash, prf, stream,);
+fn mix(c: &mut Criterion) {
+    let input = vec![0u8; 32];
+    let mut protocol = Protocol::new("hash");
+    c.bench_function("mix", |b| {
+        b.iter(|| {
+            protocol.mix("message", &input);
+        });
+    });
+}
+
+criterion_group!(benches, aead, hash, prf, stream, mix);
 criterion_main!(benches);

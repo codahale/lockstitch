@@ -309,7 +309,6 @@ impl AsRef<[u8]> for EncodedLen {
 }
 
 /// Encrypts (or decrypts) an input with AES-256-CTR.
-#[inline]
 fn aes_ctr(key: &[u8], nonce: &[u8], in_out: &mut [u8]) {
     let mut ctx = CipherCtx::new().expect("should create a cipher context");
     ctx.encrypt_init(Some(Cipher::aes_256_ctr()), Some(key), Some(nonce))
@@ -318,7 +317,6 @@ fn aes_ctr(key: &[u8], nonce: &[u8], in_out: &mut [u8]) {
 }
 
 /// Calculates an AES-256-GMAC authenticator of the input.
-#[inline]
 fn aes_gmac(key: &[u8], input: &[u8]) -> [u8; 16] {
     let mut ctx = CipherCtx::new().expect("should create a cipher context");
     ctx.encrypt_init(Some(Cipher::aes_256_gcm()), Some(key), Some(&[0u8; 12]))

@@ -281,7 +281,7 @@ fn left_encode(mut value: u64) -> EncodedLen {
     value <<= (8 - n) * 8;
     b[1..].copy_from_slice(&value.to_be_bytes());
     b[0] = n as u8;
-    EncodedLen { b, n: (n + 1) }
+    EncodedLen { b, n: n + 1 }
 }
 
 /// Encodes a value using [NIST SP 800-185]'s `right_encode`.
@@ -293,7 +293,7 @@ fn right_encode(mut value: u64) -> EncodedLen {
     value <<= (8 - n) * 8;
     b[..8].copy_from_slice(&value.to_be_bytes());
     b[n] = n as u8;
-    EncodedLen { b, n: (n + 1) }
+    EncodedLen { b, n: n + 1 }
 }
 
 /// A length encoded with either [left_encode] or [right_encode].

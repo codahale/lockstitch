@@ -1,12 +1,12 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
-use core::fmt::Debug;
-
-use openssl::cipher::Cipher;
-use openssl::cipher_ctx::CipherCtx;
-use openssl::hash::{Hasher, MessageDigest};
-use openssl::memcmp;
+use aws_lc_rs::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
+use aws_lc_rs::cipher::{AES_256, EncryptingKey, EncryptionContext, UnboundCipherKey};
+use aws_lc_rs::constant_time;
+use aws_lc_rs::digest::Context;
+use aws_lc_rs::digest::SHA512;
+use std::fmt::Debug;
 
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
@@ -15,31 +15,30 @@ pub const TAG_LEN: usize = 16;
 /// message authentication codes, pseudo-random functions, authenticated encryption, and more.
 #[derive(Clone)]
 pub struct Protocol {
-    transcript: Hasher,
+    transcript: Context,
 }
 
 impl Protocol {
     /// Creates a new protocol with the given domain.
     pub fn new(domain: &str) -> Protocol {
         // Initialize an empty transcript.
-        let mut transcript =
-            Hasher::new(MessageDigest::sha512()).expect("should implement SHA-512");
+        let mut transcript = Context::new(&SHA512);
 
         // Append the operation metadata to the transcript.
-        let _ = transcript.update(&[OpCode::Init as u8]);
-        let _ = transcript.update(left_encode(domain.len() as u64 * 8).as_ref());
-        let _ = transcript.update(domain.as_bytes());
+        transcript.update(&[OpCode::Init as u8]);
+        transcript.update(left_encode(domain.len() as u64 * 8).as_ref());
+        transcript.update(domain.as_bytes());
         Protocol { transcript }
     }
 
     /// Mixes the given label and slice into the protocol state.
     pub fn mix(&mut self, label: &str, input: &[u8]) {
         // Append the operation metadata and data to the transcript.
-        let _ = self.transcript.update(&[OpCode::Mix as u8]);
-        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
-        let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(input.len() as u64 * 8).as_ref());
-        let _ = self.transcript.update(input);
+        self.transcript.update(&[OpCode::Mix as u8]);
+        self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(input.len() as u64 * 8).as_ref());
+        self.transcript.update(input);
     }
 
     /// Derives pseudorandom output from the protocol's current state, the label, and the output
@@ -49,10 +48,10 @@ impl Protocol {
         assert!(out.len() < MAX_DERIVE, "derive operations are limited to 64 GiB of output");
 
         // Append the operation metadata to the transcript.
-        let _ = self.transcript.update(&[OpCode::Derive as u8]);
-        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
-        let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(out.len() as u64 * 8).as_ref());
+        self.transcript.update(&[OpCode::Derive as u8]);
+        self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(out.len() as u64 * 8).as_ref());
 
         // Expand a PRF key.
         let mut prf_key = [0u8; 32];
@@ -78,10 +77,10 @@ impl Protocol {
     /// ratchets the protocol's state using the label and input.
     pub fn encrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Append the operation metadata to the transcript.
-        let _ = self.transcript.update(&[OpCode::Crypt as u8]);
-        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
-        let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
+        self.transcript.update(&[OpCode::Crypt as u8]);
+        self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
@@ -92,7 +91,7 @@ impl Protocol {
         let auth = aes_gmac(&dak, in_out);
 
         // Append the authenticator to the transcript.
-        let _ = self.transcript.update(&auth);
+        self.transcript.update(&auth);
 
         // Encrypt the plaintext using AES-256-CTR.
         aes_ctr(&dek, &[0u8; 16], in_out);
@@ -105,10 +104,10 @@ impl Protocol {
     /// ratchets the protocol's state using the label and input.
     pub fn decrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Append the operation metadata to the transcript.
-        let _ = self.transcript.update(&[OpCode::Crypt as u8]);
-        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
-        let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
+        self.transcript.update(&[OpCode::Crypt as u8]);
+        self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
@@ -122,7 +121,7 @@ impl Protocol {
         let auth = aes_gmac(&dak, in_out);
 
         // Append the authenticator to the transcript.
-        let _ = self.transcript.update(&auth);
+        self.transcript.update(&auth);
 
         // Ratchet the transcript.
         self.ratchet();
@@ -135,10 +134,10 @@ impl Protocol {
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Append the operation metadata to the transcript.
-        let _ = self.transcript.update(&[OpCode::AuthCrypt as u8]);
-        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
-        let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
+        self.transcript.update(&[OpCode::AuthCrypt as u8]);
+        self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
@@ -149,7 +148,7 @@ impl Protocol {
         let auth = aes_gmac(&dak, in_out);
 
         // Append the authenticator to the transcript.
-        let _ = self.transcript.update(&auth);
+        self.transcript.update(&auth);
 
         // Expand an authentication tag.
         self.expand("authentication tag", tag);
@@ -171,10 +170,10 @@ impl Protocol {
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Append the operation metadata to the transcript.
-        let _ = self.transcript.update(&[OpCode::AuthCrypt as u8]);
-        let _ = self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
-        let _ = self.transcript.update(label.as_bytes());
-        let _ = self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
+        self.transcript.update(&[OpCode::AuthCrypt as u8]);
+        self.transcript.update(left_encode(label.len() as u64 * 8).as_ref());
+        self.transcript.update(label.as_bytes());
+        self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
@@ -188,7 +187,7 @@ impl Protocol {
         let auth = aes_gmac(&dak, in_out);
 
         // Append the authenticator to the transcript.
-        let _ = self.transcript.update(&auth);
+        self.transcript.update(&auth);
 
         // Expand a counterfactual authentication tag.
         let mut tag_p = [0u8; TAG_LEN];
@@ -198,7 +197,7 @@ impl Protocol {
         self.ratchet();
 
         // Compare the tag and the counterfactual tag in constant time.
-        if memcmp::eq(tag, &tag_p) {
+        if constant_time::verify_slices_are_equal(tag, &tag_p).is_ok() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)
@@ -219,12 +218,12 @@ impl Protocol {
         self.expand("ratchet key", &mut rak);
 
         // Clear the transcript.
-        self.transcript = Hasher::new(MessageDigest::sha512()).expect("should implement SHA-512");
+        self.transcript = Context::new(&SHA512);
 
         // Append the operation metadata and data to the transcript.
-        let _ = self.transcript.update(&[OpCode::Ratchet as u8]);
-        let _ = self.transcript.update(left_encode(rak.len() as u64 * 8).as_ref());
-        let _ = self.transcript.update(&rak);
+        self.transcript.update(&[OpCode::Ratchet as u8]);
+        self.transcript.update(left_encode(rak.len() as u64 * 8).as_ref());
+        self.transcript.update(&rak);
     }
 
     /// Clones the protocol's transcript, appends an expand operation code, the label length, the
@@ -236,14 +235,14 @@ impl Protocol {
         let mut clone = self.transcript.clone();
 
         // Append the operation metadata and data to the transcript copy.
-        let _ = clone.update(&[OpCode::Expand as u8]);
-        let _ = clone.update(left_encode(label.len() as u64 * 8).as_ref());
-        let _ = clone.update(label.as_bytes());
-        let _ = clone.update(right_encode(out.len() as u64 * 8).as_ref());
+        clone.update(&[OpCode::Expand as u8]);
+        clone.update(left_encode(label.len() as u64 * 8).as_ref());
+        clone.update(label.as_bytes());
+        clone.update(right_encode(out.len() as u64 * 8).as_ref());
 
         // Generate up to 32 bytes of output.
-        let h = clone.finish().expect("should finish");
-        out.copy_from_slice(&h[..out.len()]);
+        let h = clone.finish();
+        out.copy_from_slice(&h.as_ref()[..out.len()]);
     }
 }
 
@@ -310,22 +309,25 @@ impl AsRef<[u8]> for EncodedLen {
 
 /// Encrypts (or decrypts) an input with AES-256-CTR.
 fn aes_ctr(key: &[u8], nonce: &[u8], in_out: &mut [u8]) {
-    let mut ctx = CipherCtx::new().expect("should create a cipher context");
-    ctx.encrypt_init(Some(Cipher::aes_256_ctr()), Some(key), Some(nonce))
-        .expect("should be a valid AES-256-CTR key and nonce");
-    ctx.cipher_update_inplace(in_out, in_out.len()).expect("should perform AES-256-CTR");
+    let key = UnboundCipherKey::new(&AES_256, key).expect("should be a valid AES-256 key");
+    let key = EncryptingKey::ctr(key).expect("should be a valid AES-256-CTR key");
+    let ctx = EncryptionContext::Iv128(nonce.try_into().expect("should be a valid AES-256-CTR IV"));
+    key.less_safe_encrypt(in_out, ctx).expect("should perform AES-256-CTR");
 }
 
 /// Calculates an AES-256-GMAC authenticator of the input.
 fn aes_gmac(key: &[u8], input: &[u8]) -> [u8; 16] {
-    let mut ctx = CipherCtx::new().expect("should create a cipher context");
-    ctx.encrypt_init(Some(Cipher::aes_256_gcm()), Some(key), Some(&[0u8; 12]))
-        .expect("should be a valid AES-256-GCM key and nonce");
-    ctx.cipher_update(input, None).expect("should process authenticated data");
-    ctx.cipher_final(&mut []).expect("should finalize GCM context");
-    let mut tag = [0u8; 16];
-    ctx.tag(&mut tag).expect("should calculate authenticator");
-    tag
+    let key = UnboundKey::new(&AES_256_GCM, key).expect("should be a valid AES-256-GCM key");
+    let key = LessSafeKey::new(key);
+    key.seal_in_place_separate_tag(
+        Nonce::assume_unique_for_key([0u8; 12]),
+        Aad::from(input),
+        &mut [],
+    )
+    .expect("should perform AES-256-GCM")
+    .as_ref()
+    .try_into()
+    .expect("should be 16 bytes")
 }
 
 #[cfg(test)]

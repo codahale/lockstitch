@@ -13,7 +13,7 @@ readme = "README.md"
 include = ["src/**/*", "tests/**/*", "LICENSE-*", "README.md"]
 
 [dependencies]
-aws-lc-rs = { version = "1.15.2", default-features = false, features = ["alloc", "aws-lc-sys"] }
+aws-lc-rs = { version = "1.15.2", default-features = false, features = ["aws-lc-sys"] }
 
 [workspace]
 members = ["benchmarks", "xtask"]

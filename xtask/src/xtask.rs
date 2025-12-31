@@ -51,8 +51,7 @@ enum CloudCommand {
 fn main() -> Result<()> {
     let xtask = XTask::parse();
 
-    let sh = Shell::new()?;
-    sh.change_dir(project_root());
+    let sh = Shell::new()?.with_current_dir(project_root());
 
     match xtask.cmd.unwrap_or(Command::CI) {
         Command::CI => ci(&sh),
@@ -69,42 +68,31 @@ fn main() -> Result<()> {
 }
 
 fn ci(sh: &Shell) -> Result<()> {
-    cmd!(sh, "cargo fmt --check").run()?;
-    cmd!(sh, "cargo build --no-default-features").run()?;
-    cmd!(sh, "cargo build --all-targets --all-features").run()?;
-    cmd!(sh, "cargo test").run()?;
-    cmd!(sh, "cargo clippy --all-features --tests --benches").run()?;
+    cmd!(sh, "cargo fmt --check").run_echo()?;
+    cmd!(sh, "cargo build --no-default-features").run_echo()?;
+    cmd!(sh, "cargo build --all-targets --all-features").run_echo()?;
+    cmd!(sh, "cargo test").run_echo()?;
+    cmd!(sh, "cargo clippy --all-features --tests --benches").run_echo()?;
 
     Ok(())
 }
 
-#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-const RUSTFLAGS: &str = "-C target-cpu=native";
-
-#[cfg(target_arch = "aarch64")]
-const RUSTFLAGS: &str = "--cfg aes_armv8";
-
-#[cfg(not(any(target_arch = "x86_64", target_arch = "x86", target_arch = "aarch64")))]
-const RUSTFLAGS: &str = "";
-
 fn bench(sh: &Shell, args: Vec<String>) -> Result<()> {
-    cmd!(sh, "cargo bench -p benchmarks --bench benchmarks -- {args...}")
-        .env("RUSTFLAGS", RUSTFLAGS)
-        .run()?;
+    cmd!(sh, "cargo bench -p benchmarks --bench benchmarks -- {args...}").run_echo()?;
 
     Ok(())
 }
 
 fn cloud_create(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute instances create lockstitch --zone=us-central1-a --machine-type=c4-standard-4 --min-cpu-platform 'Intel Emerald Rapids' --image-project 'debian-cloud' --image-family 'debian-12'").run()?;
+    cmd!(sh, "gcloud compute instances create lockstitch --zone=us-central1-a --machine-type=c4-standard-4 --min-cpu-platform 'Intel Emerald Rapids' --image-project 'debian-cloud' --image-family 'debian-12'").run_echo()?;
 
     Ok(())
 }
 
 fn cloud_setup(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'sudo apt-get install build-essential git -y'").run()?;
-    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run()?;
-    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'git clone https://github.com/codahale/lockstitch'").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'sudo apt-get install build-essential git -y'").run_echo()?;
+    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'").run_echo()?;
+    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command 'git clone https://github.com/codahale/lockstitch'").run_echo()?;
 
     Ok(())
 }
@@ -113,7 +101,7 @@ fn cloud_test(sh: &Shell, branch: &str) -> Result<()> {
     let cmd = format!(
         "source ~/.cargo/env && cd lockstitch && git fetch && git reset --hard origin/{branch} && cargo test"
     );
-    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command {cmd}").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command {cmd}").run_echo()?;
 
     Ok(())
 }
@@ -122,7 +110,7 @@ fn cloud_bench(sh: &Shell, branch: &str) -> Result<()> {
     let cmd = format!(
         "source ~/.cargo/env && cd lockstitch && git fetch && git reset --hard origin/{branch} && cargo xtask bench -- --quiet 2> /dev/null"
     );
-    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command {cmd}").run()?;
+    cmd!(sh, "gcloud compute ssh lockstitch --zone=us-central1-a --command {cmd}").run_echo()?;
 
     Ok(())
 }
@@ -140,7 +128,8 @@ fn cloud_ssh() -> Result<()> {
 }
 
 fn cloud_delete(sh: &Shell) -> Result<()> {
-    cmd!(sh, "gcloud compute instances delete lockstitch --zone=us-central1-a --quiet").run()?;
+    cmd!(sh, "gcloud compute instances delete lockstitch --zone=us-central1-a --quiet")
+        .run_echo()?;
 
     Ok(())
 }

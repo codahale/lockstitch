@@ -5,9 +5,9 @@ publish = false
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.98"
-clap = { version = "4.5.42", features = ["deprecated", "derive"] }
-xshell = "0.2.7"
+anyhow = "1.0.100"
+clap = { version = "4.5.53", features = ["deprecated", "derive"] }
+xshell = "0.3.0-pre.2"
 
 [[bin]]
 name = "xtask"

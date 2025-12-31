@@ -5,9 +5,8 @@ use std::fmt::Debug;
 
 use aws_lc_rs::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
 use aws_lc_rs::cipher::{AES_256, EncryptingKey, EncryptionContext, UnboundCipherKey};
-use aws_lc_rs::constant_time;
-use aws_lc_rs::digest::Context;
-use aws_lc_rs::digest::SHA512;
+use aws_lc_rs::constant_time::verify_slices_are_equal;
+use aws_lc_rs::digest::{Context, SHA512};
 
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
@@ -198,7 +197,7 @@ impl Protocol {
         self.ratchet();
 
         // Compare the tag and the counterfactual tag in constant time.
-        if constant_time::verify_slices_are_equal(tag, &tag_p).is_ok() {
+        if verify_slices_are_equal(tag, &tag_p).is_ok() {
             // If the tag is verified, then the ciphertext is authentic. Return the slice of the
             // input which contains the plaintext.
             Some(in_out)

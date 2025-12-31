@@ -1,12 +1,13 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
+use std::fmt::Debug;
+
 use aws_lc_rs::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
 use aws_lc_rs::cipher::{AES_256, EncryptingKey, EncryptionContext, UnboundCipherKey};
 use aws_lc_rs::constant_time;
 use aws_lc_rs::digest::Context;
 use aws_lc_rs::digest::SHA512;
-use std::fmt::Debug;
 
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;

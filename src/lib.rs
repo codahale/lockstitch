@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use aws_lc_rs::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
 use aws_lc_rs::cipher::{AES_256, EncryptingKey, EncryptionContext, UnboundCipherKey};
 use aws_lc_rs::constant_time::verify_slices_are_equal;
-use aws_lc_rs::digest::{Context, SHA512};
+use aws_lc_rs::digest::{Context, SHA512_256};
 
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
@@ -22,7 +22,7 @@ impl Protocol {
     /// Creates a new protocol with the given domain.
     pub fn new(domain: &str) -> Protocol {
         // Initialize an empty transcript.
-        let mut transcript = Context::new(&SHA512);
+        let mut transcript = Context::new(&SHA512_256);
 
         // Append the operation metadata to the transcript.
         transcript.update(&[OpCode::Init as u8]);
@@ -218,7 +218,7 @@ impl Protocol {
         self.expand("ratchet key", &mut rak);
 
         // Clear the transcript.
-        self.transcript = Context::new(&SHA512);
+        self.transcript = Context::new(&SHA512_256);
 
         // Append the operation metadata and data to the transcript.
         self.transcript.update(&[OpCode::Ratchet as u8]);
@@ -342,21 +342,21 @@ mod tests {
         protocol.mix("first", b"one");
         protocol.mix("second", b"two");
 
-        expect!["49639b877ddea480"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
+        expect!["94817feeb041f907"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
-        expect!["34830931d97c14b4b4a5dd2093429347aeb6"].assert_eq(&hex::encode(plaintext));
+        expect!["cd7a6d51699ae237dc2ef5a91d3a39639b34"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["76bef04c2d274072f84e52867c347783aa489041b8936ca27e0f30b5181f1def3879"]
+        expect!["659ef429e2680fbaf02a0702928d9600f10efcb90a124c2e040ea52901c8f8650634"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["d95ee73d86687616"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["cb0ec90e45f6eeff"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

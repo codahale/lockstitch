@@ -1,12 +1,12 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
-use std::fmt::Debug;
+use std::fmt;
 
-use aws_lc_rs::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
-use aws_lc_rs::cipher::{AES_256, EncryptingKey, EncryptionContext, UnboundCipherKey};
+use aws_lc_rs::aead::{AES_128_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
+use aws_lc_rs::cipher::{AES_128, EncryptingKey, EncryptionContext, UnboundCipherKey};
 use aws_lc_rs::constant_time::verify_slices_are_equal;
-use aws_lc_rs::digest::{Context, SHA512_256};
+use aws_lc_rs::digest::{Context, SHA256};
 
 /// The length of an authentication tag in bytes.
 pub const TAG_LEN: usize = 16;
@@ -22,7 +22,7 @@ impl Protocol {
     /// Creates a new protocol with the given domain.
     pub fn new(domain: &str) -> Protocol {
         // Initialize an empty transcript.
-        let mut transcript = Context::new(&SHA512_256);
+        let mut transcript = Context::new(&SHA256);
 
         // Append the operation metadata to the transcript.
         transcript.update(&[OpCode::Init as u8]);
@@ -54,10 +54,10 @@ impl Protocol {
         self.transcript.update(left_encode(out.len() as u64 * 8).as_ref());
 
         // Expand a PRF key.
-        let mut prf_key = [0u8; 32];
+        let mut prf_key = [0u8; 16];
         self.expand("prf key", &mut prf_key);
 
-        // Expand n bytes of AES-256-CTR keystream for PRF output.
+        // Expand n bytes of AES-128-CTR keystream for PRF output.
         out.fill(0);
         aes_ctr(&prf_key, &[0u8; 16], out);
 
@@ -83,17 +83,17 @@ impl Protocol {
         self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
-        let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
+        let (mut dek, mut dak) = ([0u8; 16], [0u8; 16]);
         self.expand("data encryption key", &mut dek);
         self.expand("data authentication key", &mut dak);
 
-        // Calculate an AES-256-GMAC authenticator of the plaintext.
+        // Calculate an AES-128-GMAC authenticator of the plaintext.
         let auth = aes_gmac(&dak, in_out);
 
         // Append the authenticator to the transcript.
         self.transcript.update(&auth);
 
-        // Encrypt the plaintext using AES-256-CTR.
+        // Encrypt the plaintext using AES-128-CTR.
         aes_ctr(&dek, &[0u8; 16], in_out);
 
         // Ratchet the transcript.
@@ -110,14 +110,14 @@ impl Protocol {
         self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
-        let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
+        let (mut dek, mut dak) = ([0u8; 16], [0u8; 16]);
         self.expand("data encryption key", &mut dek);
         self.expand("data authentication key", &mut dak);
 
-        // Decrypt the plaintext using AES-256-CTR.
+        // Decrypt the plaintext using AES-128-CTR.
         aes_ctr(&dek, &[0u8; 16], in_out);
 
-        // Calculate an AES-256-GMAC authenticator of the plaintext.
+        // Calculate an AES-128-GMAC authenticator of the plaintext.
         let auth = aes_gmac(&dak, in_out);
 
         // Append the authenticator to the transcript.
@@ -140,11 +140,11 @@ impl Protocol {
         self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
-        let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
+        let (mut dek, mut dak) = ([0u8; 16], [0u8; 16]);
         self.expand("data encryption key", &mut dek);
         self.expand("data authentication key", &mut dak);
 
-        // Calculate an AES-256-GMAC authenticator of the plaintext.
+        // Calculate an AES-128-GMAC authenticator of the plaintext.
         let auth = aes_gmac(&dak, in_out);
 
         // Append the authenticator to the transcript.
@@ -153,7 +153,7 @@ impl Protocol {
         // Expand an authentication tag.
         self.expand("authentication tag", tag);
 
-        // Encrypt the plaintext using AES-256-CTR with the tag as the IV.
+        // Encrypt the plaintext using AES-128-CTR with the tag as the IV.
         aes_ctr(&dek, tag, in_out);
 
         // Ratchet the transcript.
@@ -176,14 +176,14 @@ impl Protocol {
         self.transcript.update(left_encode(in_out.len() as u64 * 8).as_ref());
 
         // Expand a data encryption key and a data authentication key from the transcript.
-        let (mut dek, mut dak) = ([0u8; 32], [0u8; 32]);
+        let (mut dek, mut dak) = ([0u8; 16], [0u8; 16]);
         self.expand("data encryption key", &mut dek);
         self.expand("data authentication key", &mut dak);
 
-        // Decrypt the ciphertext using AES-256-CTR with the tag as the IV.
+        // Decrypt the ciphertext using AES-128-CTR with the tag as the IV.
         aes_ctr(&dek, tag, in_out);
 
-        // Calculate an AES-256-GMAC authenticator of the plaintext.
+        // Calculate an AES-128-GMAC authenticator of the plaintext.
         let auth = aes_gmac(&dak, in_out);
 
         // Append the authenticator to the transcript.
@@ -214,11 +214,11 @@ impl Protocol {
     /// from the previous protocol transcript.
     fn ratchet(&mut self) {
         // Expand a ratchet key.
-        let mut rak = [0u8; 32];
+        let mut rak = [0u8; 16];
         self.expand("ratchet key", &mut rak);
 
         // Clear the transcript.
-        self.transcript = Context::new(&SHA512_256);
+        self.transcript = Context::new(&SHA256);
 
         // Append the operation metadata and data to the transcript.
         self.transcript.update(&[OpCode::Ratchet as u8]);
@@ -227,9 +227,9 @@ impl Protocol {
     }
 
     /// Clones the protocol's transcript, appends an expand operation code, the label length, the
-    /// label, and the requested output length, and returns n (<=32) bytes of derived output.
+    /// label, and the requested output length, and returns n (<=16) bytes of derived output.
     fn expand(&self, label: &str, out: &mut [u8]) {
-        debug_assert!(out.len() <= 32, "expand output must be <=32 bytes");
+        debug_assert!(out.len() <= 16, "expand output must be <=16bytes");
 
         // Create a copy of the transcript.
         let mut clone = self.transcript.clone();
@@ -240,14 +240,14 @@ impl Protocol {
         clone.update(label.as_bytes());
         clone.update(right_encode(out.len() as u64 * 8).as_ref());
 
-        // Generate up to 32 bytes of output.
+        // Generate up to 16 bytes of output.
         let h = clone.finish();
         out.copy_from_slice(&h.as_ref()[..out.len()]);
     }
 }
 
-impl Debug for Protocol {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Debug for Protocol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Protocol").finish_non_exhaustive()
     }
 }
@@ -307,24 +307,24 @@ impl AsRef<[u8]> for EncodedLen {
     }
 }
 
-/// Encrypts (or decrypts) an input with AES-256-CTR.
+/// Encrypts (or decrypts) an input with AES-128-CTR.
 fn aes_ctr(key: &[u8], nonce: &[u8], in_out: &mut [u8]) {
-    let key = UnboundCipherKey::new(&AES_256, key).expect("should be a valid AES-256 key");
-    let key = EncryptingKey::ctr(key).expect("should be a valid AES-256-CTR key");
-    let ctx = EncryptionContext::Iv128(nonce.try_into().expect("should be a valid AES-256-CTR IV"));
-    key.less_safe_encrypt(in_out, ctx).expect("should perform AES-256-CTR");
+    let key = UnboundCipherKey::new(&AES_128, key).expect("should be a valid AES-128 key");
+    let key = EncryptingKey::ctr(key).expect("should be a valid AES-128-CTR key");
+    let ctx = EncryptionContext::Iv128(nonce.try_into().expect("should be a valid AES-128-CTR IV"));
+    key.less_safe_encrypt(in_out, ctx).expect("should perform AES-128-CTR");
 }
 
-/// Calculates an AES-256-GMAC authenticator of the input.
+/// Calculates an AES-128-GMAC authenticator of the input.
 fn aes_gmac(key: &[u8], input: &[u8]) -> [u8; 16] {
-    let key = UnboundKey::new(&AES_256_GCM, key).expect("should be a valid AES-256-GCM key");
+    let key = UnboundKey::new(&AES_128_GCM, key).expect("should be a valid AES-128-GCM key");
     let key = LessSafeKey::new(key);
     key.seal_in_place_separate_tag(
         Nonce::assume_unique_for_key([0u8; 12]),
         Aad::from(input),
         &mut [],
     )
-    .expect("should perform AES-256-GCM")
+    .expect("should perform AES-128-GCM")
     .as_ref()
     .try_into()
     .expect("should be 16 bytes")
@@ -342,21 +342,21 @@ mod tests {
         protocol.mix("first", b"one");
         protocol.mix("second", b"two");
 
-        expect!["94817feeb041f907"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
+        expect!["1b1eb6c50b7a0efa"].assert_eq(&hex::encode(protocol.derive_array::<8>("third")));
 
         let mut plaintext = b"this is an example".to_vec();
         protocol.encrypt("fourth", &mut plaintext);
-        expect!["cd7a6d51699ae237dc2ef5a91d3a39639b34"].assert_eq(&hex::encode(plaintext));
+        expect!["db1daa1bc9483166afc66e64e5ea755551a1"].assert_eq(&hex::encode(plaintext));
 
         let plaintext = b"this is an example";
         let mut sealed = vec![0u8; plaintext.len() + TAG_LEN];
         sealed[..plaintext.len()].copy_from_slice(plaintext);
         protocol.seal("fifth", &mut sealed);
 
-        expect!["659ef429e2680fbaf02a0702928d9600f10efcb90a124c2e040ea52901c8f8650634"]
+        expect!["d02f72467272779eedff51ffd875d6a4c45537b38d3d56868af3acdb81c22e2fcd24"]
             .assert_eq(&hex::encode(sealed));
 
-        expect!["cb0ec90e45f6eeff"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
+        expect!["04d8a4b236e5e7db"].assert_eq(&hex::encode(protocol.derive_array::<8>("sixth")));
     }
 
     #[test]

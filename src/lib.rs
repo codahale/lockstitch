@@ -252,6 +252,7 @@ impl fmt::Debug for Protocol {
 
 /// All Lockstitch operation types.
 #[derive(Debug, Clone, Copy)]
+#[repr(u8)]
 enum OpCode {
     /// Initialize a protocol with a domain separation string.
     Init = 0x01,

@@ -1,7 +1,7 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
-use std::fmt;
+use std::{fmt, mem};
 
 use aws_lc_rs::aead::{AES_128_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
 use aws_lc_rs::cipher::{AES_128, EncryptingKey, EncryptionContext, UnboundCipherKey};
@@ -55,7 +55,7 @@ impl Protocol {
 
         // Expand a PRF key.
         let mut prf_key = [0u8; 16];
-        self.expand("prf key", &mut prf_key);
+        Self::expand(self.transcript.clone(), "prf key", &mut prf_key);
 
         // Expand n bytes of AES-128-CTR keystream for PRF output.
         out.fill(0);
@@ -84,8 +84,8 @@ impl Protocol {
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 16], [0u8; 16]);
-        self.expand("data encryption key", &mut dek);
-        self.expand("data authentication key", &mut dak);
+        Self::expand(self.transcript.clone(), "data encryption key", &mut dek);
+        Self::expand(self.transcript.clone(), "data authentication key", &mut dak);
 
         // Calculate an AES-128-GMAC authenticator of the plaintext.
         let auth = aes_gmac(&dak, in_out);
@@ -111,8 +111,8 @@ impl Protocol {
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 16], [0u8; 16]);
-        self.expand("data encryption key", &mut dek);
-        self.expand("data authentication key", &mut dak);
+        Self::expand(self.transcript.clone(), "data encryption key", &mut dek);
+        Self::expand(self.transcript.clone(), "data authentication key", &mut dak);
 
         // Decrypt the plaintext using AES-128-CTR.
         aes_ctr(&dek, &[0u8; 16], in_out);
@@ -141,8 +141,8 @@ impl Protocol {
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 16], [0u8; 16]);
-        self.expand("data encryption key", &mut dek);
-        self.expand("data authentication key", &mut dak);
+        Self::expand(self.transcript.clone(), "data encryption key", &mut dek);
+        Self::expand(self.transcript.clone(), "data authentication key", &mut dak);
 
         // Calculate an AES-128-GMAC authenticator of the plaintext.
         let auth = aes_gmac(&dak, in_out);
@@ -151,7 +151,7 @@ impl Protocol {
         self.transcript.update(&auth);
 
         // Expand an authentication tag.
-        self.expand("authentication tag", tag);
+        Self::expand(self.transcript.clone(), "authentication tag", tag);
 
         // Encrypt the plaintext using AES-128-CTR with the tag as the IV.
         aes_ctr(&dek, tag, in_out);
@@ -177,8 +177,8 @@ impl Protocol {
 
         // Expand a data encryption key and a data authentication key from the transcript.
         let (mut dek, mut dak) = ([0u8; 16], [0u8; 16]);
-        self.expand("data encryption key", &mut dek);
-        self.expand("data authentication key", &mut dak);
+        Self::expand(self.transcript.clone(), "data encryption key", &mut dek);
+        Self::expand(self.transcript.clone(), "data authentication key", &mut dak);
 
         // Decrypt the ciphertext using AES-128-CTR with the tag as the IV.
         aes_ctr(&dek, tag, in_out);
@@ -191,7 +191,7 @@ impl Protocol {
 
         // Expand a counterfactual authentication tag.
         let mut tag_p = [0u8; TAG_LEN];
-        self.expand("authentication tag", &mut tag_p);
+        Self::expand(self.transcript.clone(), "authentication tag", &mut tag_p);
 
         // Ratchet the transcript.
         self.ratchet();
@@ -213,12 +213,13 @@ impl Protocol {
     /// Replaces the protocol's transcript with a ratchet operation code and a ratchet key derived
     /// from the previous protocol transcript.
     fn ratchet(&mut self) {
-        // Expand a ratchet key.
-        let mut rak = [0u8; 16];
-        self.expand("ratchet key", &mut rak);
+        // Replace the transcript with a blank one.
+        let mut transcript = Context::new(&SHA256);
+        mem::swap(&mut self.transcript, &mut transcript);
 
-        // Clear the transcript.
-        self.transcript = Context::new(&SHA256);
+        // Expand a ratchet key from the old transcript.
+        let mut rak = [0u8; 16];
+        Self::expand(transcript, "ratchet key", &mut rak);
 
         // Append the operation metadata and data to the transcript.
         self.transcript.update(&[OpCode::Ratchet as u8]);
@@ -226,22 +227,19 @@ impl Protocol {
         self.transcript.update(&rak);
     }
 
-    /// Clones the protocol's transcript, appends an expand operation code, the label length, the
-    /// label, and the requested output length, and returns n (<=16) bytes of derived output.
-    fn expand(&self, label: &str, out: &mut [u8]) {
-        debug_assert!(out.len() <= 16, "expand output must be <=16bytes");
-
-        // Create a copy of the transcript.
-        let mut clone = self.transcript.clone();
+    /// Appends an expand operation code, the label length, the label, and the requested output
+    /// length to the given transcript, hashes it, and returns n (<=16) bytes of derived output.
+    fn expand(mut transcript: Context, label: &str, out: &mut [u8]) {
+        debug_assert!(out.len() <= 16, "expand output must be <= 16 bytes");
 
         // Append the operation metadata and data to the transcript copy.
-        clone.update(&[OpCode::Expand as u8]);
-        clone.update(left_encode(label.len() as u64 * 8).as_ref());
-        clone.update(label.as_bytes());
-        clone.update(right_encode(out.len() as u64 * 8).as_ref());
+        transcript.update(&[OpCode::Expand as u8]);
+        transcript.update(left_encode(label.len() as u64 * 8).as_ref());
+        transcript.update(label.as_bytes());
+        transcript.update(right_encode(out.len() as u64 * 8).as_ref());
 
         // Generate up to 16 bytes of output.
-        let h = clone.finish();
+        let h = transcript.finish();
         out.copy_from_slice(&h.as_ref()[..out.len()]);
     }
 }

@@ -25,8 +25,7 @@ impl Protocol {
         let mut transcript = Context::new(&SHA256);
 
         // Append the operation metadata to the transcript.
-        let mut buf = [0u8; 10];
-        buf[0] = OpCode::Init as u8;
+        let mut buf = [OpCode::Init as u8; 10];
         transcript.update(left_encode(&mut buf, 1, domain.len() as u64 * 8));
         transcript.update(domain.as_bytes());
         Protocol { transcript }
@@ -35,8 +34,7 @@ impl Protocol {
     /// Mixes the given label and slice into the protocol state.
     pub fn mix(&mut self, label: &str, input: &[u8]) {
         // Append the operation metadata and data to the transcript.
-        let mut buf = [0u8; 10];
-        buf[0] = OpCode::Mix as u8;
+        let mut buf = [OpCode::Mix as u8; 10];
         self.transcript.update(left_encode(&mut buf, 1, label.len() as u64 * 8));
         self.transcript.update(label.as_bytes());
         self.transcript.update(left_encode(&mut buf, 0, input.len() as u64 * 8));
@@ -50,8 +48,7 @@ impl Protocol {
         assert!(out.len() < MAX_DERIVE, "derive operations are limited to 64 GiB of output");
 
         // Append the operation metadata to the transcript.
-        let mut buf = [0u8; 10];
-        buf[0] = OpCode::Derive as u8;
+        let mut buf = [OpCode::Derive as u8; 10];
         self.transcript.update(left_encode(&mut buf, 1, label.len() as u64 * 8));
         self.transcript.update(label.as_bytes());
         self.transcript.update(left_encode(&mut buf, 0, out.len() as u64 * 8));
@@ -80,8 +77,7 @@ impl Protocol {
     /// ratchets the protocol's state using the label and input.
     pub fn encrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Append the operation metadata to the transcript.
-        let mut buf = [0u8; 10];
-        buf[0] = OpCode::Crypt as u8;
+        let mut buf = [OpCode::Crypt as u8; 10];
         self.transcript.update(left_encode(&mut buf, 1, label.len() as u64 * 8));
         self.transcript.update(label.as_bytes());
         self.transcript.update(left_encode(&mut buf, 0, in_out.len() as u64 * 8));
@@ -108,8 +104,7 @@ impl Protocol {
     /// ratchets the protocol's state using the label and input.
     pub fn decrypt(&mut self, label: &str, in_out: &mut [u8]) {
         // Append the operation metadata to the transcript.
-        let mut buf = [0u8; 10];
-        buf[0] = OpCode::Crypt as u8;
+        let mut buf = [OpCode::Crypt as u8; 10];
         self.transcript.update(left_encode(&mut buf, 1, label.len() as u64 * 8));
         self.transcript.update(label.as_bytes());
         self.transcript.update(left_encode(&mut buf, 0, in_out.len() as u64 * 8));
@@ -139,8 +134,7 @@ impl Protocol {
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Append the operation metadata to the transcript.
-        let mut buf = [0u8; 10];
-        buf[0] = OpCode::AuthCrypt as u8;
+        let mut buf = [OpCode::AuthCrypt as u8; 10];
         self.transcript.update(left_encode(&mut buf, 1, label.len() as u64 * 8));
         self.transcript.update(label.as_bytes());
         self.transcript.update(left_encode(&mut buf, 0, in_out.len() as u64 * 8));
@@ -176,8 +170,7 @@ impl Protocol {
         let (in_out, tag) = in_out.split_at_mut(in_out.len() - TAG_LEN);
 
         // Append the operation metadata to the transcript.
-        let mut buf = [0u8; 10];
-        buf[0] = OpCode::AuthCrypt as u8;
+        let mut buf = [OpCode::AuthCrypt as u8; 10];
         self.transcript.update(left_encode(&mut buf, 1, label.len() as u64 * 8));
         self.transcript.update(label.as_bytes());
         self.transcript.update(left_encode(&mut buf, 0, in_out.len() as u64 * 8));
@@ -229,8 +222,7 @@ impl Protocol {
         Self::expand(transcript, "ratchet key", &mut rak);
 
         // Append the operation metadata and data to the transcript.
-        let mut buf = [0u8; 10];
-        buf[0] = OpCode::Ratchet as u8;
+        let mut buf = [OpCode::Ratchet as u8; 10];
         self.transcript.update(left_encode(&mut buf, 1, rak.len() as u64 * 8));
         self.transcript.update(&rak);
     }
@@ -241,8 +233,7 @@ impl Protocol {
         debug_assert!(out.len() <= 16, "expand output must be <= 16 bytes");
 
         // Append the operation metadata and data to the transcript copy.
-        let mut buf = [0u8; 10];
-        buf[0] = OpCode::Expand as u8;
+        let mut buf = [OpCode::Expand as u8; 10];
         transcript.update(left_encode(&mut buf, 1, label.len() as u64 * 8));
         transcript.update(label.as_bytes());
         transcript.update(right_encode(&mut buf, 0, out.len() as u64 * 8));
